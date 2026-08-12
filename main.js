@@ -292,19 +292,27 @@ function buyUpg(k) {
 function saveRanking() {
   let list;
   try { list = JSON.parse(localStorage.getItem('fps.rank') || '[]'); } catch { list = []; }
-  const entry = { score, wave, kills, hs: headshots, date: new Date().toISOString().slice(0, 10) };
+  const entry = { score, wave, kills, hs: headshots, acc: accuracy(), date: new Date().toISOString().slice(0, 10) };
   list.push(entry);
   list.sort((a, b) => b.score - a.score);
   list = list.slice(0, 10);
   localStorage.setItem('fps.rank', JSON.stringify(list));
   return { list, entry };
 }
+function rankingRows(list, me = null) {
+  if (!list.length) return '<div class="rankRow"><small>기록이 없습니다</small></div>';
+  return list.map((r, i) =>
+    `<div class="rankRow${r === me ? ' me' : ''}"><span>${i + 1}.</span><b>${r.score}</b><small>W${r.wave} · ${r.kills}킬 · HS ${r.hs || 0} · 명중 ${r.acc ?? '-'}% · ${r.date}</small></div>`
+  ).join('');
+}
 function renderRanking() {
   const { list, entry } = saveRanking();
-  const el = document.getElementById('rankList');
-  el.innerHTML = '<h3>TOP 10</h3>' + list.map((r, i) =>
-    `<div class="rankRow${r === entry ? ' me' : ''}"><span>${i + 1}.</span><b>${r.score}</b><small>W${r.wave} · ${r.kills}킬 · HS ${r.hs || 0} · ${r.date}</small></div>`
-  ).join('');
+  document.getElementById('rankList').innerHTML = '<h3>TOP 10</h3>' + rankingRows(list, entry);
+}
+function viewRanking() { // 메인 화면 열람용 (기록 저장 없음)
+  let list;
+  try { list = JSON.parse(localStorage.getItem('fps.rank') || '[]'); } catch { list = []; }
+  document.getElementById('rankMenuList').innerHTML = rankingRows(list);
 }
 
 function setupPlayer() {
@@ -787,7 +795,8 @@ function updateEnemy(en, dt) {
   }
 }
 
-let gameTime = 0, combo = 0, lastKillT = -99, headshots = 0;
+let gameTime = 0, combo = 0, lastKillT = -99, headshots = 0, shotsFired = 0, shotsHit = 0;
+const accuracy = () => shotsFired ? Math.round(shotsHit / shotsFired * 100) : 0;
 // ---------- 수류탄 ----------
 let grenades = 0, gMode = false;
 const liveGrenades = [];
@@ -1128,7 +1137,13 @@ const shopMenu = document.getElementById('shopMenu');
 document.getElementById('startShop').addEventListener('click', e => {
   e.stopPropagation(); // 시작 오버레이의 포인터록 진입 차단
   shopMenu.style.display = shopMenu.style.display === 'block' ? 'none' : 'block';
-  if (shopMenu.style.display === 'block') renderUpg();
+  if (shopMenu.style.display === 'block') { renderUpg(); rankMenu.style.display = 'none'; }
+});
+const rankMenu = document.getElementById('rankMenu');
+document.getElementById('startRank').addEventListener('click', e => {
+  e.stopPropagation();
+  rankMenu.style.display = rankMenu.style.display === 'block' ? 'none' : 'block';
+  if (rankMenu.style.display === 'block') { viewRanking(); shopMenu.style.display = 'none'; }
 });
 optMenu.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => {
   camMode = b.dataset.view; localStorage.setItem('fps.view', camMode); syncOptUI(); applyView();
@@ -1160,7 +1175,8 @@ const startEl = document.getElementById('start');
 const msgEl = document.getElementById('msg');
 startEl.addEventListener('click', () => {
   audioInit();
-  shopMenu.style.display = 'none'; // 게임 시작 시 상점 닫기
+  shopMenu.style.display = 'none'; // 게임 시작 시 상점·랭킹 닫기
+  rankMenu.style.display = 'none';
   optMenu.style.display = 'none';
   if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
@@ -1269,6 +1285,7 @@ function shoot(now) {
     ammo--;
   }
   lastShot = now; updateAmmo();
+  shotsFired++;
   sfxShot();
   if (player.fireAction) { player.fireAction.reset(); player.fireAction.setLoop(THREE.LoopOnce); player.fireAction.play(); }
   recoil = Math.min(recoil + (player.zooming ? 0.008 : 0.014), 0.05);
@@ -1327,6 +1344,7 @@ function shoot(now) {
       const hdd = hc.lengthSq() - ht * ht;
       if (hdd < (0.075 * hitEn.scale) ** 2) hitKind = 'hs'; // 정밀 헤드샷 반경 50% 추가 축소
     }
+    shotsHit++;
     const hitPos = origin.clone().addScaledVector(dir, bestT);
     addTracer(muzzle, hitPos);
     burst(hitPos, headshot ? 0xffcc44 : 0xbb2233, hitKind === 'hs' ? 20 : headshot ? 14 : 9);
@@ -1437,7 +1455,7 @@ function restart(toMenu = false) {
   ammo = magSize();
   clearSpawnTimers();
   renderUpg();
-  combo = 0; lastKillT = -99; headshots = 0;
+  combo = 0; lastKillT = -99; headshots = 0; shotsFired = 0; shotsHit = 0;
   for (const en of enemies) { scene.remove(en.root); clearAoe(en); }
   enemies.length = 0;
   for (const d of drops) scene.remove(d.root);
@@ -1684,7 +1702,7 @@ window.__game = {
   get state() {
     return {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
-      wave, score, kills, headshots, ammo, coins, combo, camMode, ctrlMode, gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
+      wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
       grenades, gMode, liveGrenades: liveGrenades.length,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
