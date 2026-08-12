@@ -1158,13 +1158,13 @@ document.getElementById('dbgWave').addEventListener('click', e => {
 });
 
 const shopMenu = document.getElementById('shopMenu');
-// 시작 화면 패널을 버튼 바로 아래에 배치 (겹침 방지 · 넘치면 스크롤)
+// 시작 화면 패널: 우하단 메뉴와 겹치지 않게 좌측-중앙에 배치 (넘치면 스크롤)
 function placeStartPanel(el) {
-  const b = document.getElementById('startBtns').getBoundingClientRect();
-  const GAP = 30;                       // 버튼과 패널 사이 여백
-  el.style.top = (b.bottom + GAP) + 'px';
+  el.style.left = '38%';
+  el.style.top = '50%';
   el.style.bottom = 'auto';
-  el.style.maxHeight = Math.max(160, innerHeight - b.bottom - GAP - 16) + 'px';
+  el.style.transform = 'translate(-50%,-50%)';
+  el.style.maxHeight = '78vh';
   el.style.overflowY = 'auto';
 }
 document.getElementById('startShop').addEventListener('click', e => {
@@ -1206,20 +1206,25 @@ const keys = {};
 let locked = false, firing = false, lastShot = 0;
 const startEl = document.getElementById('start');
 const msgEl = document.getElementById('msg');
-startEl.addEventListener('click', () => {
+document.getElementById('btnStart').addEventListener('click', e => {
+  e.stopPropagation();
   audioInit();
-  shopMenu.style.display = 'none'; // 게임 시작 시 상점·랭킹 닫기
+  shopMenu.style.display = 'none'; // 게임 시작 시 열린 패널 닫기
   rankMenu.style.display = 'none';
   optMenu.style.display = 'none';
   if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
+});
+document.getElementById('btnOptions').addEventListener('click', e => {
+  e.stopPropagation();
+  optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
+  if (optMenu.style.display === 'block') { shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; }
 });
 canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) canvas.requestPointerLock(); }); // 사망 화면에선 커서 유지
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   if (locked) shopMenu.style.display = 'none'; // 게임(포인터록) 진입 시 상점 숨김
   refreshOverlay();
-  if (!locked && !player.dead) startEl.querySelector('.go').textContent = '▶ 클릭해서 계속';
 });
 
 // ---------- 모바일 조작 (조이스틱 + 버튼) ----------
