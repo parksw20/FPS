@@ -1451,11 +1451,13 @@ function drawMinimap() {
     mmCtx.beginPath(); mmCtx.arc(C, C, R * i / 3, 0, Math.PI * 2); mmCtx.stroke();
   }
   const toMap = (wx, wz) => {
-    // 플레이어 기준 상대좌표 → yaw 회전(위=전방) → 픽셀
+    // 플레이어 기준 상대좌표 → 위=전방 정렬
+    // 전방 f=(-sin yaw, -cos yaw), 우측 r=(cos yaw, -sin yaw)
     const dx = wx - player.pos.x, dz = wz - player.pos.z;
-    const c = Math.cos(-player.yaw), s = Math.sin(-player.yaw);
-    const rx = dx * c - dz * s, rz = dx * s + dz * c;
-    return [C + rx / ARENA * R, C + rz / ARENA * R];
+    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+    const u = dx * cy - dz * sy;        // 우측 성분 → 화면 +x
+    const v = dx * sy + dz * cy;        // 전방 성분의 음수 → 화면 +y(아래)
+    return [C + u / ARENA * R, C + v / ARENA * R];
   };
   const dot = (x, y, color, r = 3 * k) => {
     if (Math.hypot(x - C, y - C) > R - 1) { // 범위 밖은 가장자리에 클램프
