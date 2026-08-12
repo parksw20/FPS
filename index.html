@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARENA FPS — Prototype</title>
+<style>
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{width:100%; height:100%; overflow:hidden; background:#0a0c10; font-family:system-ui,"Segoe UI","Malgun Gothic",sans-serif}
+  #c{display:block; width:100%; height:100%}
+  #hud{position:fixed; inset:0; pointer-events:none; color:#e8edf4}
+  #crosshair{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:22px; height:22px; transition:transform .08s}
+  #crosshair.zoom{transform:translate(-50%,-50%) scale(.55)}
+  #crosshair::before,#crosshair::after{content:""; position:absolute; background:#7ee0a3; box-shadow:0 0 6px #7ee0a3}
+  #crosshair::before{left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); clip-path:polygon(0 0,100% 0,100% 32%,0 32%,0 68%,100% 68%,100% 100%,0 100%)}
+  #crosshair::after{top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); clip-path:polygon(0 0,32% 0,32% 100%,0 100%,68% 0,100% 0,100% 100%,68% 100%)}
+  .panel{position:absolute; background:rgba(10,14,20,.55); border:1px solid rgba(126,224,163,.25); border-radius:10px; padding:10px 16px; backdrop-filter:blur(4px)}
+  #stats{position:absolute; left:50%; bottom:18px; transform:translateX(-50%); width:300px; display:flex; align-items:center; gap:10px; text-shadow:0 0 8px rgba(0,0,0,.9)}
+  #stats .hpbar{flex:1; height:10px; background:rgba(28,36,49,.75); border-radius:5px; overflow:hidden}
+  #stats .hpfill{height:100%; width:100%; background:linear-gradient(90deg,#d9534f,#e8a33d 60%,#7ee0a3); transition:width .15s}
+  #topChips{position:absolute; right:18px; top:18px; display:flex; gap:10px}
+  .chip{background:rgba(10,14,20,.55); border:1px solid rgba(126,224,163,.25); border-radius:10px; padding:10px 16px; backdrop-filter:blur(4px);
+    font-variant-numeric:tabular-nums; font-size:1.15rem; color:#e8edf4; white-space:nowrap}
+  .chip small{color:#9fb0c4; font-size:.75rem}
+  .chip span{display:inline-block}
+  .chip span.flash{animation:chipFlash .6s}
+  @keyframes chipFlash{0%{transform:scale(1)}30%{transform:scale(1.4); color:#ffd76b; text-shadow:0 0 16px rgba(255,215,107,.95)}100%{transform:scale(1)}}
+  #minimap{position:absolute; left:18px; top:18px; border-radius:50%; background:rgba(10,14,20,.6); border:1px solid rgba(126,224,163,.3)}
+  #combo{position:absolute; left:50%; top:33%; transform:translateX(-50%); font-size:1.9rem; font-weight:800; letter-spacing:.08em; color:#ffcf4d; text-shadow:0 0 18px rgba(255,207,77,.8); opacity:0; pointer-events:none}
+  #combo.pop{animation:comboPop 1.1s ease-out}
+  @keyframes comboPop{0%{opacity:0; transform:translateX(-50%) scale(.4)}15%{opacity:1; transform:translateX(-50%) scale(1.25)}30%{transform:translateX(-50%) scale(1)}75%{opacity:1}100%{opacity:0; transform:translateX(-50%) scale(1)}}
+  #ammo{position:absolute; left:50%; bottom:70px; transform:translateX(-50%); text-align:center; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
+  #ammo small{color:#9fb0c4; font-size:.75rem}
+  /* 수류탄 단축 슬롯 (잔탄 오른쪽) */
+  #gSlot{position:absolute; left:50%; margin-left:150px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+    background:rgba(10,14,20,.6); border:1.5px solid rgba(126,224,163,.3); border-radius:12px}
+  #gSlot img{width:100%; height:100%; object-fit:contain; padding:6px; box-sizing:border-box}
+  #gSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7ee0a3; border-radius:4px; padding:1px 5px}
+  #gSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffd76b; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
+  #gSlot.empty{opacity:.35; filter:grayscale(.8)}
+  #gSlot.active{border-color:#7ee0a3; box-shadow:0 0 16px rgba(126,224,163,.5)}
+  #ammo.inf #ammoN{color:#6bb8ff; text-shadow:0 0 12px rgba(107,184,255,.8)}
+  #wave{left:50%; top:18px; transform:translateX(-50%); font-size:.9rem; letter-spacing:.15em; text-transform:uppercase; color:#9fb0c4}
+  #wave b{color:#e8a33d}
+  #banner{position:absolute; left:50%; top:26%; transform:translateX(-50%); font-size:2rem; letter-spacing:.35em; color:#e8a33d; text-shadow:0 0 24px rgba(232,163,61,.6); opacity:0; transition:opacity .4s; text-transform:uppercase; white-space:nowrap}
+  #pickup{position:absolute; left:50%; top:60%; transform:translateX(-50%); font-size:1rem; color:#7ee0a3; text-shadow:0 0 14px rgba(126,224,163,.7); opacity:0; transition:opacity .3s; white-space:nowrap}
+  #buff{position:absolute; left:50%; bottom:220px; transform:translateX(-50%); font-size:1rem; color:#6bb8ff; text-shadow:0 0 14px rgba(107,184,255,.8); display:none; letter-spacing:.1em}
+  #msg{position:absolute; left:50%; top:38%; transform:translateX(-50%); text-align:center; display:none}
+  #msg h2{font-size:2.2rem; color:#d9534f; text-shadow:0 0 20px rgba(217,83,79,.5)}
+  #msg p{color:#9fb0c4; margin-top:8px}
+  #msg{pointer-events:auto}
+  #deathOk{margin-top:16px; padding:12px 48px; font-size:1.05rem; font-weight:700; color:#0a0e14; background:#7ee0a3;
+    border:none; border-radius:10px; cursor:pointer; letter-spacing:.1em}
+  #deathOk:hover{background:#9df0bb}
+  #hitmark{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) rotate(45deg); width:26px; height:26px; opacity:0; pointer-events:none}
+  #hitmark.head::before,#hitmark.head::after{background:#ffcf4d}
+  #hitmark::before,#hitmark::after{content:""; position:absolute; background:#fff}
+  #hitmark::before{left:50%; top:0; width:2px; height:100%; transform:translateX(-50%)}
+  #hitmark::after{top:50%; left:0; height:2px; width:100%; transform:translateY(-50%)}
+  #dmgflash{position:fixed; inset:0; background:radial-gradient(ellipse at center, transparent 55%, rgba(217,83,79,.45)); opacity:0; pointer-events:none; transition:opacity .25s}
+  #zoomVig{position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .18s;
+    background:radial-gradient(ellipse at center, transparent 32%, rgba(0,0,0,.5) 62%, rgba(0,0,0,.92) 95%)}
+  #zoomVig.on{opacity:1}
+  #aura{position:fixed; inset:0; background:radial-gradient(ellipse at center, transparent 52%, rgba(80,160,255,.28) 78%, rgba(60,140,255,.55)); opacity:0; pointer-events:none; transition:opacity .5s}
+  #aura.on{opacity:1; animation:auraPulse 1.4s infinite}
+  @keyframes auraPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.45)}}
+  #loading{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; background:#06080c; color:#9fb0c4; z-index:20; letter-spacing:.2em}
+  #loading .bar{width:280px; height:6px; background:#1c2431; border-radius:3px; overflow:hidden}
+  #loading .fill{height:100%; width:0%; background:#7ee0a3; transition:width .2s}
+  #start{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; background:rgba(6,8,12,.88); color:#e8edf4; cursor:pointer; z-index:10}
+  #start h1{font-size:3rem; letter-spacing:.3em; color:#7ee0a3; text-shadow:0 0 30px rgba(126,224,163,.4)}
+  #start .sub{color:#9fb0c4; letter-spacing:.1em}
+  #start .keys{display:flex; gap:12px; margin-top:10px; flex-wrap:wrap; justify-content:center; max-width:720px}
+  #start .key{background:#161b24; border:1px solid #2a3444; border-radius:8px; padding:8px 14px; font-size:.85rem; color:#9fb0c4}
+  #start .key b{color:#e8edf4}
+  #start .go{margin-top:16px; font-size:1.1rem; color:#e8a33d; animation:pulse 1.6s infinite}
+  #startShop{margin-top:34px; font-size:1.35rem; font-weight:700; letter-spacing:.12em; color:#ffd76b; cursor:pointer;
+    padding:16px 56px; border:1.5px solid rgba(255,215,107,.55); border-radius:14px; background:rgba(22,27,36,.85)}
+  #startShop:hover{background:rgba(255,215,107,.18); border-color:#ffd76b; box-shadow:0 0 24px rgba(255,215,107,.25)}
+  @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  /* 옵션 */
+  #optBtn{position:fixed; right:18px; top:74px; z-index:40; pointer-events:auto; cursor:pointer;
+    background:rgba(10,14,20,.7); border:1px solid rgba(126,224,163,.35); border-radius:10px; padding:10px 16px; color:#9fb0c4; font-size:.95rem; user-select:none}
+  #optBtn:hover{color:#e8edf4; border-color:#7ee0a3}
+  #optMenu{position:fixed; right:18px; top:122px; z-index:40; pointer-events:auto; display:none;
+    background:rgba(10,14,20,.92); border:1px solid rgba(126,224,163,.35); border-radius:12px; padding:16px 18px; color:#e8edf4; min-width:230px}
+  #optMenu h3{font-size:.8rem; letter-spacing:.15em; color:#9fb0c4; margin:10px 0 6px; text-transform:uppercase}
+  #optMenu h3:first-child{margin-top:0}
+  #optMenu .optRow{display:flex; gap:6px; flex-wrap:wrap}
+  #optMenu button{background:#161b24; border:1px solid #2a3444; border-radius:8px; padding:7px 11px; color:#9fb0c4; font-size:.85rem; cursor:pointer}
+  #optMenu button.on{color:#0a0e14; background:#7ee0a3; border-color:#7ee0a3; font-weight:700}
+  #shopMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
+    background:rgba(10,14,20,.92); border:1px solid rgba(255,215,107,.4); border-radius:12px; padding:16px 20px; color:#e8edf4; text-align:center}
+  #shopMenu h3{font-size:.8rem; letter-spacing:.15em; color:#ffd76b; margin-bottom:8px; text-transform:uppercase}
+  #shopCoins{font-size:.9rem; color:#9fb0c4; margin-bottom:10px}
+  #shopCoins b{color:#ffd76b; font-variant-numeric:tabular-nums}
+  #shopMenu .shopHint{margin-top:10px; font-size:.72rem; color:#9fb0c4}
+  #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:8px; justify-content:center}
+  #upgList button{background:#161b24; border:1px solid #2a3444; border-radius:8px; padding:9px 12px; color:#e8edf4; font-size:.85rem; cursor:pointer; text-align:center}
+  #upgList button b{color:#ffd76b; display:block; margin-top:3px}
+  #upgList button small{color:#9fb0c4}
+  #upgList button:hover:not(:disabled){border-color:#ffd76b}
+  #upgList button:disabled{opacity:.45; cursor:default}
+  #rankList{margin-top:14px; text-align:left; min-width:250px}
+  #rankList h3{font-size:.8rem; letter-spacing:.2em; color:#9fb0c4; margin-bottom:6px; text-align:center}
+  .rankRow{display:flex; gap:8px; align-items:baseline; padding:3px 6px; border-radius:6px; font-variant-numeric:tabular-nums}
+  .rankRow span{color:#9fb0c4; width:22px}
+  .rankRow b{color:#7ee0a3; min-width:70px}
+  .rankRow small{color:#9fb0c4}
+  .rankRow.me{background:rgba(126,224,163,.15); outline:1px solid rgba(126,224,163,.4)}
+  .rankRow.me b{color:#ffcf4d}
+  /* 모바일 조작 UI */
+  #mobileUI{display:none}
+  body.mobile #mobileUI{display:block}
+  #joy{position:fixed; left:76px; bottom:76px; width:150px; height:150px; border-radius:50%; z-index:35; pointer-events:auto; touch-action:none;
+    background:rgba(10,14,20,.4); border:1px solid rgba(126,224,163,.3)}
+  #joyStick{position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%;
+    background:rgba(126,224,163,.35); border:1px solid #7ee0a3; pointer-events:none}
+  .mbtn{width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.8rem; color:#e8edf4;
+    background:rgba(22,27,36,.75); border:1.5px solid #2a3444; pointer-events:auto; touch-action:none; user-select:none; -webkit-user-select:none; z-index:35}
+  .mbtn:active{background:rgba(126,224,163,.4)}
+  .mbtn.tog.on{background:rgba(126,224,163,.45); border-color:#7ee0a3; color:#0a0e14; font-weight:700}
+  /* 사격: 조이스틱 맞은편(우하단) 동일 위치·중심 미러 */
+  #mbFire{position:fixed; right:88px; bottom:88px; width:126px; height:126px; font-size:1.2rem; background:rgba(217,83,79,.4); border-color:#d9534f}
+  /* 사격 위 일렬: 달리기 · 줌 · 점프 (사격 버튼과 간격 +10px) */
+  #mBtnRow{position:fixed; right:76px; bottom:243px; z-index:35; display:flex; gap:12px; pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="hitmark"></div>
+  <div id="wave" class="panel">WAVE <b id="waveN">1</b> — <span id="left">0</span>마리 남음</div>
+  <div id="banner"></div>
+  <div id="combo"></div>
+  <div id="pickup"></div>
+  <canvas id="minimap" width="300" height="300"></canvas>
+  <div id="buff">∞ 무한 탄약 <span id="buffT">10</span>s</div>
+  <div id="topChips">
+    <div class="chip">🪙 <span id="coinN">0</span> <small>COINS</small></div>
+    <div class="chip">🚩 <span id="scoreN">0</span> <small>SCORE</small></div>
+    <div class="chip">💀 <span id="kills">0</span> <small>KILLS</small></div>
+  </div>
+  <div id="stats">HP <span id="hpT">100</span><div class="hpbar"><div class="hpfill" id="hpF"></div></div></div>
+  <div id="ammo"><span id="ammoN">10</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
+  <div id="gSlot"><span class="gKey">F</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
+  <div id="msg" class="panel"><h2>YOU DIED</h2><div id="rankList"></div><button id="deathOk">확인</button></div>
+</div>
+<div id="dmgflash"></div>
+<div id="zoomVig"></div>
+<div id="aura"></div>
+<div id="optBtn">⚙ 옵션</div>
+<div id="optMenu">
+  <h3>시점</h3>
+  <div class="optRow">
+    <button data-view="fps">1인칭</button>
+    <button data-view="shoulder">3인칭 숄더뷰</button>
+  </div>
+  <h3>조작</h3>
+  <div class="optRow">
+    <button data-ctrl="pc">PC</button>
+    <button data-ctrl="mobile">모바일</button>
+  </div>
+  <div id="dbgWrap">
+    <h3>디버그</h3>
+    <div class="optRow">
+      <button id="dbgCoins">코인 +1,000,000</button>
+      <button id="dbgWave">웨이브 스킵</button>
+    </div>
+  </div>
+</div>
+<div id="shopMenu">
+  <h3>업그레이드 상점</h3>
+  <div id="shopCoins">보유 코인: <b id="shopCoinN">0</b> 🪙</div>
+  <div id="upgList"></div>
+  <p class="shopHint">레벨당 기본 성능 +5% · 킬로 코인 획득</p>
+</div>
+<div id="mobileUI">
+  <div id="joy"><div id="joyStick"></div></div>
+  <div id="mBtnRow">
+    <div class="mbtn" id="mbDash">대쉬</div>
+    <div class="mbtn tog" id="mbZoom">줌</div>
+    <div class="mbtn" id="mbJump">점프</div>
+  </div>
+  <div class="mbtn" id="mbFire">사격</div>
+</div>
+<div id="loading">LOADING MODELS<div class="bar"><div class="fill" id="loadF"></div></div></div>
+<div id="start">
+  <h1>ARENA FPS</h1>
+  <div class="sub">FIRST-PERSON SHOOTER — Vibe-coded with Claude</div>
+  <div class="keys">
+    <span class="key"><b>W A S D</b> 이동</span>
+    <span class="key"><b>Shift</b> 대쉬</span>
+    <span class="key"><b>Space</b> 점프</span>
+    <span class="key"><b>좌클릭</b> 사격</span>
+    <span class="key"><b>우클릭</b> 줌</span>
+    <span class="key"><b>R</b> 재장전</span>
+  </div>
+  <div class="go">▶ 클릭해서 시작</div>
+  <div id="startShop">🛒 상점</div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/": "./vendor/addons/"
+} }
+</script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
