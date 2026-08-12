@@ -1132,7 +1132,7 @@ startEl.addEventListener('click', () => {
   if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
 });
-canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl()) canvas.requestPointerLock(); });
+canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) canvas.requestPointerLock(); }); // 사망 화면에선 커서 유지
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   if (locked) shopMenu.style.display = 'none'; // 게임(포인터록) 진입 시 상점 숨김
