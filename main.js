@@ -1362,6 +1362,8 @@ function damagePlayer(n) {
 function restart(toMenu = false) {
   player.dead = false; player.pos.set(0, 0, 0); player.vy = 0;
   player.oneShot = null;
+  // 사망 포즈(clampWhenFinished) 잔존 방지 — 전체 액션 정지 후 idle 새로 시작
+  if (player.mixer) player.mixer.stopAllAction();
   if (player.actions['rifle aiming idle']) { player.current = null; play('rifle aiming idle', 0.1); }
   player.zooming = false; player.eyeH = EYE_STAND;
   player.dashT = 0; player.dashCd = 0;
@@ -1471,7 +1473,8 @@ function updatePlayer(dt) {
   // 점프/중력/플랫폼 지지
   if (keys['Space'] && player.onGround) {
     player.vy = 5.8; player.onGround = false;
-    oneShot('rifle jump', 0.9);
+    // 1인칭에서는 점프 모션이 상체를 카메라 앞으로 들이밀어 화면을 가리므로 생략
+    if (camMode !== 'fps') oneShot('rifle jump', 0.9);
   }
   const sup = supportHeight(player.pos);
   player.vy -= 13.5 * dt; player.pos.y += player.vy * dt;
