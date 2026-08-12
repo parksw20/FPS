@@ -103,34 +103,43 @@
     50%{box-shadow:0 0 38px rgba(80,225,255,.95), inset 0 0 24px rgba(80,225,255,.35)}}
   /* ESC 일시정지 */
   #pauseOv{position:fixed; inset:0; display:none; background:rgba(3,8,12,.55); backdrop-filter:blur(2px); z-index:10}
-  #pauseBtns{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:16px; width:300px}
+  #pauseBtns{position:absolute; left:50%; top:26%; transform:translateX(-50%); display:flex; flex-direction:column; gap:16px; width:300px}
+  #btnQuit{position:absolute; right:5%; bottom:7%; width:min(280px,40vw)}
   #rankMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
-    background:rgba(10,14,20,.92); border:1px solid rgba(126,224,163,.4); border-radius:12px; padding:16px 22px; color:#e8edf4; min-width:340px}
-  #rankMenu h3{font-size:.8rem; letter-spacing:.2em; color:#7ee0a3; margin-bottom:8px; text-align:center; text-transform:uppercase}
+    background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 24px; color:#eaf9ff; min-width:340px;
+    box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
+  #rankMenu h3{font-size:.8rem; letter-spacing:.2em; color:#7df3ff; margin-bottom:8px; text-align:center; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
   @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
   /* 옵션 */
   #optBtn{position:fixed; right:18px; top:74px; z-index:40; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.7); border:1px solid rgba(126,224,163,.35); border-radius:10px; padding:10px 16px; color:#9fb0c4; font-size:.95rem; user-select:none}
   #optBtn:hover{color:#e8edf4; border-color:#7ee0a3}
   #optMenu{position:fixed; right:18px; top:122px; z-index:40; pointer-events:auto; display:none;
-    background:rgba(10,14,20,.92); border:1px solid rgba(126,224,163,.35); border-radius:12px; padding:16px 18px; color:#e8edf4; min-width:230px}
-  #optMenu h3{font-size:.8rem; letter-spacing:.15em; color:#9fb0c4; margin:10px 0 6px; text-transform:uppercase}
+    background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 20px; color:#eaf9ff; min-width:240px;
+    box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
+  #optMenu h3{font-size:.8rem; letter-spacing:.15em; color:#7df3ff; margin:10px 0 6px; text-transform:uppercase; text-shadow:0 0 8px rgba(64,214,255,.6)}
   #optMenu h3:first-child{margin-top:0}
-  #optMenu .optRow{display:flex; gap:6px; flex-wrap:wrap}
-  #optMenu button{background:#161b24; border:1px solid #2a3444; border-radius:8px; padding:7px 11px; color:#9fb0c4; font-size:.85rem; cursor:pointer}
-  #optMenu button.on{color:#0a0e14; background:#7ee0a3; border-color:#7ee0a3; font-weight:700}
+  #optMenu .optRow{display:flex; gap:8px; flex-wrap:wrap}
+  #optMenu button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.45); border-radius:8px;
+    padding:7px 12px; color:#bfe9f7; font-size:.85rem; cursor:pointer; box-shadow:0 0 8px rgba(64,214,255,.2)}
+  #optMenu button:hover{border-color:#7df3ff; background:rgba(64,214,255,.15)}
+  #optMenu button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700; box-shadow:0 0 16px rgba(64,224,255,.7)}
   #shopMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
-    background:rgba(10,14,20,.92); border:1px solid rgba(255,215,107,.4); border-radius:12px; padding:16px 20px; color:#e8edf4; text-align:center}
-  #shopMenu h3{font-size:.8rem; letter-spacing:.15em; color:#ffd76b; margin-bottom:8px; text-transform:uppercase}
+    background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 22px; color:#eaf9ff; text-align:center;
+    box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
+  #shopMenu h3{font-size:.8rem; letter-spacing:.15em; color:#7df3ff; margin-bottom:8px; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
   #shopCoins{font-size:.9rem; color:#9fb0c4; margin-bottom:10px}
   #shopCoins b{color:#ffd76b; font-variant-numeric:tabular-nums}
   #shopMenu .shopHint{margin-top:10px; font-size:.72rem; color:#9fb0c4}
-  #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:8px; justify-content:center}
-  #upgList button{background:#161b24; border:1px solid #2a3444; border-radius:8px; padding:9px 12px; color:#e8edf4; font-size:.85rem; cursor:pointer; text-align:center}
+  #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center}
+  #upgList button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.55); border-radius:8px;
+    padding:10px 16px; color:#eaf9ff; font-size:.85rem; cursor:pointer; text-align:center;
+    box-shadow:0 0 10px rgba(64,214,255,.25), inset 0 0 8px rgba(64,214,255,.08)}
+  #upgList button>span{display:inline-block; transform:skewX(8deg)}
   #upgList button b{color:#ffd76b; display:block; margin-top:3px}
   #upgList button small{color:#9fb0c4}
-  #upgList button:hover:not(:disabled){border-color:#ffd76b}
-  #upgList button:disabled{opacity:.45; cursor:default}
+  #upgList button:hover:not(:disabled){border-color:#7df3ff; background:rgba(64,214,255,.18); box-shadow:0 0 18px rgba(64,214,255,.5)}
+  #upgList button:disabled{opacity:.4; cursor:default}
   #rankList{margin-top:14px; text-align:left; min-width:250px}
   #rankList h3{font-size:.8rem; letter-spacing:.2em; color:#9fb0c4; margin-bottom:6px; text-align:center}
   .rankRow{display:flex; gap:8px; align-items:baseline; padding:3px 6px; border-radius:6px; font-variant-numeric:tabular-nums}
@@ -183,7 +192,7 @@
     <div class="chip">💀 <span id="kills">0</span> <small>KILLS</small></div>
   </div>
   <div id="stats">HP <span id="hpT">100</span><div class="hpbar"><div class="hpfill" id="hpF"></div></div></div>
-  <div id="ammo"><span id="ammoN">15</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
+  <div id="ammo"><span id="ammoN">20</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
   <div id="gSlot"><span class="gKey">F</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
   <div id="msg" class="panel"><h2>YOU DIED</h2><div id="rankList"></div><button id="deathOk">확인</button></div>
 </div>
@@ -246,8 +255,8 @@
 <div id="pauseOv">
   <div id="pauseBtns">
     <div class="menuBtn primary" id="btnResume"><span>▶&nbsp; 되돌아가기</span></div>
-    <div class="menuBtn" id="pauseShop"><span>🛒&nbsp; 상점</span></div>
   </div>
+  <div class="menuBtn" id="btnQuit"><span>⏻&nbsp; 게임 종료</span></div>
 </div>
 <div id="rankMenu">
   <h3>TOP 10</h3>

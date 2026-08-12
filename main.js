@@ -233,7 +233,7 @@ const player = {
   oneShot: null, fireAction: null,
   dashT: 0, dashCd: 0, dashDir: { x: 0, z: -1 }, lastDir: { x: 0, z: -1 },
 };
-let score = 0, kills = 0, wave = 0, ammo = 15, reloading = false, coins = 0;
+let score = 0, kills = 0, wave = 0, ammo = 20, reloading = false, coins = 0;
 let buffT = 0; // 무한 탄약 남은 시간
 // ---------- 업그레이드 (코인 소모, 기본대비 +5%/레벨) ----------
 const upg = { dmg: 0, rate: 0, reload: 0, mag: 0, hp: 0 };
@@ -242,7 +242,7 @@ const upgCost = k => 100 * (upg[k] + 1);
 const dmgMul = () => 1 + 0.05 * upg.dmg;
 const fireInterval = () => 110 / (1 + 0.05 * upg.rate);
 const reloadMs = () => 1600 / (1 + 0.05 * upg.reload);
-const magSize = () => Math.round(15 * (1 + 0.05 * upg.mag)); // 기본 탄창 15발
+const magSize = () => Math.round(20 * (1 + 0.05 * upg.mag)); // 기본 탄창 20발
 const maxHp = () => Math.round(100 * (1 + 0.05 * upg.hp));
 function updateHpHud() {
   document.getElementById('hpT').textContent = Math.max(0, player.hp | 0);
@@ -254,14 +254,14 @@ function renderUpg() {
   el.innerHTML = '';
   for (const k of Object.keys(upg)) {
     const btn = document.createElement('button');
-    btn.innerHTML = `${UPG_NAMES[k]} Lv.${upg[k]} <small>(+${upg[k] * 5}%)</small> <b>${upgCost(k)}🪙</b>`;
+    btn.innerHTML = `<span>${UPG_NAMES[k]} Lv.${upg[k]} <small>(+${upg[k] * 5}%)</small> <b>${upgCost(k)}🪙</b></span>`;
     btn.disabled = coins < upgCost(k);
     btn.addEventListener('click', () => buyUpg(k));
     el.appendChild(btn);
   }
   // 수류탄: 정가 100코인, 최대 5개 보유
   const gb = document.createElement('button');
-  gb.innerHTML = `💣 수류탄 +1 <small>(${grenades}/5)</small> <b>100🪙</b>`;
+  gb.innerHTML = `<span>💣 수류탄 +1 <small>(${grenades}/5)</small> <b>100🪙</b></span>`;
   gb.disabled = coins < 100 || grenades >= 5;
   gb.addEventListener('click', () => {
     if (coins < 100 || grenades >= 5) return;
@@ -1225,7 +1225,23 @@ function refreshOverlay() {
   const menu = !isPlaying() && !player.dead;
   startEl.style.display = (menu && !inRun) ? 'block' : 'none';
   const p = document.getElementById('pauseOv');
-  if (p) p.style.display = (menu && inRun) ? 'block' : 'none';
+  const paused = menu && inRun;
+  if (p) p.style.display = paused ? 'block' : 'none';
+  // 일시정지 화면: 되돌아가기 버튼 100px 아래에 상점 패널 상시 표시
+  const sm = document.getElementById('shopMenu');
+  if (paused && sm) {
+    renderUpg();
+    const rb = document.getElementById('btnResume').getBoundingClientRect();
+    sm.style.display = 'block';
+    sm.style.left = '50%';
+    sm.style.top = (rb.bottom + 100) + 'px';
+    sm.style.bottom = 'auto';
+    sm.style.transform = 'translateX(-50%)';
+    sm.style.maxHeight = Math.max(160, innerHeight - rb.bottom - 120) + 'px';
+    sm.style.overflowY = 'auto';
+  } else if (!paused && inRun && sm) {
+    sm.style.display = 'none'; // 일시정지 해제 시 닫기 (타이틀에서는 버튼 토글 유지)
+  }
 }
 syncOptUI();
 
@@ -1245,11 +1261,7 @@ function enterGame() {
 }
 document.getElementById('btnStart').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
-document.getElementById('pauseShop').addEventListener('click', e => {
-  e.stopPropagation();
-  shopMenu.style.display = shopMenu.style.display === 'block' ? 'none' : 'block';
-  if (shopMenu.style.display === 'block') { renderUpg(); placeStartPanel(shopMenu); }
-});
+document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; restart(true); });
 document.getElementById('btnOptions').addEventListener('click', e => {
   e.stopPropagation();
   optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
@@ -1494,6 +1506,7 @@ function damagePlayer(n) {
   if (player.hp <= 0) {
     player.dead = true;
     firing = false; gMode = false; trajLine.visible = false; aimCircle.visible = false;
+    shopMenu.style.display = 'none'; // 일시정지 상점이 열려 있었다면 닫기
     // 사망 애니메이션(humanoid:death_gun) 재생 후 YOU DIED 표시
     const da = player.actions['humanoid:death_gun'];
     let deathDur = 2.2;
