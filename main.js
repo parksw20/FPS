@@ -594,7 +594,7 @@ function spawnEnemy(waveN, variant = 'walker') {
   const root = skClone(enemyGltf.scene);
   prepShadows(root);
   root.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; } });
-  const a = Math.random() * Math.PI * 2, r = ARENA - 3;
+  const a = Math.random() * Math.PI * 2, r = ARENA - 10; // 외벽 기준 10m 안쪽에서 스폰
   const s = boss ? 1.6 : 0.92 + Math.random() * 0.28; // 보스는 타 개체(평균 1.06) 대비 약 1.5배
   root.scale.setScalar(s);
   root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
