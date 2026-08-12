@@ -334,6 +334,7 @@ function setupPlayer() {
     if (!muzzleParent && o.isBone && /hand.*r|righthand/i.test(o.name)) muzzleParent = o;
     if (o.isMesh && /cube039/i.test(o.name)) weaponMeshes.push(o); // 총 메쉬(수류탄 투척 시 숨김)
   });
+  setupMuzzleAnchors();
   hideBones();
   if (!muzzleParent) muzzleParent = root;
 }
@@ -379,25 +380,41 @@ flashSprite.scale.set(0.5, 0.5, 1);
 scene.add(flashSprite);
 let flashT = 0;
 
-// 총구 끝 계산: 무기 메쉬 월드 bbox에서 조준 방향으로 가장 튀어나온 지점
-const _mzBox = new THREE.Box3();
+// 총구 끝: 무기 그룹(M4Colt) 로컬 bbox의 최장축 양 끝에 앵커를 달고, 조준 방향 쪽 끝을 총구로 사용
+let muzzleEndA = null, muzzleEndB = null;
 const lastMuzzle = new THREE.Vector3();
+function setupMuzzleAnchors() {
+  const wNode = weaponMeshes[0]?.parent;
+  if (!wNode) return;
+  const box = new THREE.Box3();
+  for (const m of weaponMeshes) {
+    m.geometry.computeBoundingBox();
+    const b = m.geometry.boundingBox.clone();
+    b.applyMatrix4(m.matrix); // 메쉬 → 무기 그룹 로컬
+    box.union(b);
+  }
+  const c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const axis = size.x > size.y ? (size.x > size.z ? 'x' : 'z') : (size.y > size.z ? 'y' : 'z');
+  muzzleEndA = new THREE.Object3D();
+  muzzleEndB = new THREE.Object3D();
+  const pA = c.clone(); pA[axis] = box.max[axis];
+  const pB = c.clone(); pB[axis] = box.min[axis];
+  muzzleEndA.position.copy(pA);
+  muzzleEndB.position.copy(pB);
+  wNode.add(muzzleEndA); wNode.add(muzzleEndB);
+}
+const _mzA = new THREE.Vector3(), _mzB = new THREE.Vector3();
 function muzzleTip(dir) {
-  const grp = weaponMeshes[0]?.parent;
-  if (!grp || !weaponMeshes[0].visible) {
+  if (!muzzleEndA) {
     const v = new THREE.Vector3();
     (muzzleParent ?? player.root).getWorldPosition(v);
     return v;
   }
-  _mzBox.setFromObject(grp);
-  const c = _mzBox.getCenter(new THREE.Vector3());
-  let m = 0;
-  const corner = new THREE.Vector3();
-  for (let i = 0; i < 8; i++) {
-    corner.set(i & 1 ? _mzBox.min.x : _mzBox.max.x, i & 2 ? _mzBox.min.y : _mzBox.max.y, i & 4 ? _mzBox.min.z : _mzBox.max.z);
-    m = Math.max(m, corner.sub(c).dot(dir));
-  }
-  return c.addScaledVector(dir, m);
+  muzzleEndA.getWorldPosition(_mzA);
+  muzzleEndB.getWorldPosition(_mzB);
+  // 총열 양 끝 중 조준 방향으로 앞서 있는 쪽이 총구
+  return _mzA.clone().sub(_mzB).dot(dir) > 0 ? _mzA.clone() : _mzB.clone();
 }
 
 // tracers / particles
