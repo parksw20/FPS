@@ -292,7 +292,7 @@ function buyUpg(k) {
 function saveRanking() {
   let list;
   try { list = JSON.parse(localStorage.getItem('fps.rank') || '[]'); } catch { list = []; }
-  const entry = { score, wave, kills, date: new Date().toISOString().slice(0, 10) };
+  const entry = { score, wave, kills, hs: headshots, date: new Date().toISOString().slice(0, 10) };
   list.push(entry);
   list.sort((a, b) => b.score - a.score);
   list = list.slice(0, 10);
@@ -303,7 +303,7 @@ function renderRanking() {
   const { list, entry } = saveRanking();
   const el = document.getElementById('rankList');
   el.innerHTML = '<h3>TOP 10</h3>' + list.map((r, i) =>
-    `<div class="rankRow${r === entry ? ' me' : ''}"><span>${i + 1}.</span><b>${r.score}</b><small>W${r.wave} · ${r.kills}킬 · ${r.date}</small></div>`
+    `<div class="rankRow${r === entry ? ' me' : ''}"><span>${i + 1}.</span><b>${r.score}</b><small>W${r.wave} · ${r.kills}킬 · HS ${r.hs || 0} · ${r.date}</small></div>`
   ).join('');
 }
 
@@ -629,6 +629,7 @@ function spawnEnemy(waveN, variant = 'walker') {
     root.traverse(o => { if (o.material?.emissive) o.material.emissive.setRGB(0.35, 0.09, 0.02); });
     en.jumpCd = 2.0;
   }
+  root.traverse(o => { if (!en.headBone && o.isBone && /head/i.test(o.name) && !/end/i.test(o.name)) en.headBone = o; });
   en.hpBar = makeHpBar();
   en.hpBar.grp.position.y = 2.62;
   if (boss) {
@@ -786,7 +787,7 @@ function updateEnemy(en, dt) {
   }
 }
 
-let gameTime = 0, combo = 0, lastKillT = -99;
+let gameTime = 0, combo = 0, lastKillT = -99, headshots = 0;
 // ---------- 수류탄 ----------
 let grenades = 0, gMode = false;
 const liveGrenades = [];
@@ -1290,7 +1291,7 @@ function shoot(now) {
       if (en.state === 'dead') continue;
       const s = en.scale;
       // 같은 적 안에서는 머리 우선 (머리 구체가 몸통 상단과 겹쳐도 머리로 판정)
-      const tH = test(en.root.position.clone().add(new THREE.Vector3(0, 1.8 * s, 0)), 0.36 * s);
+      const tH = test(enemyHeadPos(en), 0.28 * s); // 머리 본 기준 · 범위 축소
       const tB = test(en.root.position.clone().add(new THREE.Vector3(0, 1.15 * s, 0)), 0.66 * s);
       let t = null, hd = false;
       if (tH !== null) { t = tH; hd = true; }
@@ -1321,15 +1322,15 @@ function shoot(now) {
     // 머리 명중 세분화: 외곽 = 크리티컬(34), 중심(정밀) = 헤드샷 원샷킬
     let hitKind = headshot ? 'crit' : 'body';
     if (headshot && hitEn.kind !== 'boss') { // 보스는 헤드샷 없음(크리티컬까지만)
-      const hc = hitEn.root.position.clone().add(new THREE.Vector3(0, 1.8 * hitEn.scale, 0)).sub(origin);
+      const hc = enemyHeadPos(hitEn).sub(origin);
       const ht = hc.dot(dir);
       const hdd = hc.lengthSq() - ht * ht;
-      if (hdd < (0.2 * hitEn.scale) ** 2) hitKind = 'hs';
+      if (hdd < (0.15 * hitEn.scale) ** 2) hitKind = 'hs'; // 정밀 헤드샷 범위 축소
     }
     const hitPos = origin.clone().addScaledVector(dir, bestT);
     addTracer(muzzle, hitPos);
     burst(hitPos, headshot ? 0xffcc44 : 0xbb2233, hitKind === 'hs' ? 20 : headshot ? 14 : 9);
-    if (hitKind === 'hs') hitEn.hp = 0; // 헤드샷 = 원샷킬 (보스는 hs 판정 자체가 없음)
+    if (hitKind === 'hs') { hitEn.hp = 0; headshots++; } // 헤드샷 = 원샷킬 (보스는 hs 판정 자체가 없음)
     else hitEn.hp -= Math.round((hitKind === 'crit' ? 34 : 13) * dmgMul());
     hitEn.hitFlash = 0.12;
     // 넉백 임펄스(감쇠 속도) — 총량: 몸통 ≈0.15m, 헤드샷 ≈0.22m
@@ -1364,6 +1365,14 @@ function rayAABB(o, d, min, max) {
   }
   return tmin;
 }
+// 적 머리 실제 위치: 머리 본 월드 좌표(전방 기울기·애니메이션 추적) + 얼굴 중심 보정
+function enemyHeadPos(en) {
+  const v = new THREE.Vector3();
+  if (en.headBone) { en.headBone.getWorldPosition(v); v.y += 0.12 * en.scale; }
+  else { v.copy(en.root.position); v.y += 1.5 * en.scale; }
+  return v;
+}
+
 // 크리티컬/헤드샷 텍스트: 요소를 매번 새로 만들어 누적 표시 → 각자 위로 상승 후 제거
 function popupHitText(kind, en) {
   const el = document.createElement('div');
@@ -1428,7 +1437,7 @@ function restart(toMenu = false) {
   ammo = magSize();
   clearSpawnTimers();
   renderUpg();
-  combo = 0; lastKillT = -99;
+  combo = 0; lastKillT = -99; headshots = 0;
   for (const en of enemies) { scene.remove(en.root); clearAoe(en); }
   enemies.length = 0;
   for (const d of drops) scene.remove(d.root);
@@ -1675,7 +1684,7 @@ window.__game = {
   get state() {
     return {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
-      wave, score, kills, ammo, coins, combo, camMode, ctrlMode, gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
+      wave, score, kills, headshots, ammo, coins, combo, camMode, ctrlMode, gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
       grenades, gMode, liveGrenades: liveGrenades.length,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
