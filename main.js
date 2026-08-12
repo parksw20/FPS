@@ -1232,8 +1232,15 @@ function applyCtrl() {
 // 일시정지는 포인터록과 분리 — ESC는 브라우저 제스처로 인정되지 않아 잠금을 되걸 수 없으므로,
 // 재개는 게임 로직 기준(paused)으로 하고 조준 잠금은 다음 클릭에서 복구한다.
 let inRun = false;  // 게임 시작 후: ESC 일시정지는 타이틀이 아닌 PAUSED 오버레이
-let paused = false; // ESC 일시정지 상태
-let pausedAt = 0;   // 잠금 해제로 일시정지된 직후의 ESC keydown 전달(브라우저별) 이중 토글 방지
+let paused = false;   // ESC 일시정지 상태
+// 잠금 해제로 일시정지된 "그 ESC 누름"이 페이지에 keydown으로 전달되는 브라우저에서
+// 즉시 재개돼 버리는 이중 토글만 차단한다. 시간 지연 대신 (a) 그 키의 release 또는
+// (b) 다음 프레임 중 먼저 오는 쪽에서 곧바로 재무장 — 체감 딜레이 없음.
+let escArmed = true;
+function armEscSoon() {
+  escArmed = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => { escArmed = true; }));
+}
 const isPlaying = () => inRun && !paused && (!isMobileCtrl() || started);
 function refreshOverlay() {
   const menu = !isPlaying() && !player.dead;
@@ -1290,7 +1297,7 @@ canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !play
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   if (locked) { paused = false; shopMenu.style.display = 'none'; } // 잠금 성공 = 플레이 중
-  else if (inRun && !player.dead) { paused = true; pausedAt = performance.now(); } // ESC로 잠금 해제 → 일시정지
+  else if (inRun && !player.dead) { paused = true; armEscSoon(); } // ESC로 잠금 해제 → 일시정지
   refreshOverlay();
 });
 
@@ -1350,7 +1357,7 @@ document.addEventListener('keydown', e => {
   // ESC 토글: 일시정지 ↔ 재개 (잠금 중 ESC는 브라우저가 소비 → pointerlockchange 경로로 일시정지됨)
   if (e.code === 'Escape' && !e.repeat && inRun && !player.dead) {
     if (paused) {
-      if (performance.now() - pausedAt < 250) return; // 잠금 해제와 동시에 온 ESC는 무시
+      if (!escArmed) return;       // 잠금 해제를 유발한 그 누름의 잔여 keydown만 무시
       paused = false;              // 즉시 게임 재개 — 조준 잠금은 시도만, 실패 시 클릭으로 복구
       if (isMobileCtrl()) started = true;
       else {
@@ -1366,7 +1373,10 @@ document.addEventListener('keydown', e => {
   }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
 });
-document.addEventListener('keyup', e => { keys[e.code] = false; });
+document.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'Escape') escArmed = true; // 키를 떼는 즉시 재무장 (지연 0)
+});
 document.addEventListener('mousedown', e => {
   if (!locked) return; // 사망 후 재시작은 [확인] 버튼으로만
   if (e.button === 0) { if (gMode) { startGrenadeWindup(); return; } firing = true; } // 수류탄: 다운=와인드업
