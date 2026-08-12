@@ -1291,7 +1291,7 @@ function shoot(now) {
       if (en.state === 'dead') continue;
       const s = en.scale;
       // 같은 적 안에서는 머리 우선 (머리 구체가 몸통 상단과 겹쳐도 머리로 판정)
-      const tH = test(enemyHeadPos(en), 0.28 * s); // 머리 본 기준 · 범위 축소
+      const tH = test(enemyHeadPos(en), 0.196 * s); // 머리 본 기준 · 크리티컬 반경 30% 축소
       const tB = test(en.root.position.clone().add(new THREE.Vector3(0, 1.15 * s, 0)), 0.66 * s);
       let t = null, hd = false;
       if (tH !== null) { t = tH; hd = true; }
