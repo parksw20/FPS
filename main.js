@@ -379,6 +379,27 @@ flashSprite.scale.set(0.5, 0.5, 1);
 scene.add(flashSprite);
 let flashT = 0;
 
+// 총구 끝 계산: 무기 메쉬 월드 bbox에서 조준 방향으로 가장 튀어나온 지점
+const _mzBox = new THREE.Box3();
+const lastMuzzle = new THREE.Vector3();
+function muzzleTip(dir) {
+  const grp = weaponMeshes[0]?.parent;
+  if (!grp || !weaponMeshes[0].visible) {
+    const v = new THREE.Vector3();
+    (muzzleParent ?? player.root).getWorldPosition(v);
+    return v;
+  }
+  _mzBox.setFromObject(grp);
+  const c = _mzBox.getCenter(new THREE.Vector3());
+  let m = 0;
+  const corner = new THREE.Vector3();
+  for (let i = 0; i < 8; i++) {
+    corner.set(i & 1 ? _mzBox.min.x : _mzBox.max.x, i & 2 ? _mzBox.min.y : _mzBox.max.y, i & 4 ? _mzBox.min.z : _mzBox.max.z);
+    m = Math.max(m, corner.sub(c).dot(dir));
+  }
+  return c.addScaledVector(dir, m);
+}
+
 // tracers / particles
 const tracers = [];
 const tracerMat = new THREE.LineBasicMaterial({ color: 0xffe9a3, transparent: true });
@@ -1259,8 +1280,8 @@ function shoot(now) {
     const t = rayAABB(origin, dir, min, max);
     if (t !== null && t < wallT) wallT = t;
   }
-  const muzzle = new THREE.Vector3();
-  (muzzleParent ?? player.root).getWorldPosition(muzzle);
+  const muzzle = muzzleTip(dir);
+  lastMuzzle.copy(muzzle);
   window.__lastShot = { origin: origin.toArray().map(v => +v.toFixed(2)), dir: dir.toArray().map(v => +v.toFixed(3)), bestT: +bestT.toFixed(2), wallT: +wallT.toFixed(2), hit: !!hitEn };
   if (hitEn && bestT < wallT) {
     const hitPos = origin.clone().addScaledVector(dir, bestT);
@@ -1515,9 +1536,7 @@ function updatePlayer(dt) {
   // 총구 이펙트
   if (flashT > 0) {
     flashT -= dt;
-    const mp = new THREE.Vector3();
-    (muzzleParent ?? player.root).getWorldPosition(mp);
-    flashLight.position.copy(mp); flashSprite.position.copy(mp);
+    flashLight.position.copy(lastMuzzle); flashSprite.position.copy(lastMuzzle);
     flashLight.intensity = flashT > 0 ? 26 : 0;
     flashSprite.material.opacity = flashT > 0 ? 0.9 : 0;
   } else { flashLight.intensity = 0; flashSprite.material.opacity = 0; }
