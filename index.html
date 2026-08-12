@@ -84,7 +84,7 @@
   #loading{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; background:#06080c; color:#9fb0c4; z-index:20; letter-spacing:.2em}
   #loading .bar{width:280px; height:6px; background:#1c2431; border-radius:3px; overflow:hidden}
   #loading .fill{height:100%; width:0%; background:#7ee0a3; transition:width .2s}
-  #start{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px; background:rgba(6,8,12,.88); color:#e8edf4; cursor:pointer; z-index:10}
+  #start{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:6vh; gap:18px; background:rgba(6,8,12,.88); color:#e8edf4; cursor:pointer; z-index:10}
   #start h1{font-size:3rem; letter-spacing:.3em; color:#7ee0a3; text-shadow:0 0 30px rgba(126,224,163,.4)}
   #start .sub{color:#9fb0c4; letter-spacing:.1em}
   #start .keys{display:flex; gap:12px; margin-top:10px; flex-wrap:wrap; justify-content:center; max-width:720px}
@@ -137,7 +137,8 @@
   .rankTbl th{color:#9fb0c4; font-size:.72rem; font-weight:600; letter-spacing:.08em; padding:5px 9px; border-bottom:1px solid #2a3444; text-align:center}
   .rankTbl td{padding:5px 9px; font-size:.9rem; text-align:center; color:#e8edf4}
   .rankTbl td:first-child{color:#9fb0c4; text-align:right; padding-right:2px}
-  .rankTbl td.num,.rankTbl th.num{text-align:right}
+  .rankTbl td.num{text-align:right}
+  .rankTbl th.num{text-align:center}
   .rankTbl td.num{color:#7ee0a3; font-weight:700}
   .rankTbl td:last-child{color:#9fb0c4; font-size:.8rem}
   .rankTbl tr.me td{background:rgba(126,224,163,.14)}

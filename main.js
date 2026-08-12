@@ -1136,16 +1136,24 @@ document.getElementById('dbgWave').addEventListener('click', e => {
 });
 
 const shopMenu = document.getElementById('shopMenu');
+// 시작 화면 패널을 버튼 바로 아래에 배치 (겹침 방지 · 넘치면 스크롤)
+function placeStartPanel(el) {
+  const b = document.getElementById('startBtns').getBoundingClientRect();
+  el.style.top = (b.bottom + 12) + 'px';
+  el.style.bottom = 'auto';
+  el.style.maxHeight = Math.max(160, innerHeight - b.bottom - 28) + 'px';
+  el.style.overflowY = 'auto';
+}
 document.getElementById('startShop').addEventListener('click', e => {
   e.stopPropagation(); // 시작 오버레이의 포인터록 진입 차단
   shopMenu.style.display = shopMenu.style.display === 'block' ? 'none' : 'block';
-  if (shopMenu.style.display === 'block') { renderUpg(); rankMenu.style.display = 'none'; }
+  if (shopMenu.style.display === 'block') { renderUpg(); placeStartPanel(shopMenu); rankMenu.style.display = 'none'; }
 });
 const rankMenu = document.getElementById('rankMenu');
 document.getElementById('startRank').addEventListener('click', e => {
   e.stopPropagation();
   rankMenu.style.display = rankMenu.style.display === 'block' ? 'none' : 'block';
-  if (rankMenu.style.display === 'block') { viewRanking(); shopMenu.style.display = 'none'; }
+  if (rankMenu.style.display === 'block') { viewRanking(); placeStartPanel(rankMenu); shopMenu.style.display = 'none'; }
 });
 optMenu.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => {
   camMode = b.dataset.view; localStorage.setItem('fps.view', camMode); syncOptUI(); applyView();
