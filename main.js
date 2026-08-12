@@ -1351,7 +1351,7 @@ function damagePlayer(n) {
     damagePlayer._t = setTimeout(() => {
       renderRanking(); // TOP 10 기록·표시
       msgEl.style.display = 'block';
-    }, Math.min(3200, deathDur * 1000 + 300));
+    }, 300); // 사망 0.3초 후 표시 (사망 애니는 뒤에서 계속 재생)
     document.exitPointerLock();
     refreshOverlay();
   } else {
