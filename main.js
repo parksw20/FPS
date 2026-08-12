@@ -1094,7 +1094,7 @@ function banner(text) {
 }
 
 // ---------- 옵션 (시점 · 조작) ----------
-let camMode = localStorage.getItem('fps.view') || 'fps';       // 'fps' | 'shoulder'
+let camMode = localStorage.getItem('fps.view') || 'shoulder';  // 기본: 3인칭 숄더뷰
 if (camMode === 'tps') camMode = 'shoulder';                    // 구버전 저장값 호환
 let ctrlMode = localStorage.getItem('fps.ctrl') || 'pc';       // 'pc' | 'mobile'
 const isMobileCtrl = () => ctrlMode === 'mobile';
