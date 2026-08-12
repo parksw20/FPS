@@ -921,6 +921,16 @@ function releaseGrenadeWindup() {
   if (!gWindup) return;
   gWindup = false;
   const a = player.actions['toss grenade'];
+  // 준비자세(1.5초) 도달 전 릴리즈 → 투척 취소 (수류탄 미소모, 총 복원)
+  if (a && a.time < WIND_HOLD_T - 0.02) {
+    a.stop();
+    player.oneShot = null;
+    player.current = null;
+    play('rifle aiming idle', 0.12);
+    clearTimeout(hideWeapon._t);
+    for (const m of weaponMeshes) m.visible = true;
+    return;
+  }
   if (a) a.paused = false; // 나머지 모션 재생
   grenades--;
   // 수류탄 모드는 F를 다시 누를 때까지 유지 (남은 수류탄이 없으면 총으로 복귀)
@@ -1257,7 +1267,10 @@ function enterGame() {
   optMenu.style.display = 'none';
   inRun = true;
   if (isMobileCtrl()) { started = true; refreshOverlay(); }
-  else canvas.requestPointerLock();
+  else {
+    const pr = canvas.requestPointerLock();
+    if (pr && pr.catch) pr.catch(() => { }); // 잠금 해제 직후 쿨다운(~1.3초) 중 재요청 거부 무시
+  }
 }
 document.getElementById('btnStart').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
@@ -1327,6 +1340,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !reloading && ammo < magSize()) reload();
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
   if (e.code === 'KeyF' && !e.repeat) toggleGMode();
+  if (e.code === 'Escape' && !e.repeat && inRun && !player.dead && !isPlaying()) enterGame(); // 일시정지에서 ESC → 재개
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
