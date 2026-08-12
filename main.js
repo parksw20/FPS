@@ -901,17 +901,39 @@ function hideWeapon(sec) {
   clearTimeout(hideWeapon._t);
   hideWeapon._t = setTimeout(() => weaponMeshes.forEach(m => m.visible = true), sec * 1000);
 }
-const pendingThrows = []; // 투척 모션 중 — 릴리즈(2초) 시점에 실제 발사
-function throwGrenade() {
-  if (grenades <= 0 || player.dead || pendingThrows.length || player.oneShot === 'toss grenade') return;
+const pendingThrows = []; // 릴리즈 예약 — 마우스 업 0.5초 뒤 실제 발사
+// 홀드 투척: 다운 → toss grenade 1.5초까지 재생 후 정지 유지, 업 → 나머지 재생 + 0.5초 뒤 투척
+const WIND_HOLD_T = 1.5;
+let gWindup = false;
+function startGrenadeWindup() {
+  if (grenades <= 0 || player.dead || gWindup || pendingThrows.length) return;
+  gWindup = true;
+  const a = player.actions['toss grenade'];
+  if (a) {
+    a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.paused = false;
+    play('toss grenade', 0.08);
+    player.oneShot = 'toss grenade';
+  }
+  clearTimeout(hideWeapon._t);
+  for (const m of weaponMeshes) m.visible = false; // 던지는 동안 총 숨김 (릴리즈 후 복원)
+}
+function releaseGrenadeWindup() {
+  if (!gWindup) return;
+  gWindup = false;
+  const a = player.actions['toss grenade'];
+  if (a) a.paused = false; // 나머지 모션 재생
   grenades--;
   // 수류탄 모드는 F를 다시 누를 때까지 유지 (남은 수류탄이 없으면 총으로 복귀)
   if (grenades <= 0) { gMode = false; trajLine.visible = false; aimCircle.visible = false; }
   updateGSlot();
   persistProgress();
-  oneShot('toss grenade', 2.3);
-  hideWeapon(2.7); // 던지는 동안 총 숨김
-  pendingThrows.push({ t: 2.0 });
+  pendingThrows.push({ t: 0.5 });
+  hideWeapon(1.3);
+  setTimeout(() => { if (player.oneShot === 'toss grenade') player.oneShot = null; }, 1300);
+}
+function throwGrenade() { // 디버그/즉시 투척 (홀드 없이)
+  startGrenadeWindup();
+  releaseGrenadeWindup();
 }
 function releaseGrenade() {
   // 릴리즈 순간의 조준 방향으로 발사
@@ -1158,13 +1180,13 @@ document.getElementById('dbgWave').addEventListener('click', e => {
 });
 
 const shopMenu = document.getElementById('shopMenu');
-// 시작 화면 패널: 우하단 메뉴와 겹치지 않게 좌측-중앙에 배치 (넘치면 스크롤)
+// 시작 화면 패널: 중앙 하단 배치 (넘치면 스크롤)
 function placeStartPanel(el) {
-  el.style.left = '38%';
-  el.style.top = '50%';
-  el.style.bottom = 'auto';
-  el.style.transform = 'translate(-50%,-50%)';
-  el.style.maxHeight = '78vh';
+  el.style.left = '50%';
+  el.style.top = 'auto';
+  el.style.bottom = '24px';
+  el.style.transform = 'translateX(-50%)';
+  el.style.maxHeight = '72vh';
   el.style.overflowY = 'auto';
 }
 document.getElementById('startShop').addEventListener('click', e => {
@@ -1198,7 +1220,13 @@ function applyCtrl() {
   refreshOverlay();
 }
 const isPlaying = () => locked || (isMobileCtrl() && started);
-function refreshOverlay() { startEl.style.display = (isPlaying() || player.dead) ? 'none' : 'flex'; }
+let inRun = false; // 게임 시작 후: ESC 일시정지는 타이틀이 아닌 PAUSED 오버레이
+function refreshOverlay() {
+  const menu = !isPlaying() && !player.dead;
+  startEl.style.display = (menu && !inRun) ? 'block' : 'none';
+  const p = document.getElementById('pauseOv');
+  if (p) p.style.display = (menu && inRun) ? 'block' : 'none';
+}
 syncOptUI();
 
 // ---------- input ----------
@@ -1206,14 +1234,21 @@ const keys = {};
 let locked = false, firing = false, lastShot = 0;
 const startEl = document.getElementById('start');
 const msgEl = document.getElementById('msg');
-document.getElementById('btnStart').addEventListener('click', e => {
-  e.stopPropagation();
+function enterGame() {
   audioInit();
-  shopMenu.style.display = 'none'; // 게임 시작 시 열린 패널 닫기
+  shopMenu.style.display = 'none'; // 게임 진입 시 열린 패널 닫기
   rankMenu.style.display = 'none';
   optMenu.style.display = 'none';
+  inRun = true;
   if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
+}
+document.getElementById('btnStart').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
+document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
+document.getElementById('pauseShop').addEventListener('click', e => {
+  e.stopPropagation();
+  shopMenu.style.display = shopMenu.style.display === 'block' ? 'none' : 'block';
+  if (shopMenu.style.display === 'block') { renderUpg(); placeStartPanel(shopMenu); }
 });
 document.getElementById('btnOptions').addEventListener('click', e => {
   e.stopPropagation();
@@ -1261,8 +1296,8 @@ const lookEnd = e => { if (e.pointerId === lookId) { lookId = null; lastLook = n
 canvas.addEventListener('pointerup', lookEnd); canvas.addEventListener('pointercancel', lookEnd);
 // 버튼
 const mb = id => document.getElementById(id);
-mb('mbFire').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if (gMode) return; firing = true; });
-mb('mbFire').addEventListener('pointerup', () => { if (gMode) throwGrenade(); firing = false; });
+mb('mbFire').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if (gMode) { startGrenadeWindup(); return; } firing = true; });
+mb('mbFire').addEventListener('pointerup', () => { if (gMode) releaseGrenadeWindup(); firing = false; });
 mb('mbFire').addEventListener('pointercancel', () => firing = false);
 mb('mbJump').addEventListener('pointerdown', e => { e.preventDefault(); keys['Space'] = true; });
 mb('mbJump').addEventListener('pointerup', () => keys['Space'] = false);
@@ -1285,12 +1320,12 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 document.addEventListener('mousedown', e => {
   if (!locked) return; // 사망 후 재시작은 [확인] 버튼으로만
-  if (e.button === 0) { if (gMode) return; firing = true; } // 수류탄은 마우스 업에서 발사
+  if (e.button === 0) { if (gMode) { startGrenadeWindup(); return; } firing = true; } // 수류탄: 다운=와인드업
   if (e.button === 2) player.zooming = true;
 });
 document.addEventListener('mouseup', e => {
   if (e.button === 0) {
-    if (locked && gMode) throwGrenade(); // 다운 후 업 시점에 투척
+    if (locked && gMode) releaseGrenadeWindup(); // 업: 나머지 모션 + 0.5초 뒤 투척
     firing = false;
   }
   if (e.button === 2) player.zooming = false;
@@ -1516,7 +1551,7 @@ function restart(toMenu = false) {
   document.getElementById('ammo').classList.remove('inf');
   updateAmmo();
   msgEl.style.display = 'none';
-  if (toMenu) { started = false; refreshOverlay(); } // 확인 → 메인 화면
+  if (toMenu) { started = false; inRun = false; refreshOverlay(); } // 확인 → 메인 화면
   else if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
   nextWave();
@@ -1619,6 +1654,11 @@ function updatePlayer(dt) {
   if (player.current && !player.oneShot) player.current.timeScale = player.dashT > 0 ? 1.6 : 1.15;
 
   player.mixer.update(dt);
+  // 홀드 투척: 1.5초 지점에서 모션 정지 유지 (마우스 업까지)
+  if (gWindup) {
+    const a = player.actions['toss grenade'];
+    if (a && a.time >= WIND_HOLD_T) { a.time = WIND_HOLD_T; a.paused = true; }
+  }
   if (camMode === 'fps') hideBones();
   recoil = Math.max(0, recoil - dt * 0.25);
 
