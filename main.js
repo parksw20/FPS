@@ -1229,17 +1229,21 @@ function applyCtrl() {
   if (isMobileCtrl() && document.pointerLockElement) document.exitPointerLock();
   refreshOverlay();
 }
-const isPlaying = () => locked || (isMobileCtrl() && started);
-let inRun = false; // 게임 시작 후: ESC 일시정지는 타이틀이 아닌 PAUSED 오버레이
+// 일시정지는 포인터록과 분리 — ESC는 브라우저 제스처로 인정되지 않아 잠금을 되걸 수 없으므로,
+// 재개는 게임 로직 기준(paused)으로 하고 조준 잠금은 다음 클릭에서 복구한다.
+let inRun = false;  // 게임 시작 후: ESC 일시정지는 타이틀이 아닌 PAUSED 오버레이
+let paused = false; // ESC 일시정지 상태
+let pausedAt = 0;   // 잠금 해제로 일시정지된 직후의 ESC keydown 전달(브라우저별) 이중 토글 방지
+const isPlaying = () => inRun && !paused && (!isMobileCtrl() || started);
 function refreshOverlay() {
   const menu = !isPlaying() && !player.dead;
   startEl.style.display = (menu && !inRun) ? 'block' : 'none';
   const p = document.getElementById('pauseOv');
-  const paused = menu && inRun;
-  if (p) p.style.display = paused ? 'block' : 'none';
+  const pauseUI = menu && inRun;
+  if (p) p.style.display = pauseUI ? 'block' : 'none';
   // 일시정지 화면: 되돌아가기 버튼 100px 아래에 상점 패널 상시 표시
   const sm = document.getElementById('shopMenu');
-  if (paused && sm) {
+  if (pauseUI && sm) {
     renderUpg();
     const rb = document.getElementById('btnResume').getBoundingClientRect();
     sm.style.display = 'block';
@@ -1249,7 +1253,7 @@ function refreshOverlay() {
     sm.style.transform = 'translateX(-50%)';
     sm.style.maxHeight = Math.max(160, innerHeight - rb.bottom - 120) + 'px';
     sm.style.overflowY = 'auto';
-  } else if (!paused && inRun && sm) {
+  } else if (!pauseUI && inRun && sm) {
     sm.style.display = 'none'; // 일시정지 해제 시 닫기 (타이틀에서는 버튼 토글 유지)
   }
 }
@@ -1266,26 +1270,27 @@ function enterGame() {
   rankMenu.style.display = 'none';
   optMenu.style.display = 'none';
   inRun = true;
-  if (isMobileCtrl()) { started = true; refreshOverlay(); }
+  paused = false;
+  if (isMobileCtrl()) started = true;
   else {
     const pr = canvas.requestPointerLock();
-    if (pr && pr.catch) pr.catch(() => { }); // 잠금 해제 직후 쿨다운(~1.3초) 중 재요청 거부 무시
+    if (pr && pr.catch) pr.catch(() => { }); // 잠금 실패해도 게임은 시작 — 클릭 시 재시도
   }
+  refreshOverlay();
 }
 document.getElementById('btnStart').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
-document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; restart(true); });
+document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; paused = false; restart(true); });
 document.getElementById('btnOptions').addEventListener('click', e => {
   e.stopPropagation();
   optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
   if (optMenu.style.display === 'block') { shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; }
 });
 canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) canvas.requestPointerLock(); }); // 사망 화면에선 커서 유지
-let lockLostAt = 0; // ESC 해제 직후 크롬 재잠금 쿨다운(~1.3초) 판정용
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
-  if (locked) shopMenu.style.display = 'none'; // 게임(포인터록) 진입 시 상점 숨김
-  else lockLostAt = performance.now();
+  if (locked) { paused = false; shopMenu.style.display = 'none'; } // 잠금 성공 = 플레이 중
+  else if (inRun && !player.dead) { paused = true; pausedAt = performance.now(); } // ESC로 잠금 해제 → 일시정지
   refreshOverlay();
 });
 
@@ -1342,12 +1347,21 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !reloading && ammo < magSize()) reload();
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
   if (e.code === 'KeyF' && !e.repeat) toggleGMode();
-  // 일시정지에서 ESC → 재개 (잠금 해제 직후 쿨다운 중에는 무시 — 메뉴 상태를 건드리지 않는다)
-  if (e.code === 'Escape' && !e.repeat && inRun && !player.dead && !isPlaying()) {
-    if (isMobileCtrl()) { started = true; refreshOverlay(); }
-    else if (performance.now() - lockLostAt > 1350) {
-      const pr = canvas.requestPointerLock();
-      if (pr && pr.catch) pr.catch(() => { });
+  // ESC 토글: 일시정지 ↔ 재개 (잠금 중 ESC는 브라우저가 소비 → pointerlockchange 경로로 일시정지됨)
+  if (e.code === 'Escape' && !e.repeat && inRun && !player.dead) {
+    if (paused) {
+      if (performance.now() - pausedAt < 250) return; // 잠금 해제와 동시에 온 ESC는 무시
+      paused = false;              // 즉시 게임 재개 — 조준 잠금은 시도만, 실패 시 클릭으로 복구
+      if (isMobileCtrl()) started = true;
+      else {
+        const pr = canvas.requestPointerLock();
+        if (pr && pr.catch) pr.catch(() => { });
+      }
+      shopMenu.style.display = 'none';
+      refreshOverlay();
+    } else if (!locked) {          // 잠금 없이 플레이 중 ESC → 일시정지
+      paused = true;
+      refreshOverlay();
     }
   }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
@@ -1587,7 +1601,7 @@ function restart(toMenu = false) {
   document.getElementById('ammo').classList.remove('inf');
   updateAmmo();
   msgEl.style.display = 'none';
-  if (toMenu) { started = false; inRun = false; refreshOverlay(); } // 확인 → 메인 화면
+  if (toMenu) { started = false; inRun = false; paused = false; refreshOverlay(); } // 확인 → 메인 화면
   else if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
   nextWave();
