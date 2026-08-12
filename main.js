@@ -1066,7 +1066,7 @@ function nextWave() {
   const rangers = wave >= 9 ? Math.min(3, wave - 8) : 0;      // 웨이브9부터 1마리, 이후 +1 (최대 3)
   const bosses = wave % 10 === 0 ? 1 : 0;                     // 10웨이브마다 보스
   banner('WAVE ' + wave + (bosses ? ' — ⚠ BOSS 출현 ⚠' : rangers ? ' — 원거리 개체 출현!' : jumpers ? ' — 도약 개체 출현!' : runners ? ' — 러너 출현!' : ''));
-  const count = (2 + wave) * 2 + bosses; // 일반 개체 2배 (보스는 별도 1마리 유지)
+  const count = (2 + wave) * 2 + 3 + bosses; // 일반 개체 2배 + 3마리 (보스는 별도 1마리 유지)
   for (let i = 0; i < count; i++) {
     const kind = i < bosses ? 'boss'
       : i < bosses + rangers ? 'ranged'
