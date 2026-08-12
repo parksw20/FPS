@@ -1139,9 +1139,10 @@ const shopMenu = document.getElementById('shopMenu');
 // 시작 화면 패널을 버튼 바로 아래에 배치 (겹침 방지 · 넘치면 스크롤)
 function placeStartPanel(el) {
   const b = document.getElementById('startBtns').getBoundingClientRect();
-  el.style.top = (b.bottom + 12) + 'px';
+  const GAP = 30;                       // 버튼과 패널 사이 여백
+  el.style.top = (b.bottom + GAP) + 'px';
   el.style.bottom = 'auto';
-  el.style.maxHeight = Math.max(160, innerHeight - b.bottom - 28) + 'px';
+  el.style.maxHeight = Math.max(160, innerHeight - b.bottom - GAP - 16) + 'px';
   el.style.overflowY = 'auto';
 }
 document.getElementById('startShop').addEventListener('click', e => {
