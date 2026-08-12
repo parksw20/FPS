@@ -103,8 +103,11 @@
     50%{box-shadow:0 0 38px rgba(80,225,255,.95), inset 0 0 24px rgba(80,225,255,.35)}}
   /* ESC 일시정지 */
   #pauseOv{position:fixed; inset:0; display:none; background:rgba(3,8,12,.55); backdrop-filter:blur(2px); z-index:10}
-  #pauseBtns{position:absolute; left:50%; top:26%; transform:translateX(-50%); display:flex; flex-direction:column; gap:16px; width:300px}
-  #btnQuit{position:absolute; right:5%; bottom:7%; width:min(280px,40vw)}
+  #pauseBtns{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:16px; width:300px}
+  #btnQuit{position:absolute; right:5%; bottom:7%; width:min(280px,40vw);
+    border-color:rgba(255,77,77,.75); box-shadow:0 0 14px rgba(255,77,77,.4), inset 0 0 12px rgba(255,77,77,.12)}
+  #btnQuit span{color:#ffd9d9; text-shadow:0 0 10px rgba(255,77,77,.85)}
+  #btnQuit:hover{background:rgba(255,77,77,.2); box-shadow:0 0 28px rgba(255,77,77,.75), inset 0 0 16px rgba(255,77,77,.25); border-color:#ff6b6b}
   #rankMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
     background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 24px; color:#eaf9ff; min-width:340px;
     box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
@@ -127,13 +130,13 @@
   #shopMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
     background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 22px; color:#eaf9ff; text-align:center;
     box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
-  #shopMenu h3{font-size:.8rem; letter-spacing:.15em; color:#7df3ff; margin-bottom:8px; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
-  #shopCoins{font-size:.9rem; color:#9fb0c4; margin-bottom:10px}
+  #shopMenu h3{font-size:1.05rem; letter-spacing:.15em; color:#7df3ff; margin-bottom:8px; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
+  #shopCoins{font-size:1.15rem; color:#9fb0c4; margin-bottom:10px}
   #shopCoins b{color:#ffd76b; font-variant-numeric:tabular-nums}
-  #shopMenu .shopHint{margin-top:10px; font-size:.72rem; color:#9fb0c4}
+  #shopMenu .shopHint{margin-top:10px; font-size:.95rem; color:#9fb0c4}
   #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center}
   #upgList button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.55); border-radius:8px;
-    padding:10px 16px; color:#eaf9ff; font-size:.85rem; cursor:pointer; text-align:center;
+    padding:11px 18px; color:#eaf9ff; font-size:1.1rem; cursor:pointer; text-align:center;
     box-shadow:0 0 10px rgba(64,214,255,.25), inset 0 0 8px rgba(64,214,255,.08)}
   #upgList button>span{display:inline-block; transform:skewX(8deg)}
   #upgList button b{color:#ffd76b; display:block; margin-top:3px}

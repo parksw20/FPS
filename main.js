@@ -1180,13 +1180,13 @@ document.getElementById('dbgWave').addEventListener('click', e => {
 });
 
 const shopMenu = document.getElementById('shopMenu');
-// 시작 화면 패널: 중앙 하단 배치 (넘치면 스크롤)
+// 시작 화면 패널: 화면 중앙에서 100px 아래 배치 (넘치면 스크롤)
 function placeStartPanel(el) {
   el.style.left = '50%';
-  el.style.top = 'auto';
-  el.style.bottom = '24px';
-  el.style.transform = 'translateX(-50%)';
-  el.style.maxHeight = '72vh';
+  el.style.top = 'calc(50% + 100px)';
+  el.style.bottom = 'auto';
+  el.style.transform = 'translate(-50%,-50%)';
+  el.style.maxHeight = '60vh';
   el.style.overflowY = 'auto';
 }
 document.getElementById('startShop').addEventListener('click', e => {
