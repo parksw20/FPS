@@ -1325,7 +1325,7 @@ function shoot(now) {
       const hc = enemyHeadPos(hitEn).sub(origin);
       const ht = hc.dot(dir);
       const hdd = hc.lengthSq() - ht * ht;
-      if (hdd < (0.15 * hitEn.scale) ** 2) hitKind = 'hs'; // 정밀 헤드샷 범위 축소
+      if (hdd < (0.075 * hitEn.scale) ** 2) hitKind = 'hs'; // 정밀 헤드샷 반경 50% 추가 축소
     }
     const hitPos = origin.clone().addScaledVector(dir, bestT);
     addTracer(muzzle, hitPos);
