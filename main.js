@@ -1333,6 +1333,10 @@ function shoot(now) {
       hitEn.hpBar.fill.position.x = -(1 - ratio) * 0.55;
     }
     hitmark(headshot);
+    if (headshot) {
+      const h = document.getElementById('headshotTxt');
+      h.classList.remove('pop'); void h.offsetWidth; h.classList.add('pop');
+    }
     headshot ? sfxHead() : sfxHit();
     if (hitEn.hp <= 0) killEnemy(hitEn);
   } else {
