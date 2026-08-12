@@ -299,20 +299,22 @@ function saveRanking() {
   localStorage.setItem('fps.rank', JSON.stringify(list));
   return { list, entry };
 }
-function rankingRows(list, me = null) {
+function rankingTable(list, me = null) {
   if (!list.length) return '<div class="rankRow"><small>기록이 없습니다</small></div>';
-  return list.map((r, i) =>
-    `<div class="rankRow${r === me ? ' me' : ''}"><span>${i + 1}.</span><b>${r.score}</b><small>W${r.wave} · ${r.kills}킬 · HS ${r.hs || 0} · 명중 ${r.acc ?? '-'}% · ${r.date}</small></div>`
+  const rows = list.map((r, i) =>
+    `<tr class="${r === me ? 'me' : ''}"><td>${i + 1}</td><td class="num">${r.score.toLocaleString()}</td>` +
+    `<td>${r.wave}</td><td>${r.kills}</td><td>${r.hs || 0}</td><td>${r.acc != null ? r.acc + '%' : '-'}</td><td>${r.date}</td></tr>`
   ).join('');
+  return `<table class="rankTbl"><thead><tr><th></th><th class="num">점수</th><th>웨이브</th><th>킬수</th><th>헤드샷</th><th>명중률</th><th>기록일</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function renderRanking() {
   const { list, entry } = saveRanking();
-  document.getElementById('rankList').innerHTML = '<h3>TOP 10</h3>' + rankingRows(list, entry);
+  document.getElementById('rankList').innerHTML = '<h3>TOP 10</h3>' + rankingTable(list, entry);
 }
 function viewRanking() { // 메인 화면 열람용 (기록 저장 없음)
   let list;
   try { list = JSON.parse(localStorage.getItem('fps.rank') || '[]'); } catch { list = []; }
-  document.getElementById('rankMenuList').innerHTML = rankingRows(list);
+  document.getElementById('rankMenuList').innerHTML = rankingTable(list);
 }
 
 function setupPlayer() {
