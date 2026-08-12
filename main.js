@@ -1021,7 +1021,7 @@ function updateProjectiles(dt) {
   }
 }
 
-function killEnemy(en) {
+function killEnemy(en, scoreMult = 1) {
   en.state = 'dead'; en.t = 0;
   if (en.hpBar) en.hpBar.grp.visible = false;
   clearAoe(en);
@@ -1032,7 +1032,7 @@ function killEnemy(en) {
   // 7초 내 연속킬 → 콤보. 점수는 콤보 배율 적용 (100 × 웨이브 × 콤보)
   combo = (gameTime - lastKillT <= 7) ? combo + 1 : 1;
   lastKillT = gameTime;
-  score += 100 * wave * combo;
+  score += 100 * wave * combo * scoreMult; // 헤드샷 킬 = 2배
   if (combo >= 2) {
     const c = document.getElementById('combo');
     c.textContent = `+${combo} COMBO!`;
@@ -1066,7 +1066,7 @@ function nextWave() {
   const rangers = wave >= 9 ? Math.min(3, wave - 8) : 0;      // 웨이브9부터 1마리, 이후 +1 (최대 3)
   const bosses = wave % 10 === 0 ? 1 : 0;                     // 10웨이브마다 보스
   banner('WAVE ' + wave + (bosses ? ' — ⚠ BOSS 출현 ⚠' : rangers ? ' — 원거리 개체 출현!' : jumpers ? ' — 도약 개체 출현!' : runners ? ' — 러너 출현!' : ''));
-  const count = 2 + wave;
+  const count = (2 + wave) * 2 + bosses; // 일반 개체 2배 (보스는 별도 1마리 유지)
   for (let i = 0; i < count; i++) {
     const kind = i < bosses ? 'boss'
       : i < bosses + rangers ? 'ranged'
@@ -1280,20 +1280,22 @@ function shoot(now) {
   let origin = raycaster.ray.origin.clone();
   function scan(org) {
     let bestT = 120, hitEn = null, headshot = false;
+    const test = (c, r) => {
+      const oc = c.clone().sub(org);
+      const t = oc.dot(dir);
+      if (t < 0) return null;
+      return (oc.lengthSq() - t * t) < r * r ? t : null;
+    };
     for (const en of enemies) {
       if (en.state === 'dead') continue;
       const s = en.scale;
-      const spheres = [
-        { c: en.root.position.clone().add(new THREE.Vector3(0, 1.15 * s, 0)), r: 0.66 * s, head: false },
-        { c: en.root.position.clone().add(new THREE.Vector3(0, 2.0 * s, 0)), r: 0.36 * s, head: true },
-      ];
-      for (const sp of spheres) {
-        const oc = sp.c.clone().sub(org);
-        const t = oc.dot(dir);
-        if (t < 0 || t > bestT) continue;
-        const dd = oc.lengthSq() - t * t;
-        if (dd < sp.r * sp.r) { bestT = t; hitEn = en; headshot = sp.head; }
-      }
+      // 같은 적 안에서는 머리 우선 (머리 구체가 몸통 상단과 겹쳐도 머리로 판정)
+      const tH = test(en.root.position.clone().add(new THREE.Vector3(0, 1.8 * s, 0)), 0.36 * s);
+      const tB = test(en.root.position.clone().add(new THREE.Vector3(0, 1.15 * s, 0)), 0.66 * s);
+      let t = null, hd = false;
+      if (tH !== null) { t = tH; hd = true; }
+      else if (tB !== null) { t = tB; hd = false; }
+      if (t !== null && t < bestT) { bestT = t; hitEn = en; headshot = hd; }
     }
     return { bestT, hitEn, headshot };
   }
@@ -1318,8 +1320,8 @@ function shoot(now) {
   if (hitEn && bestT < wallT) {
     // 머리 명중 세분화: 외곽 = 크리티컬(34), 중심(정밀) = 헤드샷 원샷킬
     let hitKind = headshot ? 'crit' : 'body';
-    if (headshot) {
-      const hc = hitEn.root.position.clone().add(new THREE.Vector3(0, 2.0 * hitEn.scale, 0)).sub(origin);
+    if (headshot && hitEn.kind !== 'boss') { // 보스는 헤드샷 없음(크리티컬까지만)
+      const hc = hitEn.root.position.clone().add(new THREE.Vector3(0, 1.8 * hitEn.scale, 0)).sub(origin);
       const ht = hc.dot(dir);
       const hdd = hc.lengthSq() - ht * ht;
       if (hdd < (0.2 * hitEn.scale) ** 2) hitKind = 'hs';
@@ -1327,13 +1329,8 @@ function shoot(now) {
     const hitPos = origin.clone().addScaledVector(dir, bestT);
     addTracer(muzzle, hitPos);
     burst(hitPos, headshot ? 0xffcc44 : 0xbb2233, hitKind === 'hs' ? 20 : headshot ? 14 : 9);
-    if (hitKind === 'hs') {
-      // 원샷킬 (보스는 예외: 크리티컬 3배)
-      if (hitEn.kind === 'boss') hitEn.hp -= Math.round(34 * 3 * dmgMul());
-      else hitEn.hp = 0;
-    } else {
-      hitEn.hp -= Math.round((hitKind === 'crit' ? 34 : 13) * dmgMul());
-    }
+    if (hitKind === 'hs') hitEn.hp = 0; // 헤드샷 = 원샷킬 (보스는 hs 판정 자체가 없음)
+    else hitEn.hp -= Math.round((hitKind === 'crit' ? 34 : 13) * dmgMul());
     hitEn.hitFlash = 0.12;
     // 넉백 임펄스(감쇠 속도) — 총량: 몸통 ≈0.15m, 헤드샷 ≈0.22m
     const kb = dir.clone(); kb.y = 0; kb.normalize();
@@ -1347,14 +1344,9 @@ function shoot(now) {
       hitEn.hpBar.fill.position.x = -(1 - ratio) * 0.55;
     }
     hitmark(headshot);
-    if (headshot) {
-      const h = document.getElementById('headshotTxt');
-      h.textContent = hitKind === 'hs' ? 'HEADSHOT!' : 'CRITICAL!';
-      h.classList.toggle('crit', hitKind !== 'hs');
-      h.classList.remove('pop'); void h.offsetWidth; h.classList.add('pop');
-    }
+    if (headshot) popupHitText(hitKind, hitEn);
     headshot ? sfxHead() : sfxHit();
-    if (hitEn.hp <= 0) killEnemy(hitEn);
+    if (hitEn.hp <= 0) killEnemy(hitEn, hitKind === 'hs' ? 2 : 1);
   } else {
     const end = origin.clone().addScaledVector(dir, Math.min(wallT, 80));
     addTracer(muzzle, end);
@@ -1371,6 +1363,18 @@ function rayAABB(o, d, min, max) {
     if (tmax < tmin) return null;
   }
   return tmin;
+}
+// 크리티컬/헤드샷 텍스트: 요소를 매번 새로 만들어 누적 표시 → 각자 위로 상승 후 제거
+function popupHitText(kind, en) {
+  const el = document.createElement('div');
+  el.className = 'hitPop ' + kind;
+  el.textContent = kind === 'hs' ? 'HEADSHOT!' : 'CRITICAL!';
+  const v = en.root.position.clone().add(new THREE.Vector3(0, 2.5 * en.scale, 0)).project(camera);
+  const jx = (Math.random() - 0.5) * 36; // 연타 시 겹치지 않게 좌우 흔들림
+  el.style.left = ((v.x * 0.5 + 0.5) * innerWidth + jx) + 'px';
+  el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
+  document.getElementById('hud').appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
 }
 function hitmark(head) {
   const h = document.getElementById('hitmark');
