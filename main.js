@@ -1071,7 +1071,7 @@ function nextWave() {
   if (player.dead) return;
   wave++;
   document.getElementById('waveN').textContent = wave;
-  const runners = Math.max(0, wave - 2);                      // 웨이브3부터 1마리, 이후 +1
+  const runners = Math.max(0, wave - 2) + (wave >= 3 ? 3 : 0); // 웨이브3부터 1마리+추가분 3마리 전부 러너, 이후 +1
   const jumpers = wave >= 6 ? Math.min(3, wave - 5) : 0;      // 웨이브6부터 1마리, 이후 +1 (최대 3)
   const rangers = wave >= 9 ? Math.min(3, wave - 8) : 0;      // 웨이브9부터 1마리, 이후 +1 (최대 3)
   const bosses = wave % 10 === 0 ? 1 : 0;                     // 10웨이브마다 보스
