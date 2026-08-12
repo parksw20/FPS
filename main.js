@@ -233,7 +233,7 @@ const player = {
   oneShot: null, fireAction: null,
   dashT: 0, dashCd: 0, dashDir: { x: 0, z: -1 }, lastDir: { x: 0, z: -1 },
 };
-let score = 0, kills = 0, wave = 0, ammo = 10, reloading = false, coins = 0;
+let score = 0, kills = 0, wave = 0, ammo = 15, reloading = false, coins = 0;
 let buffT = 0; // 무한 탄약 남은 시간
 // ---------- 업그레이드 (코인 소모, 기본대비 +5%/레벨) ----------
 const upg = { dmg: 0, rate: 0, reload: 0, mag: 0, hp: 0 };
@@ -242,7 +242,7 @@ const upgCost = k => 100 * (upg[k] + 1);
 const dmgMul = () => 1 + 0.05 * upg.dmg;
 const fireInterval = () => 110 / (1 + 0.05 * upg.rate);
 const reloadMs = () => 1600 / (1 + 0.05 * upg.reload);
-const magSize = () => Math.round(10 * (1 + 0.05 * upg.mag)); // 기본 탄창 10발
+const magSize = () => Math.round(15 * (1 + 0.05 * upg.mag)); // 기본 탄창 15발
 const maxHp = () => Math.round(100 * (1 + 0.05 * upg.hp));
 function updateHpHud() {
   document.getElementById('hpT').textContent = Math.max(0, player.hp | 0);
