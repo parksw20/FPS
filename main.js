@@ -393,13 +393,28 @@ function setupMuzzleAnchors() {
     b.applyMatrix4(m.matrix); // 메쉬 → 무기 그룹 로컬
     box.union(b);
   }
-  const c = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
   const axis = size.x > size.y ? (size.x > size.z ? 'x' : 'z') : (size.y > size.z ? 'y' : 'z');
+  // 총열은 단면 중심(탄창·조준경 포함)에서 벗어나 있으므로,
+  // 양 끝 5% 구간 정점들의 실제 중심(centroid)을 앵커로 사용
+  const span = box.max[axis] - box.min[axis];
+  const thA = box.max[axis] - span * 0.05, thB = box.min[axis] + span * 0.05;
+  const sumA = new THREE.Vector3(), sumB = new THREE.Vector3();
+  let nA = 0, nB = 0;
+  const v = new THREE.Vector3();
+  for (const m of weaponMeshes) {
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrix);
+      if (v[axis] >= thA) { sumA.add(v); nA++; }
+      else if (v[axis] <= thB) { sumB.add(v); nB++; }
+    }
+  }
+  const c = box.getCenter(new THREE.Vector3());
+  const pA = nA ? sumA.divideScalar(nA) : c.clone().setComponent({ x: 0, y: 1, z: 2 }[axis], box.max[axis]);
+  const pB = nB ? sumB.divideScalar(nB) : c.clone().setComponent({ x: 0, y: 1, z: 2 }[axis], box.min[axis]);
   muzzleEndA = new THREE.Object3D();
   muzzleEndB = new THREE.Object3D();
-  const pA = c.clone(); pA[axis] = box.max[axis];
-  const pB = c.clone(); pB[axis] = box.min[axis];
   muzzleEndA.position.copy(pA);
   muzzleEndB.position.copy(pB);
   wNode.add(muzzleEndA); wNode.add(muzzleEndB);
