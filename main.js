@@ -271,6 +271,7 @@ function renderUpg() {
     updateGSlot();
     sfxPotion();
     renderUpg();
+    persistProgress();
   });
   el.appendChild(gb);
   const cn = document.getElementById('shopCoinN');
@@ -286,6 +287,23 @@ function buyUpg(k) {
   if (k === 'mag') updateAmmo();
   sfxPotion();
   renderUpg();
+  persistProgress();
+}
+
+// ---------- 코인·업그레이드·수류탄 영속화 (새로고침에도 유지) ----------
+function persistProgress() {
+  try { localStorage.setItem('fps.save', JSON.stringify({ coins, upg, grenades })); } catch { }
+}
+function loadProgress() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('fps.save') || 'null'); } catch { }
+  if (!s) return;
+  coins = s.coins || 0;
+  grenades = Math.min(5, s.grenades || 0);
+  for (const k of Object.keys(upg)) upg[k] = s.upg?.[k] || 0;
+  player.hp = maxHp();
+  ammo = magSize();
+  document.getElementById('coinN').textContent = coins;
 }
 
 // ---------- 스코어 랭킹 TOP 10 (localStorage) ----------
@@ -497,6 +515,7 @@ function dropCoins(x, z) {
   coins += gain;
   document.getElementById('coinN').textContent = coins;
   renderUpg(); // 코인 변동 시 구매 가능 상태 갱신
+  persistProgress();
   toast(`+${gain} 🪙`);
   sfxCoin();
 }
@@ -534,6 +553,7 @@ function updateDrops(dt) {
         if (grenades >= 5) continue; // 최대 5개 — 바닥에 남겨둠
         grenades++;
         updateGSlot();
+        persistProgress();
         toast('💣 수류탄 +1 — [F]로 조준');
         sfxPotion();
       } else {
@@ -888,6 +908,7 @@ function throwGrenade() {
   // 수류탄 모드는 F를 다시 누를 때까지 유지 (남은 수류탄이 없으면 총으로 복귀)
   if (grenades <= 0) { gMode = false; trajLine.visible = false; aimCircle.visible = false; }
   updateGSlot();
+  persistProgress();
   oneShot('toss grenade', 2.3);
   hideWeapon(2.7); // 던지는 동안 총 숨김
   pendingThrows.push({ t: 2.0 });
@@ -1129,6 +1150,7 @@ document.getElementById('dbgCoins').addEventListener('click', e => {
   document.getElementById('coinN').textContent = coins;
   flashChip('coinN');
   renderUpg();
+  persistProgress();
 });
 document.getElementById('dbgWave').addEventListener('click', e => {
   e.stopPropagation();
@@ -1696,6 +1718,9 @@ function tick() {
     stripRootMotion(playerGltf);
     stripRootMotion(enemyGltf);
     setupPlayer();
+    loadProgress(); // 저장된 코인·업그레이드·수류탄 복원
+    updateAmmo();
+    updateHpHud();
     applyView();
     applyCtrl();
     document.getElementById('loading').style.display = 'none';
@@ -1759,5 +1784,5 @@ window.__game = {
   toss() { throwGrenade(); },
   revive() { player.dead = false; player.hp = maxHp(); msgEl.style.display = 'none'; updateHpHud(); },
   buy(k) { buyUpg(k); },
-  addCoins(n) { coins += n; document.getElementById('coinN').textContent = coins; renderUpg(); },
+  addCoins(n) { coins += n; document.getElementById('coinN').textContent = coins; renderUpg(); persistProgress(); },
 };
