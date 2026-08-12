@@ -1316,10 +1316,24 @@ function shoot(now) {
   lastMuzzle.copy(muzzle);
   window.__lastShot = { origin: origin.toArray().map(v => +v.toFixed(2)), dir: dir.toArray().map(v => +v.toFixed(3)), bestT: +bestT.toFixed(2), wallT: +wallT.toFixed(2), hit: !!hitEn };
   if (hitEn && bestT < wallT) {
+    // 머리 명중 세분화: 외곽 = 크리티컬(34), 중심(정밀) = 헤드샷 원샷킬
+    let hitKind = headshot ? 'crit' : 'body';
+    if (headshot) {
+      const hc = hitEn.root.position.clone().add(new THREE.Vector3(0, 2.0 * hitEn.scale, 0)).sub(origin);
+      const ht = hc.dot(dir);
+      const hdd = hc.lengthSq() - ht * ht;
+      if (hdd < (0.2 * hitEn.scale) ** 2) hitKind = 'hs';
+    }
     const hitPos = origin.clone().addScaledVector(dir, bestT);
     addTracer(muzzle, hitPos);
-    burst(hitPos, headshot ? 0xffcc44 : 0xbb2233, headshot ? 14 : 9);
-    hitEn.hp -= Math.round((headshot ? 34 : 13) * dmgMul());
+    burst(hitPos, headshot ? 0xffcc44 : 0xbb2233, hitKind === 'hs' ? 20 : headshot ? 14 : 9);
+    if (hitKind === 'hs') {
+      // 원샷킬 (보스는 예외: 크리티컬 3배)
+      if (hitEn.kind === 'boss') hitEn.hp -= Math.round(34 * 3 * dmgMul());
+      else hitEn.hp = 0;
+    } else {
+      hitEn.hp -= Math.round((hitKind === 'crit' ? 34 : 13) * dmgMul());
+    }
     hitEn.hitFlash = 0.12;
     // 넉백 임펄스(감쇠 속도) — 총량: 몸통 ≈0.15m, 헤드샷 ≈0.22m
     const kb = dir.clone(); kb.y = 0; kb.normalize();
@@ -1335,6 +1349,8 @@ function shoot(now) {
     hitmark(headshot);
     if (headshot) {
       const h = document.getElementById('headshotTxt');
+      h.textContent = hitKind === 'hs' ? 'HEADSHOT!' : 'CRITICAL!';
+      h.classList.toggle('crit', hitKind !== 'hs');
       h.classList.remove('pop'); void h.offsetWidth; h.classList.add('pop');
     }
     headshot ? sfxHead() : sfxHit();
