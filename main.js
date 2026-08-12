@@ -1281,9 +1281,11 @@ document.getElementById('btnOptions').addEventListener('click', e => {
   if (optMenu.style.display === 'block') { shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; }
 });
 canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) canvas.requestPointerLock(); }); // 사망 화면에선 커서 유지
+let lockLostAt = 0; // ESC 해제 직후 크롬 재잠금 쿨다운(~1.3초) 판정용
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   if (locked) shopMenu.style.display = 'none'; // 게임(포인터록) 진입 시 상점 숨김
+  else lockLostAt = performance.now();
   refreshOverlay();
 });
 
@@ -1340,7 +1342,14 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !reloading && ammo < magSize()) reload();
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
   if (e.code === 'KeyF' && !e.repeat) toggleGMode();
-  if (e.code === 'Escape' && !e.repeat && inRun && !player.dead && !isPlaying()) enterGame(); // 일시정지에서 ESC → 재개
+  // 일시정지에서 ESC → 재개 (잠금 해제 직후 쿨다운 중에는 무시 — 메뉴 상태를 건드리지 않는다)
+  if (e.code === 'Escape' && !e.repeat && inRun && !player.dead && !isPlaying()) {
+    if (isMobileCtrl()) { started = true; refreshOverlay(); }
+    else if (performance.now() - lockLostAt > 1350) {
+      const pr = canvas.requestPointerLock();
+      if (pr && pr.catch) pr.catch(() => { });
+    }
+  }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
