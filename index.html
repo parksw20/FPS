@@ -56,6 +56,15 @@
   #gSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffd76b; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
   #gSlot.empty{opacity:.35; filter:grayscale(.8)}
   #gSlot.active{border-color:#7ee0a3; box-shadow:0 0 16px rgba(126,224,163,.5)}
+  #mSlot{position:absolute; left:50%; margin-left:232px; bottom:66px; width:76px; height:76px;
+    background:rgba(10,14,20,.6); border:1.5px solid rgba(255,90,60,.35); border-radius:12px}
+  #mSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
+  #mSlot.empty{opacity:.35; filter:grayscale(.8)}
+  #multiKill{position:absolute; left:50%; top:calc(33% + 10px); transform:translateX(-50%); font-size:1.5rem; font-weight:800; font-style:italic;
+    letter-spacing:.08em; color:#ff8a4d; text-shadow:0 0 18px rgba(255,110,60,.9); opacity:0; pointer-events:none; white-space:nowrap}
+  #multiKill.pop{animation:mkPop 1.2s ease-out}
+  @keyframes mkPop{0%{opacity:0; transform:translateX(-50%) scale(.5)}14%{opacity:1; transform:translateX(-50%) scale(1.2)}
+    30%{transform:translateX(-50%) scale(1)}72%{opacity:1}100%{opacity:0; transform:translateX(-50%) translateY(-24px)}}
   #ammo.inf #ammoN{color:#6bb8ff; text-shadow:0 0 12px rgba(107,184,255,.8)}
   #wave{left:50%; top:18px; transform:translateX(-50%); font-size:.9rem; letter-spacing:.15em; text-transform:uppercase; color:#9fb0c4}
   #wave b{color:#e8a33d}
@@ -192,6 +201,7 @@
   <div id="wave" class="panel">WAVE <b id="waveN">1</b> — <span id="left">0</span>마리 남음</div>
   <div id="banner"></div>
   <div id="combo"></div>
+  <div id="multiKill"></div>
   <div id="pickup"></div>
   <canvas id="minimap" width="300" height="300"></canvas>
   <div id="buff">∞ 무한 탄약 <span id="buffT">10</span>s</div>
@@ -203,6 +213,7 @@
   <div id="stats">HP <span id="hpT">100</span><div class="hpbar"><div class="hpfill" id="hpF"></div></div></div>
   <div id="ammo"><span id="ammoN">20</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
   <div id="gSlot"><span class="gKey">F</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
+  <div id="mSlot" class="empty"><span class="gKey">G</span><span class="mIcon">🧨</span><span class="gCnt" id="mCnt">0</span></div>
   <div id="msg" class="panel"><h2>YOU DIED</h2><div id="rankList"></div><button id="deathOk">확인</button></div>
 </div>
 <div id="dmgflash"></div>
@@ -259,6 +270,7 @@
     <span class="key"><b>우클릭</b> 줌</span>
     <span class="key"><b>R</b> 재장전</span>
     <span class="key"><b>F</b> 수류탄</span>
+    <span class="key"><b>G</b> 지뢰</span>
   </div>
 </div>
 <div id="mapPick">

@@ -531,6 +531,17 @@ function renderUpg() {
     persistProgress();
   });
   el.appendChild(gb);
+  // 지뢰: 정가 150코인, 최대 5개 보유
+  const mb2 = document.createElement('button');
+  mb2.innerHTML = `<span>🧨 지뢰 +1 <small>(${mines}/${MINE_MAX})</small> <b>${MINE_COST}🪙</b></span>`;
+  mb2.disabled = coins < MINE_COST || mines >= MINE_MAX;
+  mb2.addEventListener('click', () => {
+    if (coins < MINE_COST || mines >= MINE_MAX) return;
+    coins -= MINE_COST; mines++;
+    document.getElementById('coinN').textContent = coins;
+    updateMineSlot(); sfxPotion(); renderUpg(); persistProgress();
+  });
+  el.appendChild(mb2);
   const cn = document.getElementById('shopCoinN');
   if (cn) cn.textContent = coins;
 }
@@ -549,7 +560,7 @@ function buyUpg(k) {
 
 // ---------- 코인·업그레이드·수류탄 영속화 (새로고침에도 유지) ----------
 function persistProgress() {
-  try { localStorage.setItem('fps.save', JSON.stringify({ coins, upg, grenades })); } catch { }
+  try { localStorage.setItem('fps.save', JSON.stringify({ coins, upg, grenades, mines })); } catch { }
 }
 function loadProgress() {
   let s = null;
@@ -557,6 +568,8 @@ function loadProgress() {
   if (!s) return;
   coins = s.coins || 0;
   grenades = Math.min(5, s.grenades || 0);
+  mines = Math.min(MINE_MAX, s.mines || 0);
+  updateMineSlot();
   for (const k of Object.keys(upg)) upg[k] = s.upg?.[k] || 0;
   player.hp = maxHp();
   ammo = magSize();
@@ -1093,6 +1106,7 @@ function updateEnemy(en, dt) {
 }
 
 let gameTime = 0, combo = 0, lastKillT = -99, headshots = 0, shotsFired = 0, shotsHit = 0;
+let multiT = -99, multiN = 0;          // 멀티킬 판정
 const accuracy = () => shotsFired ? Math.round(shotsHit / shotsFired * 100) : 0;
 // ---------- 수류탄 ----------
 let grenades = 0, gMode = false;
@@ -1317,6 +1331,74 @@ function updateDecals(dt) {
   }
 }
 
+// ---------- 지뢰 (상점 구매 · G키 설치 · 적 접근 시 폭발) ----------
+let mines = 0;
+const liveMines = [];
+const MINE_MAX = 5, MINE_COST = 150, MINE_DMG = 220, MINE_R = 5;
+function updateMineSlot() {
+  const el = document.getElementById('mSlot');
+  if (!el) return;
+  document.getElementById('mCnt').textContent = mines;
+  el.classList.toggle('empty', mines === 0);
+}
+function placeMine() {
+  if (mines <= 0 || player.dead) return;
+  mines--;
+  updateMineSlot(); persistProgress();
+  const grp = new THREE.Group();
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.1, 16),
+    new THREE.MeshStandardMaterial({ color: 0x3a2020, emissive: 0xff2200, emissiveIntensity: 0.7 }));
+  disc.position.y = 0.05;
+  grp.add(disc);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 8, 24).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xff3311, transparent: true, opacity: 0.8, fog: false, toneMapped: false }));
+  ring.position.y = 0.06;
+  grp.add(ring);
+  grp.position.set(player.pos.x, 0.02, player.pos.z);
+  scene.add(grp);
+  liveMines.push({ grp, ring, t: 0, armed: 0.7 });
+  sfxTone(420, 0.08, 'square', 0.12);
+  toast('🧨 지뢰 설치');
+}
+function explodeAt(pos, radius, dmg, color) {
+  burst(pos, color, 26);
+  flashLight.position.copy(pos); flashLight.intensity = 50; flashT = 0.1;
+  shake(0.25, 0.35);
+  sfxTone(80, 0.45, 'sawtooth', 0.3, -30);
+  for (const en of enemies) {
+    if (en.state === 'dead') continue;
+    const d = Math.hypot(en.root.position.x - pos.x, en.root.position.z - pos.z);
+    if (d >= radius) continue;
+    en.hp -= dmg; en.hitFlash = 0.2; en.hpBarT = 4;
+    if (en.hpBar) {
+      const r = Math.max(0, en.hp / en.maxhp);
+      en.hpBar.fill.scale.x = Math.max(0.001, r);
+      en.hpBar.fill.position.x = -(1 - r) * 0.55;
+    }
+    if (en.hp <= 0) killEnemy(en);
+  }
+}
+function updateMines(dt) {
+  for (let i = liveMines.length - 1; i >= 0; i--) {
+    const m = liveMines[i];
+    m.t += dt; m.armed -= dt;
+    const k = 1 + Math.sin(m.t * 5) * 0.08;
+    m.ring.scale.set(k, k, k);
+    m.ring.material.opacity = 0.5 + Math.sin(m.t * 5) * 0.3;
+    if (m.armed > 0) continue;
+    let trig = false;
+    for (const en of enemies) {
+      if (en.state === 'dead') continue;
+      if (Math.hypot(en.root.position.x - m.grp.position.x, en.root.position.z - m.grp.position.z) < 2.2) { trig = true; break; }
+    }
+    if (trig) {
+      const p = m.grp.position.clone(); p.y = 0.4;
+      scene.remove(m.grp); liveMines.splice(i, 1);
+      explodeAt(p, MINE_R, MINE_DMG, 0xff7733);
+    }
+  }
+}
+
 // ---------- 보스 광역 공격 경고 원 ----------
 function makeAoeCircle(pos) {
   const m = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2),
@@ -1375,6 +1457,21 @@ function killEnemy(en, scoreMult = 1) {
   combo = (gameTime - lastKillT <= 7) ? combo + 1 : 1;
   lastKillT = gameTime;
   score += 100 * wave * combo * scoreMult; // 헤드샷 킬 = 2배
+  // 0.7초 안에 겹쳐 죽이면 멀티킬 — 복도에 몰아넣고 터뜨리는 플레이 보상
+  multiN = (gameTime - multiT <= 0.7) ? multiN + 1 : 1;
+  multiT = gameTime;
+  if (multiN >= 2) {
+    const label = { 2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'QUAD KILL' }[multiN] || ('MULTI KILL x' + multiN);
+    const bonus = 50 * multiN;
+    coins += bonus;
+    document.getElementById('coinN').textContent = coins;
+    flashChip('coinN');
+    persistProgress();
+    const mk = document.getElementById('multiKill');
+    mk.textContent = label + '  +' + bonus + '🪙';
+    mk.classList.remove('pop'); void mk.offsetWidth; mk.classList.add('pop');
+    sfxTone(660 + multiN * 120, 0.14, 'square', 0.16);
+  }
   if (combo >= 2) {
     const c = document.getElementById('combo');
     c.textContent = `+${combo} COMBO!`;
@@ -1508,6 +1605,8 @@ function applyMap() {
   for (const pr of projectiles) scene.remove(pr.m); projectiles.length = 0;
   for (const gr of liveGrenades) { scene.remove(gr.root); if (gr.circle) scene.remove(gr.circle); }
   liveGrenades.length = 0;
+  for (const m of liveMines) scene.remove(m.grp);
+  liveMines.length = 0;
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
   wave = 0;
@@ -1666,6 +1765,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !reloading && ammo < magSize()) reload();
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
   if (e.code === 'KeyF' && !e.repeat) toggleGMode();
+  if (e.code === 'KeyG' && !e.repeat) placeMine();
   // ESC 토글: 일시정지 ↔ 재개 (잠금 중 ESC는 브라우저가 소비 → pointerlockchange 경로로 일시정지됨)
   if (e.code === 'Escape' && !e.repeat && inRun && !player.dead) {
     if (paused) {
@@ -1915,6 +2015,8 @@ function restart(toMenu = false) {
   projectiles.length = 0;
   for (const gr of liveGrenades) { scene.remove(gr.root); if (gr.circle) scene.remove(gr.circle); }
   liveGrenades.length = 0;
+  for (const m of liveMines) scene.remove(m.grp);
+  liveMines.length = 0;
   pendingThrows.length = 0;
   gMode = false; trajLine.visible = false; aimCircle.visible = false; updateGSlot();
   player.hp = maxHp(); // 업그레이드 초기화 후이므로 100
@@ -2130,6 +2232,7 @@ function tick() {
     updateBuff(dt);
     updateProjectiles(dt);
     updateGrenades(dt);
+    updateMines(dt);
     updateDecals(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
@@ -2190,7 +2293,7 @@ window.__game = {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
-      grenades, gMode, liveGrenades: liveGrenades.length,
+      grenades, gMode, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
@@ -2217,6 +2320,7 @@ window.__game = {
     updateBuff(dt);
     updateProjectiles(dt);
     updateGrenades(dt);
+    updateMines(dt);
     updateDecals(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
@@ -2230,6 +2334,8 @@ window.__game = {
   hurt(n) { damagePlayer(n); },
   skipWave() { skipWave(); },
   addGrenades(n = 1) { grenades += n; updateGSlot(); },
+  addMines(n = 1) { mines += n; updateMineSlot(); },
+  placeMine() { placeMine(); },
   walkable(x, z) { return !cellSolid(x, z); },
   setPos(x, y, z) { player.pos.set(x, y, z); player.vy = 0; player.onGround = true; },
   toss() { throwGrenade(); },
