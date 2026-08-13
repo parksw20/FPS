@@ -1331,6 +1331,67 @@ function updateDecals(dt) {
   }
 }
 
+// ---------- 비콘 이벤트: 3웨이브마다 먼 방에 표적, 제한시간 안에 도달하면 보상 ----------
+let beacon = null;                       // {grp, x, z, t, limit}
+const BEACON_LIMIT = 26, BEACON_COINS = 400;
+function spawnBeacon() {
+  clearBeacon();
+  if (!walkGrid || !spawnPoints.length) return;
+  let best = null, bestD = -1;            // 플레이어에서 가장 먼 지점
+  for (const c of spawnPoints) {
+    const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z);
+    if (d > bestD) { bestD = d; best = c; }
+  }
+  if (!best || bestD < 12) return;
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffd54a, transparent: true, opacity: 0.55, depthWrite: false, fog: false, toneMapped: false });
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 14, 18, 1, true), mat);
+  pillar.position.y = 7;
+  grp.add(pillar);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.08, 8, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xffd54a, fog: false, toneMapped: false }));
+  ring.position.y = 0.06;
+  grp.add(ring);
+  const lamp = new THREE.PointLight(0xffd54a, 3, 12);
+  lamp.position.y = 1.6;
+  grp.add(lamp);
+  grp.position.set(best.x, 0, best.z);
+  scene.add(grp);
+  beacon = { grp, ring, x: best.x, z: best.z, t: 0, limit: BEACON_LIMIT };
+  document.getElementById('beaconHud').style.display = 'block';
+  banner('보급 신호 발신 — 표적으로!');
+  sfxTone(880, 0.16, 'sine', 0.16); setTimeout(() => sfxTone(1320, 0.2, 'sine', 0.14), 160);
+}
+function clearBeacon() {
+  if (beacon) scene.remove(beacon.grp);
+  beacon = null;
+  const hud = document.getElementById('beaconHud');
+  if (hud) hud.style.display = 'none';
+}
+function updateBeacon(dt) {
+  if (!beacon) return;
+  beacon.t += dt;
+  const left = beacon.limit - beacon.t;
+  beacon.ring.scale.setScalar(1 + Math.sin(beacon.t * 3) * 0.12);
+  beacon.grp.rotation.y += dt * 0.8;
+  const d = Math.hypot(player.pos.x - beacon.x, player.pos.z - beacon.z);
+  document.getElementById('beaconT').textContent = Math.max(0, Math.ceil(left));
+  document.getElementById('beaconD').textContent = Math.round(d);
+  if (d < 2.4) {                          // 도달 — 보상
+    coins += BEACON_COINS;
+    grenades = Math.min(5, grenades + 1);
+    document.getElementById('coinN').textContent = coins;
+    flashChip('coinN'); updateGSlot(); persistProgress(); renderUpg();
+    toast('📦 보급 확보 — +' + BEACON_COINS + '🪙 · 수류탄 +1');
+    sfxChest();
+    clearBeacon();
+  } else if (left <= 0) {                 // 시간 초과
+    toast('보급 신호 소실');
+    sfxTone(200, 0.4, 'sawtooth', 0.16, -80);
+    clearBeacon();
+  }
+}
+
 // ---------- 지뢰 (상점 구매 · G키 설치 · 적 접근 시 폭발) ----------
 let mines = 0;
 const liveMines = [];
@@ -1505,6 +1566,8 @@ function nextWave() {
   const rangers = wave >= 9 ? Math.min(3, wave - 8) : 0;      // 웨이브9부터 1마리, 이후 +1 (최대 3)
   const bosses = wave % 10 === 0 ? 1 : 0;                     // 10웨이브마다 보스
   banner('WAVE ' + wave + (bosses ? ' — ⚠ BOSS 출현 ⚠' : rangers ? ' — 원거리 개체 출현!' : jumpers ? ' — 도약 개체 출현!' : runners ? ' — 러너 출현!' : ''));
+  if (walkGrid && wave % 3 === 0 && wave % 10 !== 0) setTimeout(() => { if (!player.dead) spawnBeacon(); }, 1200);
+  else clearBeacon();
   const count = (2 + wave) * 2 + 3 + bosses; // 일반 개체 2배 + 3마리 (보스는 별도 1마리 유지)
   for (let i = 0; i < count; i++) {
     const kind = i < bosses ? 'boss'
@@ -1607,6 +1670,7 @@ function applyMap() {
   liveGrenades.length = 0;
   for (const m of liveMines) scene.remove(m.grp);
   liveMines.length = 0;
+  clearBeacon();
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
   wave = 0;
@@ -2017,6 +2081,7 @@ function restart(toMenu = false) {
   liveGrenades.length = 0;
   for (const m of liveMines) scene.remove(m.grp);
   liveMines.length = 0;
+  clearBeacon();
   pendingThrows.length = 0;
   gMode = false; trajLine.visible = false; aimCircle.visible = false; updateGSlot();
   player.hp = maxHp(); // 업그레이드 초기화 후이므로 100
@@ -2081,6 +2146,10 @@ function drawMinimap() {
       mmCtx.closePath(); mmCtx.fill();
     }
     mmCtx.restore();
+  }
+  if (beacon) {                            // 비콘: 큰 노란 표식
+    const b = toMap(beacon.x, beacon.z);
+    dot(b[0], b[1], '#ffe27a', 6 * k);
   }
   for (const d of drops) dot(...toMap(d.root.position.x, d.root.position.z), '#ffd76b');
   for (const en of enemies) if (en.state !== 'dead') dot(...toMap(en.root.position.x, en.root.position.z), '#ff5555');
@@ -2233,6 +2302,7 @@ function tick() {
     updateProjectiles(dt);
     updateGrenades(dt);
     updateMines(dt);
+    updateBeacon(dt);
     updateDecals(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
@@ -2294,6 +2364,7 @@ window.__game = {
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
       grenades, gMode, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
+      beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
@@ -2321,6 +2392,7 @@ window.__game = {
     updateProjectiles(dt);
     updateGrenades(dt);
     updateMines(dt);
+    updateBeacon(dt);
     updateDecals(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
@@ -2336,6 +2408,7 @@ window.__game = {
   addGrenades(n = 1) { grenades += n; updateGSlot(); },
   addMines(n = 1) { mines += n; updateMineSlot(); },
   placeMine() { placeMine(); },
+  spawnBeacon() { spawnBeacon(); return window.__game.state.beacon; },
   walkable(x, z) { return !cellSolid(x, z); },
   setPos(x, y, z) { player.pos.set(x, y, z); player.vy = 0; player.onGround = true; },
   toss() { throwGrenade(); },
