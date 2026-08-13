@@ -1493,13 +1493,19 @@ function updateDecals(dt) {
 }
 
 // ---------- 미니맵 안개: 가본 방·복도만 드러난다 ----------
+const rectsTouch = (a, b) => a.x0 - 1 < b.x1 && b.x0 - 1 < a.x1 && a.z0 - 1 < b.z1 && b.z0 - 1 < a.z1;
 function updateSeenRects() {
   if (!walkGrid) return;
   for (let i = 0; i < mapRects.length; i++) {
     if (seenRects.has(i)) continue;
     const r = mapRects[i];
     if (player.pos.x >= r.x0 - 1 && player.pos.x <= r.x1 + 1 &&
-        player.pos.z >= r.z0 - 1 && player.pos.z <= r.z1 + 1) seenRects.add(i);
+        player.pos.z >= r.z0 - 1 && player.pos.z <= r.z1 + 1) {
+      seenRects.add(i);
+      // 들어간 방에 붙어 있는 통로는 함께 드러낸다 (출구를 알 수 있게)
+      if (r.room) for (let j = 0; j < mapRects.length; j++)
+        if (!mapRects[j].room && rectsTouch(r, mapRects[j])) seenRects.add(j);
+    }
   }
 }
 // ---------- 피격 방향 표시기 ----------
