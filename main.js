@@ -1615,10 +1615,14 @@ function markerTexture() {
   markerTex = new THREE.CanvasTexture(cv);
   return markerTex;
 }
-function aimHitPoint(maxT = 70) {        // 크로스헤어가 닿는 지점과 그 면의 법선
+const MARKER_RANGE = 2;                  // 손이 닿는 거리 — 2m 이내 면에만 칠한다
+function aimHitPoint(maxT = 70, fromEye = false) {  // 크로스헤어가 닿는 지점과 그 면의 법선
   raycaster.setFromCamera({ x: 0, y: 0 }, camera);
   const dir = raycaster.ray.direction.clone();
-  const origin = raycaster.ray.origin.clone();
+  // 어깨뷰에서는 카메라가 등 뒤에 있으므로, 손이 닿는 거리 판정은 플레이어 눈에서 쏜다
+  const origin = fromEye
+    ? new THREE.Vector3(player.pos.x, player.pos.y + player.eyeH, player.pos.z)
+    : raycaster.ray.origin.clone();
   let bestT = maxT, kind = null;
   if (dir.y < -0.01) {                   // 바닥
     const t = -origin.y / dir.y;
@@ -1651,8 +1655,18 @@ function aimHitPoint(maxT = 70) {        // 크로스헤어가 닿는 지점과 
 const markerGeo = new THREE.PlaneGeometry(1.7, 1.7);
 function placeMarker() {                 // 조준한 면에 데칼처럼 표시를 남긴다
   if (player.dead) return;
-  const h = aimHitPoint();
-  if (!h) { toast("표시할 지점이 없습니다"); return; }
+  let h = aimHitPoint(MARKER_RANGE, true);
+  if (!h) {                              // 2m 안에 조준한 면이 없으면 바라보는 쪽 바닥에 칠한다
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const d = raycaster.ray.direction;
+    const dh = new THREE.Vector3(d.x, 0, d.z);
+    if (dh.lengthSq() < 1e-4) dh.set(0, 0, -1);
+    dh.normalize();
+    const eye = new THREE.Vector3(player.pos.x, player.pos.y + player.eyeH, player.pos.z);
+    const gt = gridRayT(eye, dh, MARKER_RANGE);
+    const r = gt === null ? MARKER_RANGE : Math.max(0.4, gt - 0.3);
+    h = { p: new THREE.Vector3(player.pos.x + dh.x * r, 0, player.pos.z + dh.z * r), n: new THREE.Vector3(0, 1, 0) };
+  }
   const m = new THREE.Mesh(markerGeo, new THREE.MeshBasicMaterial({
     map: markerTexture(), transparent: true, depthWrite: false, opacity: 0.95,
     side: THREE.DoubleSide, fog: false, toneMapped: false
@@ -1885,7 +1899,7 @@ function killEnemy(en, scoreMult = 1) {
   enPlay(en, 'mutant dying', 0.1, true);
   sfxDie();
   kills++;
-  if (walkGrid) floorTime = Math.min(FLOOR_TIME * 2, floorTime + 3);   // 처치마다 +3초
+  if (walkGrid) floorTime = Math.min(FLOOR_TIME * 2, floorTime + 2);   // 처치마다 +2초
   lastKillClock = gameTime;                                            // 소강 상태 감지용
   // 7초 내 연속킬 → 콤보. 점수는 콤보 배율 적용 (100 × 웨이브 × 콤보)
   combo = (gameTime - lastKillT <= 7) ? combo + 1 : 1;
@@ -3006,7 +3020,7 @@ window.__game = {
   spawnAt(x, z, variant = 'walker') { spawnEnemy(wave || 1, variant); const e = enemies[enemies.length - 1]; e.root.position.set(x, 0, z); e.state = 'chase'; return e; },
   dropAt(type, x, z) { type === 'coin' ? dropCoins(x, z) : dropItem(type, x, z); },
   hurt(n) { damagePlayer(n); },
-  hurtEnemy(i, dmg) { const e = enemies[i]; if (!e) return null; damageEnemy(e, dmg ?? 10); return e.hp; },
+  hurtEnemy(i, dmg) { const e = enemies[i]; if (!e) return null; if (damageEnemy(e, dmg ?? 10)) killEnemy(e); return e.hp; },
   skipWave() { skipWave(); },
   addGrenades(n = 1) { grenades += n; updateGSlot(); },
   addMines(n = 1) { mines += n; updateMineSlot(); },
@@ -3016,6 +3030,12 @@ window.__game = {
   toFloor(f) { floorNo = f - 1; nextFloor(); },
   populate() { return populateRooms(); },
   placeMarker() { placeMarker(); return markers.length; },
+  aim() {
+    const h = aimHitPoint(MARKER_RANGE, true);
+    if (!h) return null;
+    const eye = new THREE.Vector3(player.pos.x, player.pos.y + player.eyeH, player.pos.z);
+    return { p: h.p.toArray().map(v => +v.toFixed(2)), n: h.n.toArray(), dEye: +eye.distanceTo(h.p).toFixed(2), dCam: +camera.position.distanceTo(h.p).toFixed(2), camToEye: +camera.position.distanceTo(eye).toFixed(2) };
+  },
   toPortal() { if (portal) player.pos.set(portal.x, 0, portal.z); },
   buildSeed(seed) { mapMode = 'random'; clearWorld(); seenRects.clear(); buildRandom(seed); return mapSeed; },
   walkable(x, z) { return !cellSolid(x, z); },
