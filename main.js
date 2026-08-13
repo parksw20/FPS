@@ -1076,14 +1076,18 @@ function updateEnemy(en, dt) {
     } else if (dist > atkRange) {
       toP.normalize();
       let mvx = toP.x, mvz = toP.z;
-      if (walkGrid && (dist > 2.5 || !losClear(p.x, p.z, player.pos.x, player.pos.z))) {
-        const f = flowVec(p.x, p.z);   // 랜덤맵: 방·복도를 따라 우회 (시야가 막히면 근접해도 경로 사용)
+      // 시야가 트였으면 곧장 플레이어에게 (경로 필드는 4방향이라 열린 방에서 축 방향으로만 움직인다)
+      en.losT = (en.losT || 0) - dt;
+      if (en.losT <= 0) { en.los = losClear(p.x, p.z, player.pos.x, player.pos.z); en.losT = 0.2; }
+      if (walkGrid && !en.los) {
+        const f = flowVec(p.x, p.z);   // 벽에 가리면 방·복도를 따라 우회
         if (f) { mvx = f.x; mvz = f.z; en.root.rotation.y = Math.atan2(f.x, f.z); }
       }
       // 모서리에 끼면(0.6초간 거의 못 움직이면) 잠깐 옆으로 미끄러져 빠져나온다
+      if (en.lpx === undefined) { en.lpx = p.x; en.lpz = p.z; }   // 첫 검사에서 오판하지 않게 초기화
       en.stuckT = (en.stuckT || 0) + dt;
       if (en.stuckT > 0.6) {
-        const moved = Math.hypot(p.x - (en.lpx ?? p.x), p.z - (en.lpz ?? p.z));
+        const moved = Math.hypot(p.x - en.lpx, p.z - en.lpz);
         if (moved < 0.12) { en.slipT = 0.6; en.slipDir = Math.random() < 0.5 ? 1 : -1; }
         en.lpx = p.x; en.lpz = p.z; en.stuckT = 0;
       }
