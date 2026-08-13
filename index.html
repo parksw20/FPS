@@ -67,6 +67,12 @@
     background:conic-gradient(from -14deg, rgba(255,60,50,.85), rgba(255,60,50,0) 28deg);
     -webkit-mask:radial-gradient(circle, transparent 118px, #000 122px, #000 168px, transparent 172px);
     mask:radial-gradient(circle, transparent 118px, #000 122px, #000 168px, transparent 172px)}
+  #floorHud{position:absolute; left:50%; top:40px; transform:translateX(-50%); display:none;
+    background:rgba(10,14,20,.6); border:1px solid rgba(199,155,255,.5); border-radius:10px; padding:6px 16px;
+    color:#d9c2ff; font-size:1rem; letter-spacing:.1em; font-variant-numeric:tabular-nums}
+  #floorHud b{color:#fff; font-size:1.15rem}
+  #floorHud.danger{border-color:rgba(255,70,70,.8); color:#ff9a9a; animation:floorPulse 1s infinite}
+  @keyframes floorPulse{0%,100%{box-shadow:0 0 6px rgba(255,60,60,.4)}50%{box-shadow:0 0 22px rgba(255,60,60,.9)}}
   #seedTag{position:absolute; left:18px; top:330px; display:none; font-size:.78rem; letter-spacing:.18em;
     color:#7ee0a3; opacity:.8; text-shadow:0 0 8px rgba(0,0,0,.9)}
   #beaconHud{position:absolute; left:50%; top:64px; transform:translateX(-50%); display:none;
@@ -213,6 +219,7 @@
   <div id="banner"></div>
   <div id="combo"></div>
   <div id="multiKill"></div>
+  <div id="floorHud">FLOOR <b id="floorN">1</b> · <span id="floorT">60s</span></div>
   <div id="seedTag">SEED ----</div>
   <div id="beaconHud">📦 보급 <b id="beaconT">0</b>s · <span id="beaconD">0</span>m</div>
   <div id="pickup"></div>

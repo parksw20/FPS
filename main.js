@@ -66,6 +66,11 @@ function newSeed() {                    // 4글자 시드 (표시·공유용)
   return out;
 }
 const seenRects = new Set();            // 미니맵 안개: 가본 방·복도 인덱스
+let portal = null;                      // {grp, x, z} — 다음 층으로 가는 문 (B 지점)
+let floorNo = 1;                        // 현재 층
+const FLOOR_TIME = 60;                  // 층 제한시간(초)
+let floorTime = FLOOR_TIME;
+let hunter = null;                      // 제한시간 초과 시 등장하는 무적 추격자
 const playerStart = new THREE.Vector3(0, 0, 0);
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -149,6 +154,7 @@ function clearWorld() {
     o.traverse(c => { if (c.geometry) c.geometry.dispose(); });
   }
   obstacles.length = 0; mapRects = []; walkGrid = null; spawnPoints = []; flowField = null;
+  clearPortal();
 }
 
 function buildPlaza() {
@@ -318,11 +324,73 @@ function buildRandom(seed) {
     for (let k = 0; k < sn; k++) spawnPoints.push({ x: rnd(r.x0 + 2, r.x1 - 2), z: rnd(r.z0 + 2, r.z1 - 2) });
   }
   playerStart.set((rooms[0].x0 + rooms[0].x1) / 2, 0, (rooms[0].z0 + rooms[0].z1) / 2);
+  // B 지점: A에서 실제 이동거리가 가장 먼 방의 중심에 포탈
+  const td = travelDistances(playerStart.x, playerStart.z);
+  let far = null, farD = -1;
+  for (let i = 1; i < rooms.length; i++) {
+    const r = rooms[i];
+    const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
+    const gi = Math.floor(cx - ox), gj = Math.floor(cz - oz);
+    const d = (gi >= 0 && gj >= 0 && gi < gw && gj < gh) ? td[gj * gw + gi] : -1;
+    if (d > farD) { farD = d; far = { x: cx, z: cz }; }
+  }
+  if (far) makePortal(far.x, far.z);
   mapRadius = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minZ), Math.abs(maxZ));
   scene.fog.far = 120;
   setSunBounds(Math.min(140, mapRadius + 14));
   const sd = document.getElementById('seedTag');
   if (sd) { sd.textContent = 'SEED ' + mapSeed; sd.style.display = 'block'; }
+}
+
+// 격자 이동거리(BFS) — 직선거리가 아니라 실제로 걸어가는 거리
+function travelDistances(sx, sz) {
+  const g = walkGrid; if (!g) return null;
+  const N = g.gw * g.gh;
+  const dist = new Int32Array(N).fill(-1);
+  let i0 = Math.floor(sx - g.ox), j0 = Math.floor(sz - g.oz);
+  const ok = (i, j) => i >= 0 && j >= 0 && i < g.gw && j < g.gh && g.cells[j * g.gw + i];
+  if (!ok(i0, j0)) {
+    let found = false;
+    for (let r = 1; r <= 4 && !found; r++)
+      for (let b = -r; b <= r && !found; b++)
+        for (let a = -r; a <= r && !found; a++)
+          if (ok(i0 + a, j0 + b)) { i0 += a; j0 += b; found = true; }
+    if (!found) return dist;
+  }
+  const q = new Int32Array(N);
+  let head = 0, tail = 0;
+  const st = j0 * g.gw + i0; dist[st] = 0; q[tail++] = st;
+  while (head < tail) {
+    const cur = q[head++], ci = cur % g.gw, cj = (cur / g.gw) | 0;
+    for (const [a, b] of FLOW_DIRS) {
+      const ni = ci + a, nj = cj + b;
+      if (!ok(ni, nj)) continue;
+      const idx = nj * g.gw + ni;
+      if (dist[idx] >= 0) continue;
+      dist[idx] = dist[cur] + 1;
+      q[tail++] = idx;
+    }
+  }
+  return dist;
+}
+function clearPortal() { if (portal) scene.remove(portal.grp); portal = null; }
+function makePortal(x, z) {              // 다음 층으로 가는 문
+  clearPortal();
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x8f5bff, transparent: true, opacity: 0.5, depthWrite: false, fog: false, toneMapped: false });
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 16, 20, 1, true), mat);
+  col.position.y = 8;
+  grp.add(col);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.1, 10, 32).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xc79bff, fog: false, toneMapped: false }));
+  ring.position.y = 0.07;
+  grp.add(ring);
+  const lamp = new THREE.PointLight(0x9b6bff, 4, 14);
+  lamp.position.y = 2;
+  grp.add(lamp);
+  grp.position.set(x, 0, z);
+  scene.add(grp);
+  portal = { grp, ring, x, z, t: 0 };
 }
 
 function buildMap() {
@@ -952,6 +1020,7 @@ function makeHpBar() {
 function spawnEnemy(waveN, variant = 'walker') {
   if (variant === true) variant = 'runner'; // 구형 호출 호환
   const runner = variant === 'runner', jumper = variant === 'jumper', ranged = variant === 'ranged', boss = variant === 'boss';
+  const isHunter = variant === 'hunter';
   const root = skClone(enemyGltf.scene);
   prepShadows(root);
   root.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; } });
@@ -967,7 +1036,9 @@ function spawnEnemy(waveN, variant = 'walker') {
   const sc = 1 + 0.05 * (waveN - 1);
   const spdSc = Math.min(2, sc);
   const baseHp = boss ? 800 : jumper ? 110 : runner ? 65 : ranged ? 70 : 80; // 보스 = 워커 10배
-  const baseSpd = runner ? 4.6 : jumper ? 3.0 : boss ? 2.2 : (1.6 + Math.random() * 0.4);
+  const runnerSpd = 4.6 + waveN * 0.15;
+  const baseSpd = isHunter ? runnerSpd * 2 / spdSc   // 추격자: 러너의 2배 (아래 spdSc 보정 상쇄)
+    : runner ? 4.6 : jumper ? 3.0 : boss ? 2.2 : (1.6 + Math.random() * 0.4);
   const baseDmg = boss ? 100 : jumper ? 28 : ranged ? 25 : 20; // 기본: 5대 사망 · 보스 = 5배
   const en = {
     root, mixer, acts, current: null, scale: s, runner, kind: variant,
@@ -985,6 +1056,19 @@ function spawnEnemy(waveN, variant = 'walker') {
   }
   if (ranged) { // 원거리 개체: 청록 발광
     root.traverse(o => { if (o.material?.emissive) o.material.emissive.setRGB(0.02, 0.25, 0.22); });
+  }
+  if (isHunter) {                       // 추격자: 죽지 않는다 · 바닥에 붉은 오라
+    en.invuln = true; en.stunAcc = 0; en.stunT = 0;
+    en.speed = runnerSpd * 2;
+    en.dmg = 34;
+    root.traverse(o => { if (o.material?.emissive) o.material.emissive.setRGB(0.5, 0.02, 0.02); });
+    const aura = new THREE.Mesh(new THREE.CircleGeometry(2.2, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xff1a1a, transparent: true, opacity: 0.45, depthWrite: false, fog: false, toneMapped: false }));
+    aura.position.y = 0.05;
+    root.add(aura);
+    en.aura = aura;
+    if (en.hpBar) { en.hpBar.grp.visible = false; en.alwaysBar = false; }
+    hunter = en;
   }
   if (boss) { // 보스: 주황 발광 + 점프 광역 공격
     root.traverse(o => { if (o.material?.emissive) o.material.emissive.setRGB(0.35, 0.09, 0.02); });
@@ -1015,6 +1099,18 @@ function enPlay(en, name, fade = 0.22, once = false) {
 }
 
 function updateEnemy(en, dt) {
+  if (en.invuln) {                      // 추격자: 스턴 처리 + 오라 색
+    if (en.stunT > 0) {
+      en.stunT -= dt;
+      if (en.aura) { en.aura.material.color.setHex(0xffdd22); en.aura.material.opacity = 0.6; }
+      en.mixer.update(dt * 0.1);
+      return;                           // 스턴 동안 완전 정지
+    }
+    if (en.aura) {
+      en.aura.material.color.setHex(0xff1a1a);
+      en.aura.material.opacity = 0.35 + Math.sin(gameTime * 6) * 0.12;
+    }
+  }
   en.mixer.update(dt);
   if (en.hitFlash > 0) {
     en.hitFlash -= dt;
@@ -1338,7 +1434,7 @@ function updateGrenades(dt) {
         if (en.state === 'dead') continue;
         const d = Math.hypot(en.root.position.x - bp.x, en.root.position.z - bp.z);
         if (d < 5.5) {
-          en.hp -= 250;
+          damageEnemy(en, 250);
           en.hitFlash = 0.2;
           en.hpBarT = 4;
           if (en.hpBar) {
@@ -1527,7 +1623,7 @@ function explodeAt(pos, radius, dmg, color) {
     if (en.state === 'dead') continue;
     const d = Math.hypot(en.root.position.x - pos.x, en.root.position.z - pos.z);
     if (d >= radius) continue;
-    en.hp -= dmg; en.hitFlash = 0.2; en.hpBarT = 4;
+    damageEnemy(en, dmg); en.hitFlash = 0.2; en.hpBarT = 4;
     if (en.hpBar) {
       const r = Math.max(0, en.hp / en.maxhp);
       en.hpBar.fill.scale.x = Math.max(0.001, r);
@@ -1603,7 +1699,22 @@ function updateProjectiles(dt) {
   }
 }
 
+function damageEnemy(en, dmg) {          // 추격자는 무적 — 누적 피해 1000마다 스턴
+  if (en.invuln) {
+    en.stunAcc += dmg;
+    if (en.stunAcc >= 1000) {
+      en.stunAcc -= 1000;
+      en.stunT = 2;
+      toast('⚡ 추격자 스턴!');
+      sfxTone(300, 0.3, 'square', 0.2, 500);
+    }
+    return false;
+  }
+  en.hp -= dmg;
+  return en.hp <= 0;
+}
 function killEnemy(en, scoreMult = 1) {
+  if (en.invuln) return;
   en.state = 'dead'; en.t = 0;
   if (en.hpBar) en.hpBar.grp.visible = false;
   clearAoe(en);
@@ -1611,6 +1722,7 @@ function killEnemy(en, scoreMult = 1) {
   enPlay(en, 'mutant dying', 0.1, true);
   sfxDie();
   kills++;
+  if (walkGrid) floorTime = Math.min(FLOOR_TIME * 2, floorTime + 5);   // 처치마다 +5초
   // 7초 내 연속킬 → 콤보. 점수는 콤보 배율 적용 (100 × 웨이브 × 콤보)
   combo = (gameTime - lastKillT <= 7) ? combo + 1 : 1;
   lastKillT = gameTime;
@@ -1651,9 +1763,63 @@ function killEnemy(en, scoreMult = 1) {
   else if (roll < 0.20) dropItem('grenade', px + 0.7, pz); // 수류탄 5%
   if (aliveCount() === 0) setTimeout(nextWave, 1600);
 }
-const aliveCount = () => enemies.filter(e => e.state !== 'dead').length;
+const aliveCount = () => enemies.filter(e => e.state !== 'dead' && !e.invuln).length;
 function updateHudWave() { document.getElementById('left').textContent = aliveCount(); }
 
+// 다음 층으로 — 맵을 새로 그리고 A 지점에서 다시 시작
+function nextFloor() {
+  floorNo++;
+  floorTime = FLOOR_TIME;
+  hunter = null;
+  clearSpawnTimers();
+  for (const en of enemies) { scene.remove(en.root); clearAoe(en); }
+  enemies.length = 0;
+  for (const d of drops) scene.remove(d.root); drops.length = 0;
+  for (const c of coinFx) scene.remove(c.root); coinFx.length = 0;
+  for (const pr of projectiles) scene.remove(pr.m); projectiles.length = 0;
+  for (const gr of liveGrenades) { scene.remove(gr.root); if (gr.circle) scene.remove(gr.circle); }
+  liveGrenades.length = 0;
+  for (const m of liveMines) scene.remove(m.grp);
+  liveMines.length = 0;
+  clearBeacon();
+  buildMap();                            // 새 랜덤맵 (새 시드)
+  player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
+  rebuildFlow();
+  coins += 200;
+  document.getElementById('coinN').textContent = coins;
+  flashChip('coinN'); persistProgress();
+  banner('FLOOR ' + floorNo);
+  toast('🌀 다음 층 — +200🪙');
+  sfxChest();
+  nextWave();
+}
+function updateFloor(dt) {
+  if (!walkGrid) { document.getElementById('floorHud').style.display = 'none'; return; }
+  const hud = document.getElementById('floorHud');
+  hud.style.display = 'block';
+  if (floorTime > 0) {
+    floorTime -= dt;
+    if (floorTime <= 0) {                // 시간 초과 — 추격자 등장
+      floorTime = 0;
+      if (!hunter) {
+        spawnEnemy(Math.max(1, wave), 'hunter');
+        banner('⚠ 추격자 등장 — 포탈로!');
+        sfxRoar(); shake(0.35, 0.6);
+      }
+    }
+  }
+  document.getElementById('floorN').textContent = floorNo;
+  document.getElementById('floorT').textContent = floorTime > 0 ? Math.ceil(floorTime) + 's' : '추격 중';
+  hud.classList.toggle('danger', floorTime <= 10);
+  // 포탈 도달 → 다음 층
+  if (portal) {
+    portal.t += dt;
+    portal.ring.rotation.z += dt * 1.2;
+    const k = 1 + Math.sin(portal.t * 2.5) * 0.08;
+    portal.ring.scale.set(k, k, k);
+    if (Math.hypot(player.pos.x - portal.x, player.pos.z - portal.z) < 2.2) nextFloor();
+  }
+}
 function nextWave() {
   if (player.dead) return;
   wave++;
@@ -1770,6 +1936,7 @@ function applyMap() {
   clearBeacon();
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
+  floorNo = 1; floorTime = FLOOR_TIME; hunter = null;
   wave = 0;
   updateHudWave();
   nextWave();
@@ -2057,8 +2224,8 @@ function shoot(now) {
     const hitPos = origin.clone().addScaledVector(dir, bestT);
     addTracer(muzzle, hitPos);
     burst(hitPos, headshot ? 0xffcc44 : 0xbb2233, hitKind === 'hs' ? 20 : headshot ? 14 : 9);
-    if (hitKind === 'hs') { hitEn.hp = 0; headshots++; } // 헤드샷 = 원샷킬 (보스는 hs 판정 자체가 없음)
-    else hitEn.hp -= Math.round((hitKind === 'crit' ? 34 : 13) * dmgMul());
+    if (hitKind === 'hs' && !hitEn.invuln) { hitEn.hp = 0; headshots++; } // 헤드샷 = 원샷킬
+    else damageEnemy(hitEn, Math.round((hitKind === 'crit' ? 34 : 13) * dmgMul()));
     hitEn.hitFlash = 0.12;
     // 넉백 임펄스(감쇠 속도) — 총량: 몸통 ≈0.15m, 헤드샷 ≈0.22m
     const kb = dir.clone(); kb.y = 0; kb.normalize();
@@ -2161,6 +2328,7 @@ function restart(toMenu = false) {
   if (player.actions['rifle aiming idle']) { player.current = null; play('rifle aiming idle', 0.1); }
   player.zooming = false; player.eyeH = EYE_STAND;
   player.dashT = 0; player.dashCd = 0;
+  floorNo = 1; floorTime = FLOOR_TIME; hunter = null;
   score = 0; kills = 0; wave = 0; reloading = false; buffT = 0;
   // 코인·업그레이드·수류탄은 게임오버 후에도 유지
   ammo = magSize();
@@ -2244,6 +2412,10 @@ function drawMinimap() {
       mmCtx.closePath(); mmCtx.fill();
     }
     mmCtx.restore();
+  }
+  if (portal) {                            // 포탈: 보라 표식 (항상 보인다)
+    const q = toMap(portal.x, portal.z);
+    dot(q[0], q[1], '#c79bff', 6 * k);
   }
   if (beacon) {                            // 비콘: 큰 노란 표식
     const b = toMap(beacon.x, beacon.z);
@@ -2387,6 +2559,7 @@ function updatePlayer(dt) {
   } else { flashLight.intensity = 0; flashSprite.material.opacity = 0; }
   if (gMode) updateTrajectory();
   updateSeenRects();
+  updateFloor(dt);
   updateHitArrows(dt);
   drawMinimap();
 }
@@ -2471,6 +2644,9 @@ window.__game = {
       grenades, gMode, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
+      floorNo, floorTime: +floorTime.toFixed(1),
+      portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1) } : null,
+      hunter: hunter ? { pos: hunter.root.position.toArray().map(v => +v.toFixed(1)), speed: +hunter.speed.toFixed(1), stunAcc: hunter.stunAcc, stunT: +hunter.stunT.toFixed(2) } : null,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
@@ -2515,6 +2691,8 @@ window.__game = {
   addMines(n = 1) { mines += n; updateMineSlot(); },
   placeMine() { placeMine(); },
   spawnBeacon() { spawnBeacon(); return window.__game.state.beacon; },
+  setFloorTime(t) { floorTime = t; },
+  toPortal() { if (portal) player.pos.set(portal.x, 0, portal.z); },
   buildSeed(seed) { mapMode = 'random'; clearWorld(); seenRects.clear(); buildRandom(seed); return mapSeed; },
   walkable(x, z) { return !cellSolid(x, z); },
   setPos(x, y, z) { player.pos.set(x, y, z); player.vy = 0; player.onGround = true; },
