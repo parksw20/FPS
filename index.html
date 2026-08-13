@@ -101,6 +101,12 @@
   .menuBtn.primary span{font-size:1.5rem; color:#ffffff}
   @keyframes menuPulse{0%,100%{box-shadow:0 0 22px rgba(80,225,255,.55), inset 0 0 16px rgba(80,225,255,.2)}
     50%{box-shadow:0 0 38px rgba(80,225,255,.95), inset 0 0 24px rgba(80,225,255,.35)}}
+  /* 시작 전 맵 선택 */
+  #mapPick{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    background:rgba(3,8,12,.72); backdrop-filter:blur(3px); z-index:20}
+  #mapPick h3{font-size:1rem; letter-spacing:.28em; color:#7df3ff; text-shadow:0 0 12px rgba(64,214,255,.8); margin-bottom:6px}
+  #mapPick .menuBtn{width:340px; text-align:center}
+  #mapPick .menuBtn span{font-size:1.35rem}
   /* ESC 일시정지 */
   #pauseOv{position:fixed; inset:0; display:none; background:rgba(3,8,12,.55); backdrop-filter:blur(2px); z-index:10}
   #pauseBtns{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:16px; width:300px}
@@ -209,11 +215,6 @@
     <button data-view="fps">1인칭</button>
     <button data-view="shoulder">3인칭 숄더뷰</button>
   </div>
-  <h3>맵</h3>
-  <div class="optRow">
-    <button data-map="plaza">광장</button>
-    <button data-map="random">랜덤</button>
-  </div>
   <h3>조작</h3>
   <div class="optRow">
     <button data-ctrl="pc">PC</button>
@@ -259,6 +260,11 @@
     <span class="key"><b>R</b> 재장전</span>
     <span class="key"><b>F</b> 수류탄</span>
   </div>
+</div>
+<div id="mapPick">
+  <h3>맵 선택</h3>
+  <div class="menuBtn primary" data-startmap="plaza"><span>🏛&nbsp; 광장</span></div>
+  <div class="menuBtn" data-startmap="random"><span>🎲&nbsp; 랜덤 (방·복도)</span></div>
 </div>
 <div id="pauseOv">
   <div id="pauseBtns">

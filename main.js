@@ -285,12 +285,21 @@ function cellSolid(x, z) {
 }
 function gridRayT(o, d, maxT) {       // 벽에 막히는 거리(없으면 null)
   if (!walkGrid) return null;
-  for (let t = 0.4; t < maxT; t += 0.25) {
+  let outside = false;                // 시작점이 벽 속이면 벗어난 뒤부터 판정
+  for (let t = 0.2; t < maxT; t += 0.25) {
     const y = o.y + d.y * t;
-    if (y > WALL_H) continue;
-    if (cellSolid(o.x + d.x * t, o.z + d.z * t)) return t;
+    const solid = y <= WALL_H && cellSolid(o.x + d.x * t, o.z + d.z * t);
+    if (!outside) { if (!solid) outside = true; continue; }
+    if (solid) return t;
   }
   return null;
+}
+// 두 지점 사이가 벽 없이 트여 있는가
+function losClear(ax, az, bx, bz) {
+  if (!walkGrid) return true;
+  const dx = bx - ax, dz = bz - az, L = Math.hypot(dx, dz) || 1;
+  for (let t = 0.4; t < L; t += 0.4) if (cellSolid(ax + dx * t / L, az + dz * t / L)) return false;
+  return true;
 }
 function pickSpawn() {                // 적 스폰 위치 (규칙은 광장과 동일, 위치만 맵에 맞춤)
   if (walkGrid && spawnPoints.length) {
@@ -315,8 +324,16 @@ function rebuildFlow() {
   const N = g.gw * g.gh;
   if (!flowField || flowField.length !== N) flowField = new Int8Array(N);
   flowField.fill(-1);
-  const pi = Math.floor(player.pos.x - g.ox), pj = Math.floor(player.pos.z - g.oz);
-  if (pi < 0 || pj < 0 || pi >= g.gw || pj >= g.gh || !g.cells[pj * g.gw + pi]) return;
+  let pi = Math.floor(player.pos.x - g.ox), pj = Math.floor(player.pos.z - g.oz);
+  const ok = (i, j) => i >= 0 && j >= 0 && i < g.gw && j < g.gh && g.cells[j * g.gw + i];
+  if (!ok(pi, pj)) {                   // 벽에 붙어 셀이 벽으로 계산되면 주변에서 가장 가까운 바닥을 시작점으로
+    let found = false;
+    for (let r = 1; r <= 3 && !found; r++)
+      for (let b = -r; b <= r && !found; b++)
+        for (let a = -r; a <= r && !found; a++)
+          if (ok(pi + a, pj + b)) { pi += a; pj += b; found = true; }
+    if (!found) return;
+  }
   const seen = new Uint8Array(N), q = new Int32Array(N);
   let head = 0, tail = 0;
   const s = pj * g.gw + pi; seen[s] = 1; q[tail++] = s;
@@ -344,7 +361,7 @@ function flowVec(x, z) {               // 다음 셀 중심을 향한 단위벡�
   return { x: dx / L, z: dz / L };
 }
 
-function collideCircle(pos, radius, height = 1.7, feetY = 0) {
+function collideCircle(pos, radius, height = 1.7, feetY = 0, gridRadius = radius) {
   if (walkGrid) {                       // 랜덤맵: 벽 격자 밀어내기
     const g = walkGrid;
     const ci = Math.floor(pos.x - g.ox), cj = Math.floor(pos.z - g.oz);
@@ -352,7 +369,7 @@ function collideCircle(pos, radius, height = 1.7, feetY = 0) {
       const solid = (i < 0 || j < 0 || i >= g.gw || j >= g.gh) ? true : !g.cells[j * g.gw + i];
       if (!solid) continue;
       const cx = g.ox + i + 0.5, cz = g.oz + j + 0.5;
-      const hw = 0.5 + radius, dx = pos.x - cx, dz = pos.z - cz;
+      const hw = 0.5 + gridRadius, dx = pos.x - cx, dz = pos.z - cz;
       if (Math.abs(dx) < hw && Math.abs(dz) < hw) {
         const px = hw - Math.abs(dx), pz = hw - Math.abs(dz);
         if (px < pz) pos.x += dx > 0 ? px : -px;
@@ -985,17 +1002,30 @@ function updateEnemy(en, dt) {
     } else if (dist > atkRange) {
       toP.normalize();
       let mvx = toP.x, mvz = toP.z;
-      if (walkGrid && dist > 5) {                    // 랜덤맵: 방·복도를 따라 우회
-        const f = flowVec(p.x, p.z);
+      if (walkGrid && (dist > 2.5 || !losClear(p.x, p.z, player.pos.x, player.pos.z))) {
+        const f = flowVec(p.x, p.z);   // 랜덤맵: 방·복도를 따라 우회 (시야가 막히면 근접해도 경로 사용)
         if (f) { mvx = f.x; mvz = f.z; en.root.rotation.y = Math.atan2(f.x, f.z); }
       }
+      // 모서리에 끼면(0.6초간 거의 못 움직이면) 잠깐 옆으로 미끄러져 빠져나온다
+      en.stuckT = (en.stuckT || 0) + dt;
+      if (en.stuckT > 0.6) {
+        const moved = Math.hypot(p.x - (en.lpx ?? p.x), p.z - (en.lpz ?? p.z));
+        if (moved < 0.12) { en.slipT = 0.6; en.slipDir = Math.random() < 0.5 ? 1 : -1; }
+        en.lpx = p.x; en.lpz = p.z; en.stuckT = 0;
+      }
+      if (en.slipT > 0) {
+        en.slipT -= dt;
+        const sx = -mvz * en.slipDir, sz = mvx * en.slipDir;
+        mvx += sx * 1.2; mvz += sz * 1.2;
+        const L = Math.hypot(mvx, mvz) || 1; mvx /= L; mvz /= L;
+      }
       p.x += mvx * en.speed * dt; p.z += mvz * en.speed * dt;
-      collideCircle(p, 0.6, 2.4 * en.scale, 0);
+      collideCircle(p, 0.6, 2.4 * en.scale, 0, 0.32);   // 벽 통과 반경은 작게 — 폭 2m 복도도 통행
       for (const o of enemies) {
         if (o === en || o.state === 'dead') continue;
         const dx = p.x - o.root.position.x, dz = p.z - o.root.position.z;
         const d = Math.hypot(dx, dz);
-        if (d > 0.001 && d < 1.1) { p.x += dx / d * (1.1 - d) * 0.5; p.z += dz / d * (1.1 - d) * 0.5; }
+        if (d > 0.001 && d < 0.9) { p.x += dx / d * (0.9 - d) * 0.3; p.z += dz / d * (0.9 - d) * 0.3; }
       }
       enPlay(en, en.moveClip);
     } else if (en.atkCd <= 0) {
@@ -1554,7 +1584,20 @@ function enterGame() {
   }
   refreshOverlay();
 }
-document.getElementById('btnStart').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
+const mapPick = document.getElementById('mapPick');
+document.getElementById('btnStart').addEventListener('click', e => {
+  e.stopPropagation();
+  shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; optMenu.style.display = 'none';
+  mapPick.style.display = 'flex';     // 시작 전 맵 선택
+});
+mapPick.querySelectorAll('[data-startmap]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  mapMode = b.dataset.startmap;
+  localStorage.setItem('fps.map', mapMode);
+  mapPick.style.display = 'none';
+  applyMap();                          // 지형 재생성(랜덤은 매번 새 맵) + 1웨이브부터
+  enterGame();
+}));
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
 document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; paused = false; restart(true); });
 document.getElementById('btnOptions').addEventListener('click', e => {
@@ -1733,13 +1776,9 @@ function shoot(now) {
     const t = rayAABB(origin, dir, min, max);
     if (t !== null && t < wallT) wallT = t;
   }
-  if (walkGrid) {                       // 벽 차폐: 카메라가 아니라 플레이어 가슴 기준
-    const chest = new THREE.Vector3(player.pos.x, player.pos.y + 1.35, player.pos.z);
-    const gt = gridRayT(chest, dir, 90);
-    if (gt !== null) {
-      const t = chest.addScaledVector(dir, gt).sub(origin).dot(dir);
-      if (t > 0 && t < wallT) wallT = t;
-    }
+  if (walkGrid) {                       // 벽 차폐 (카메라가 벽 속이면 벗어난 지점부터 판정)
+    const gt = gridRayT(origin, dir, Math.min(wallT, 90));
+    if (gt !== null) wallT = gt;
   }
   const muzzle = muzzleTip(dir);
   lastMuzzle.copy(muzzle);
@@ -1888,7 +1927,7 @@ function restart(toMenu = false) {
   document.getElementById('ammo').classList.remove('inf');
   updateAmmo();
   msgEl.style.display = 'none';
-  if (toMenu) { started = false; inRun = false; paused = false; refreshOverlay(); } // 확인 → 메인 화면
+  if (toMenu) { started = false; inRun = false; paused = false; document.getElementById('mapPick').style.display = 'none'; refreshOverlay(); } // 확인 → 메인 화면
   else if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
   nextWave();
@@ -2025,7 +2064,16 @@ function updatePlayer(dt) {
     );
   } else {
     // 숄더뷰: 카메라를 오른쪽 어깨 위로 → 플레이어는 화면 좌측
-    const base = new THREE.Vector3(player.pos.x + cy * 0.95, player.pos.y + player.eyeH, player.pos.z - sy * 0.95);
+    let sh = 0.95;                      // 어깨 오프셋
+    if (walkGrid) {
+      const blocked = t => cellSolid(player.pos.x + cy * t, player.pos.z - sy * t);
+      if (blocked(sh)) sh = blocked(-sh) ? 0 : -sh;   // 오른쪽이 벽이면 왼쪽 어깨로 전환
+      const sgn = Math.sign(sh) || 1;
+      for (let t = 0.25; t <= Math.abs(sh); t += 0.15) {
+        if (blocked(sgn * t)) { sh = sgn * Math.max(0, t - 0.3); break; }   // 그래도 가까우면 축소
+      }
+    }
+    const base = new THREE.Vector3(player.pos.x + cy * sh, player.pos.y + player.eyeH, player.pos.z - sy * sh);
     let camDist = 2.7;
     if (walkGrid) {                     // 벽에 막히면 카메라를 앞으로 당긴다
       for (let t = 0.4; t <= camDist; t += 0.2) {
