@@ -1096,9 +1096,14 @@ function spawnEnemy(waveN, variant = 'walker') {
   if (ranged) { // 원거리 개체: 청록 발광
     root.traverse(o => { if (o.material?.emissive) o.material.emissive.setRGB(0.02, 0.25, 0.22); });
   }
+  if (boss) {                           // 보스: 자기 방을 지키며 대기 (진입·피격 시 각성)
+    en.dormant = true;
+    en.homeRoom = null;
+  }
   if (isHunter) {                       // 추격자: 죽지 않는다 · 바닥에 붉은 오라
     en.invuln = true; en.stunAcc = 0; en.stunT = 0;
     en.speed = runnerSpd * 2;
+    en.atkRate = 2;                      // 공격 모션·쿨타임 모두 2배 빠르게
     en.dmg = 34;
     root.traverse(o => { if (o.material?.emissive) o.material.emissive.setRGB(0.5, 0.02, 0.02); });
     const aura = new THREE.Mesh(new THREE.CircleGeometry(2.2, 32).rotateX(-Math.PI / 2),
@@ -1130,16 +1135,30 @@ function spawnEnemy(waveN, variant = 'walker') {
   updateHudWave();
   return en;
 }
-function enPlay(en, name, fade = 0.22, once = false) {
+function enPlay(en, name, fade = 0.22, once = false, rate = 1) {
   const next = en.acts[name];
   if (!next || en.current === next) return;
   if (once) { next.setLoop(THREE.LoopOnce); next.clampWhenFinished = true; }
   next.enabled = true; next.reset().play();
+  next.timeScale = rate;
   if (en.current) en.current.crossFadeTo(next, fade, false);
   en.current = next;
 }
 
 function updateEnemy(en, dt) {
+  if (en.dormant) {                     // 대기 중인 보스 — 플레이어가 방에 들어오면 각성
+    en.mixer.update(dt);
+    const r = en.homeRoom;
+    const inRoom = r && player.pos.x >= r.x0 - 1 && player.pos.x <= r.x1 + 1 &&
+      player.pos.z >= r.z0 - 1 && player.pos.z <= r.z1 + 1;
+    const near = Math.hypot(player.pos.x - en.root.position.x, player.pos.z - en.root.position.z) < 14;
+    if (inRoom || near) wakeEnemy(en);
+    else {
+      enPlay(en, 'mutant idle');
+      if (en.hpBar) en.hpBar.grp.lookAt(camera.position);
+      return;
+    }
+  }
   if (en.invuln) {                      // 추격자: 스턴 처리 + 오라 색
     if (en.stunT > 0) {
       en.stunT -= dt;
@@ -1247,14 +1266,14 @@ function updateEnemy(en, dt) {
       en.state = 'attack'; en.t = 0; en.dealt = false;
       enPlay(en, en.kind === 'jumper' ? 'jump attack'
         : en.kind === 'ranged' ? 'mutant punch'
-          : (Math.random() < 0.5 ? 'mutant punch' : 'mutant swiping'), 0.12, true);
+          : (Math.random() < 0.5 ? 'mutant punch' : 'mutant swiping'), 0.12, true, en.atkRate || 1);
     } else {
       enPlay(en, 'mutant idle');
     }
     en.atkCd -= dt;
   } else if (en.state === 'attack') {
     en.t += dt;
-    const clipDur = en.current?.getClip().duration ?? 1;
+    const clipDur = (en.current?.getClip().duration ?? 1) / (en.atkRate || 1);
     const jumper = en.kind === 'jumper';
     if (jumper && en.t < clipDur * 0.45 && dist > 1.2) {
       // 도약 전진
@@ -1268,7 +1287,7 @@ function updateEnemy(en, dt) {
     }
     if (en.t >= clipDur * 0.95) {
       en.state = 'chase';
-      en.atkCd = en.kind === 'ranged' ? 3.0 : jumper ? 1.4 : 0.7;
+      en.atkCd = (en.kind === 'ranged' ? 3.0 : jumper ? 1.4 : 0.7) / (en.atkRate || 1);
       enPlay(en, en.moveClip);
     }
   } else if (en.state === 'bossjump') {
@@ -1578,6 +1597,82 @@ function updateHitArrows(dt) {
   }
 }
 
+// ---------- 마커: 조준점이 닿은 바닥·벽에 표시를 남겨 길을 잃지 않게 ----------
+const markers = [];
+const MARKER_MAX = 12;
+let markerTex = null;
+function markerTexture() {
+  if (markerTex) return markerTex;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const c = cv.getContext('2d');
+  c.strokeStyle = '#39f6ff'; c.lineWidth = 9; c.lineCap = 'round';
+  c.beginPath(); c.arc(64, 64, 40, 0, Math.PI * 2); c.stroke();
+  c.beginPath();
+  c.moveTo(40, 40); c.lineTo(88, 88); c.moveTo(88, 40); c.lineTo(40, 88);
+  c.stroke();
+  c.strokeStyle = 'rgba(57,246,255,.35)'; c.lineWidth = 18;
+  c.beginPath(); c.arc(64, 64, 52, 0, Math.PI * 2); c.stroke();
+  markerTex = new THREE.CanvasTexture(cv);
+  return markerTex;
+}
+function aimHitPoint(maxT = 70) {        // 크로스헤어가 닿는 지점과 그 면의 법선
+  raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+  const dir = raycaster.ray.direction.clone();
+  const origin = raycaster.ray.origin.clone();
+  let bestT = maxT, kind = null;
+  if (dir.y < -0.01) {                   // 바닥
+    const t = -origin.y / dir.y;
+    if (t > 0.3 && t < bestT) { bestT = t; kind = 'floor'; }
+  }
+  const gt = gridRayT(origin, dir, bestT); // 벽
+  if (gt !== null) { bestT = gt; kind = 'wall'; }
+  for (const o of obstacles) {           // 승강 오브젝트
+    const min = new THREE.Vector3(o.x - o.w / 2, o.yOff, o.z - o.d / 2);
+    const max = new THREE.Vector3(o.x + o.w / 2, o.yOff + o.h, o.z + o.d / 2);
+    const t = rayAABB(origin, dir, min, max);
+    if (t !== null && t > 0.3 && t < bestT) { bestT = t; kind = 'box'; }
+  }
+  if (!kind) return null;
+  const p = origin.clone().addScaledVector(dir, bestT);
+  let nrm;
+  if (kind === 'floor') nrm = new THREE.Vector3(0, 1, 0);
+  else if (kind === 'wall') {            // 어느 축을 넘어서 막혔는지로 벽면을 판별
+    for (let k = 0; k < 12 && cellSolid(p.x, p.z); k++) p.addScaledVector(dir, -0.05);  // 벽면 앞으로 되돌린다
+    const qx = p.x + dir.x * 0.4, qz = p.z + dir.z * 0.4;
+    const xs = cellSolid(qx, p.z), zs = cellSolid(p.x, qz);
+    if (xs && !zs) nrm = new THREE.Vector3(-Math.sign(dir.x), 0, 0);
+    else if (zs && !xs) nrm = new THREE.Vector3(0, 0, -Math.sign(dir.z));
+    else nrm = Math.abs(dir.x) > Math.abs(dir.z)
+      ? new THREE.Vector3(-Math.sign(dir.x), 0, 0)
+      : new THREE.Vector3(0, 0, -Math.sign(dir.z));
+  } else nrm = new THREE.Vector3(-dir.x, 0, -dir.z).normalize();
+  return { p, n: nrm };
+}
+const markerGeo = new THREE.PlaneGeometry(1.7, 1.7);
+function placeMarker() {                 // 조준한 면에 데칼처럼 표시를 남긴다
+  if (player.dead) return;
+  const h = aimHitPoint();
+  if (!h) { toast("표시할 지점이 없습니다"); return; }
+  const m = new THREE.Mesh(markerGeo, new THREE.MeshBasicMaterial({
+    map: markerTexture(), transparent: true, depthWrite: false, opacity: 0.95,
+    side: THREE.DoubleSide, fog: false, toneMapped: false
+  }));
+  m.position.copy(h.p).addScaledVector(h.n, 0.08);
+  m.lookAt(m.position.clone().add(h.n));
+  scene.add(m);
+  markers.push({ sp: m, x: h.p.x, z: h.p.z, t: 0 });
+  if (markers.length > MARKER_MAX) { const old = markers.shift(); scene.remove(old.sp); }
+  sfxTone(1200, 0.07, "sine", 0.12);
+  toast("📍 마커 (" + markers.length + "/" + MARKER_MAX + ")");
+}
+function clearMarkers() { for (const m of markers) scene.remove(m.sp); markers.length = 0; }
+function updateMarkers(dt) {
+  for (const m of markers) {
+    m.t += dt;
+    m.sp.material.opacity = 0.7 + Math.sin(m.t * 3) * 0.25;
+  }
+}
+
 // ---------- 비콘 이벤트: 3웨이브마다 먼 방에 표적, 제한시간 안에 도달하면 보상 ----------
 let beacon = null;                       // {grp, x, z, t, limit}
 const BEACON_LIMIT = 26, BEACON_COINS = 400;
@@ -1728,11 +1823,13 @@ function fireProjectile(en) {
   const target = player.pos.clone().add(new THREE.Vector3(0, 1.2, 0)); // 발사 순간의 플레이어 위치
   const dir = target.clone().sub(origin);
   const dist = dir.length();
-  const vel = dir.divideScalar(1.0); // 어느 거리든 약 1초에 도달 (기존 2초의 2배 속도)
+  // 층마다 투사체 속도 +20% (최대 2배) — 1초 도달 → 최소 0.5초
+  const spd = Math.min(2, 1 + 0.2 * ((walkGrid ? floorNo : wave) - 1));
+  const vel = dir.divideScalar(1.0 / spd);
   const m = new THREE.Mesh(projGeo, new THREE.MeshBasicMaterial({ color: 0x5affd0, transparent: true, opacity: 0.95 }));
   m.position.copy(origin);
   scene.add(m);
-  projectiles.push({ m, vel, life: 1.15, dmg: en.dmg });
+  projectiles.push({ m, vel, life: 1.15 / spd + 0.15, dmg: en.dmg });
   sfxTone(220, 0.3, 'sawtooth', 0.14, 240);
 }
 function updateProjectiles(dt) {
@@ -1755,7 +1852,17 @@ function updateProjectiles(dt) {
   }
 }
 
+function wakeEnemy(en) {                 // 대기 해제
+  if (!en.dormant) return;
+  en.dormant = false;
+  en.state = 'chase';
+  enPlay(en, 'mutant roaring', 0.15);
+  en.spawnHold = 0.9; en.t = 0; en.state = 'spawn';
+  sfxRoar(); shake(0.2, 0.4);
+  banner('⚠ BOSS 각성');
+}
 function damageEnemy(en, dmg) {          // 추격자는 무적 — 누적 피해 1000마다 스턴
+  if (en.dormant) wakeEnemy(en);         // 맞으면 깨어난다
   if (en.invuln) {
     en.stunAcc += dmg;
     if (en.stunAcc >= 1000) {
@@ -1856,6 +1963,7 @@ function nextFloor() {
   for (const m of liveMines) scene.remove(m.grp);
   liveMines.length = 0;
   clearBeacon();
+  clearMarkers();
   buildMap();                            // 새 랜덤맵 (새 시드)
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
@@ -1911,7 +2019,10 @@ function startFloor() {                  // 층 시작 시 개체 배치
     setTimeout(() => {
       if (player.dead) return;
       const b = spawnEnemy(floorNo, 'boss');
-      if (b && portal) b.root.position.set(portal.x + 3, 0, portal.z + 2);
+          if (b && portal) {
+        b.root.position.set(portal.x + 3, 0, portal.z + 2);
+        b.homeRoom = mapRects.find(r => r.room && portal.x >= r.x0 && portal.x <= r.x1 && portal.z >= r.z0 && portal.z <= r.z1) || null;
+      }
       banner('⚠ BOSS가 포탈을 지킨다');
       sfxRoar();
     }, 900);
@@ -2122,6 +2233,7 @@ function applyMap() {
   for (const m of liveMines) scene.remove(m.grp);
   liveMines.length = 0;
   clearBeacon();
+  clearMarkers();
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
   floorNo = 1; floorTime = FLOOR_TIME; hunter = null;
@@ -2290,8 +2402,9 @@ document.addEventListener('keydown', e => {
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
   if (!e.repeat) {                       // 1 총 · 2 수류탄 · 3 지뢰
     if (e.code === 'Digit1' || e.code === 'Numpad1') selectSlot('gun');
-    if (e.code === 'Digit2' || e.code === 'Numpad2' || e.code === 'KeyF') selectSlot('grenade');
-    if (e.code === 'Digit3' || e.code === 'Numpad3' || e.code === 'KeyG') selectSlot('mine');
+    if (e.code === 'Digit2' || e.code === 'Numpad2') selectSlot('grenade');
+    if (e.code === 'Digit3' || e.code === 'Numpad3') selectSlot('mine');
+    if (e.code === 'KeyF') placeMarker();          // 조준점에 길찾기 마커
   }
   // ESC 토글: 일시정지 ↔ 재개 (잠금 중 ESC는 브라우저가 소비 → pointerlockchange 경로로 일시정지됨)
   if (e.code === 'Escape' && !e.repeat && inRun && !player.dead) {
@@ -2624,6 +2737,7 @@ function drawMinimap() {
     const b = toMap(beacon.x, beacon.z);
     dot(b[0], b[1], '#ffe27a', 6 * k);
   }
+  for (const m of markers) dot(...toMap(m.x, m.z), '#39f6ff', 3.5 * k);   // 내가 찍은 마커
   for (const d of drops) dot(...toMap(d.root.position.x, d.root.position.z), '#ffd76b');
   for (const en of enemies) {
     if (en.state === 'dead') continue;
@@ -2762,6 +2876,7 @@ function updatePlayer(dt) {
   } else { flashLight.intensity = 0; flashSprite.material.opacity = 0; }
   if (gMode) updateTrajectory();
   updateSeenRects();
+  updateMarkers(dt);
   updateFloor(dt);
   roomSpawnTick(dt);
   updateHitArrows(dt);
@@ -2845,7 +2960,7 @@ window.__game = {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
-      grenades, gMode, slot, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
+      grenades, gMode, slot, markers: markers.length, projSpeed: projectiles[0] ? +projectiles[0].vel.length().toFixed(2) : null, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
       floorNo, floorTime: +floorTime.toFixed(1), portalTravel, cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
@@ -2857,7 +2972,8 @@ window.__game = {
       enemies: enemies.map(e => ({
         state: e.state, hp: e.hp, maxhp: e.maxhp, kind: e.kind, isBoss: e === bossOfFloor, runner: e.runner,
         pos: e.root.position.toArray().map(v => +v.toFixed(2)),
-        clip: e.current?.getClip().name ?? null,
+        clip: e.current?.getClip().name ?? null, atkRate: e.atkRate ?? 1, atkCd: +(e.atkCd ?? 0).toFixed(2),
+        clipDur: +(e.current?.getClip().duration ?? 0).toFixed(2), clipScale: e.current?.timeScale ?? null,
       })),
       drops: drops.map(d => ({ type: d.type, t: +d.t.toFixed(1), visible: d.root.visible, pos: d.root.position.toArray().map(v => +v.toFixed(2)) })),
       coinFx: coinFx.length,
@@ -2890,6 +3006,7 @@ window.__game = {
   spawnAt(x, z, variant = 'walker') { spawnEnemy(wave || 1, variant); const e = enemies[enemies.length - 1]; e.root.position.set(x, 0, z); e.state = 'chase'; return e; },
   dropAt(type, x, z) { type === 'coin' ? dropCoins(x, z) : dropItem(type, x, z); },
   hurt(n) { damagePlayer(n); },
+  hurtEnemy(i, dmg) { const e = enemies[i]; if (!e) return null; damageEnemy(e, dmg ?? 10); return e.hp; },
   skipWave() { skipWave(); },
   addGrenades(n = 1) { grenades += n; updateGSlot(); },
   addMines(n = 1) { mines += n; updateMineSlot(); },
@@ -2898,6 +3015,7 @@ window.__game = {
   setFloorTime(t) { floorTime = t; },
   toFloor(f) { floorNo = f - 1; nextFloor(); },
   populate() { return populateRooms(); },
+  placeMarker() { placeMarker(); return markers.length; },
   toPortal() { if (portal) player.pos.set(portal.x, 0, portal.z); },
   buildSeed(seed) { mapMode = 'random'; clearWorld(); seenRects.clear(); buildRandom(seed); return mapSeed; },
   walkable(x, z) { return !cellSolid(x, z); },
