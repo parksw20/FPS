@@ -45,6 +45,26 @@ let mapRadius = ARENA;                  // 미니맵·스폰 기준
 let mapRects = [];                      // 랜덤맵 바닥 사각형 {x0,z0,x1,z1,room}
 let walkGrid = null;                    // 랜덤맵 이동 가능 격자(1m)
 let spawnPoints = [];                   // 랜덤맵 적 스폰 후보
+let mapSeed = '';                       // 현재 랜덤맵 시드 (랭킹에 기록)
+let roomThemes = [];                    // 방별 테마
+let rngState = 1;
+function seedFromString(str) {          // 문자열 → 32bit 시드
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function srand() {                      // mulberry32 — 시드가 같으면 같은 맵이 나온다
+  rngState |= 0; rngState = rngState + 0x6D2B79F5 | 0;
+  let t = Math.imul(rngState ^ rngState >>> 15, 1 | rngState);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+function newSeed() {                    // 4글자 시드 (표시·공유용)
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < 4; i++) out += A[(Math.random() * A.length) | 0];
+  return out;
+}
 const seenRects = new Set();            // 미니맵 안개: 가본 방·복도 인덱스
 const playerStart = new THREE.Vector3(0, 0, 0);
 const worldGroup = new THREE.Group();
@@ -159,18 +179,20 @@ function buildPlaza() {
 }
 
 // 절차 생성: 방(10~50m) + 복도(폭 2~4m, 길이 2~20m). 좌표는 전부 정수 → 격자와 정확히 일치
-function buildRandom() {
-  const rnd = (a, b) => a + Math.random() * (b - a);
-  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  const rsize = () => Math.round(10 + Math.pow(Math.random(), 1.7) * 40);   // 10~50m (작은 방 비중 높게)
+function buildRandom(seed) {
+  mapSeed = seed || newSeed();
+  rngState = seedFromString(mapSeed);
+  const rnd = (a, b) => a + srand() * (b - a);
+  const ri = (a, b) => a + Math.floor(srand() * (b - a + 1));
+  const rsize = () => Math.round(10 + Math.pow(srand(), 1.7) * 40);   // 10~50m (작은 방 비중 높게)
   const over = (a, b, m) => a.x0 - m < b.x1 && b.x0 - m < a.x1 && a.z0 - m < b.z1 && b.z0 - m < a.z1;
   const w0 = rsize(), d0 = rsize();
   const rooms = [{ x0: -(w0 >> 1), z0: -(d0 >> 1), x1: -(w0 >> 1) + w0, z1: -(d0 >> 1) + d0 }];
   const cors = [];
-  const TARGET = 6 + Math.floor(Math.random() * 3);   // 방 6~8개
+  const TARGET = 6 + Math.floor(srand() * 3);        // 방 6~8개
   for (let guard = 0; rooms.length < TARGET && guard < 800; guard++) {
-    const base = rooms[(Math.random() * rooms.length) | 0];
-    const dir = (Math.random() * 4) | 0;             // 0:+x 1:-x 2:+z 3:-z
+    const base = rooms[(srand() * rooms.length) | 0];
+    const dir = (srand() * 4) | 0;                   // 0:+x 1:-x 2:+z 3:-z
     const w = rsize(), d = rsize();
     const cw = ri(2, 4), cl = ri(2, 20);             // 복도 폭·길이
     let room, cor;
@@ -248,19 +270,49 @@ function buildRandom() {
   wi.instanceMatrix.needsUpdate = true; ci.instanceMatrix.needsUpdate = true;
   worldGroup.add(wi); worldGroup.add(ci);
 
-  // 방 안에 승강 오브젝트 + 스폰 지점
+  // 방 테마 — 같은 알고리즘이라도 방마다 성격이 달라진다
+  const THEMES = ['pillar', 'lift', 'dark', 'open'];
   let li = 0;
   spawnPoints = [];
-  for (const r of rooms) {
-    const w = r.x1 - r.x0, d = r.z1 - r.z0;
-    if (Math.min(w, d) >= 14) {
-      const n = Math.min(3, Math.floor(Math.min(w, d) / 12));
-      for (let k = 0; k < n; k++) {
-        const platform = li % 3 === 0;
-        const bw = rnd(platform ? 2.4 : 1.6, 4), bd = rnd(platform ? 2.4 : 1.6, 4);
-        const bh = platform ? rnd(0.8, 1.0) : rnd(1.2, 4.2);
-        addLiftBox(rnd(r.x0 + 3, r.x1 - 3), rnd(r.z0 + 3, r.z1 - 3), bw, bd, bh, platform, li++);
+  roomThemes = [];
+  for (let idx = 0; idx < rooms.length; idx++) {
+    const r = rooms[idx];
+    const w = r.x1 - r.x0, d = r.z1 - r.z0, small = Math.min(w, d) < 14;
+    const theme = idx === 0 ? 'open' : (small ? (srand() < 0.5 ? 'dark' : 'open') : THEMES[(srand() * THEMES.length) | 0]);
+    roomThemes.push(theme);
+    if (theme === 'pillar') {                     // 기둥 숲: 엄폐물 많은 교전장
+      const cnt = Math.min(9, Math.max(3, Math.floor(w * d / 90)));
+      for (let k = 0; k < cnt; k++) {
+        const px = rnd(r.x0 + 2.5, r.x1 - 2.5), pz = rnd(r.z0 + 2.5, r.z1 - 2.5);
+        const pw = rnd(1.2, 2.2);
+        const pil = new THREE.Mesh(new THREE.BoxGeometry(pw, WALL_H, pw), wallMat);
+        pil.position.set(px, WALL_H / 2, pz);
+        pil.castShadow = true; pil.receiveShadow = true;
+        worldGroup.add(pil);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(pw * 1.08, 0.12, pw * 1.08), edgeMat);
+        cap.position.set(px, WALL_H + 0.06, pz);
+        worldGroup.add(cap);
+        for (let j = Math.round(pz - pw / 2 - oz); j < Math.round(pz + pw / 2 - oz); j++)
+          for (let i = Math.round(px - pw / 2 - ox); i < Math.round(px + pw / 2 - ox); i++)
+            if (i >= 0 && j >= 0 && i < gw && j < gh) cells[j * gw + i] = 0;   // 기둥은 벽으로
       }
+    } else if (theme === 'lift') {                // 승강 플랫폼 방
+      const cnt = Math.min(4, Math.max(2, Math.floor(Math.min(w, d) / 10)));
+      for (let k = 0; k < cnt; k++) {
+        const platform = li % 2 === 0;
+        addLiftBox(rnd(r.x0 + 3, r.x1 - 3), rnd(r.z0 + 3, r.z1 - 3),
+          rnd(platform ? 2.4 : 1.6, 4), rnd(platform ? 2.4 : 1.6, 4),
+          platform ? rnd(0.8, 1.0) : rnd(1.2, 4.2), platform, li++);
+      }
+    } else if (theme === 'dark') {                // 어두운 방: 붉은 조명만
+      const lamp = new THREE.PointLight(0xff4433, 6, Math.max(w, d) * 0.9);
+      lamp.position.set((r.x0 + r.x1) / 2, 3.2, (r.z0 + r.z1) / 2);
+      worldGroup.add(lamp);
+      const floorDark = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x05070b, transparent: true, opacity: 0.62 }));
+      floorDark.position.set((r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2);
+      worldGroup.add(floorDark);
+      if (!small) addLiftBox(rnd(r.x0 + 3, r.x1 - 3), rnd(r.z0 + 3, r.z1 - 3), rnd(1.6, 3.4), rnd(1.6, 3.4), rnd(1.4, 3.4), false, li++);
     }
     const sn = Math.max(2, Math.floor(w * d / 300));
     for (let k = 0; k < sn; k++) spawnPoints.push({ x: rnd(r.x0 + 2, r.x1 - 2), z: rnd(r.z0 + 2, r.z1 - 2) });
@@ -269,13 +321,20 @@ function buildRandom() {
   mapRadius = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minZ), Math.abs(maxZ));
   scene.fog.far = 120;
   setSunBounds(Math.min(140, mapRadius + 14));
+  const sd = document.getElementById('seedTag');
+  if (sd) { sd.textContent = 'SEED ' + mapSeed; sd.style.display = 'block'; }
 }
 
 function buildMap() {
   clearWorld();
   seenRects.clear();
   liftClock = 0;
-  if (mapMode === 'random') buildRandom(); else buildPlaza();
+  if (mapMode === 'random') buildRandom(); else {
+    mapSeed = ''; roomThemes = [];
+    const sd = document.getElementById('seedTag');
+    if (sd) sd.style.display = 'none';
+    buildPlaza();
+  }
 }
 
 // ---------- 격자 헬퍼 ----------
@@ -582,7 +641,7 @@ function loadProgress() {
 function saveRanking() {
   let list;
   try { list = JSON.parse(localStorage.getItem('fps.rank') || '[]'); } catch { list = []; }
-  const entry = { score, wave, kills, hs: headshots, acc: accuracy(), date: new Date().toISOString().slice(0, 10) };
+  const entry = { score, wave, kills, hs: headshots, acc: accuracy(), seed: mapSeed || '광장', date: new Date().toISOString().slice(0, 10) };
   list.push(entry);
   list.sort((a, b) => b.score - a.score);
   list = list.slice(0, 10);
@@ -593,9 +652,9 @@ function rankingTable(list, me = null) {
   if (!list.length) return '<div class="rankRow"><small>기록이 없습니다</small></div>';
   const rows = list.map((r, i) =>
     `<tr class="${r === me ? 'me' : ''}"><td>${i + 1}</td><td class="num">${r.score.toLocaleString()}</td>` +
-    `<td>${r.wave}</td><td>${r.kills}</td><td>${r.hs || 0}</td><td>${r.acc != null ? r.acc + '%' : '-'}</td><td>${r.date}</td></tr>`
+    `<td>${r.wave}</td><td>${r.kills}</td><td>${r.hs || 0}</td><td>${r.acc != null ? r.acc + '%' : '-'}</td><td>${r.seed || '-'}</td><td>${r.date}</td></tr>`
   ).join('');
-  return `<table class="rankTbl"><thead><tr><th></th><th class="num">점수</th><th>웨이브</th><th>킬수</th><th>헤드샷</th><th>명중률</th><th>기록일</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table class="rankTbl"><thead><tr><th></th><th class="num">점수</th><th>웨이브</th><th>킬수</th><th>헤드샷</th><th>명중률</th><th>맵</th><th>기록일</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function renderRanking() {
   const { list, entry } = saveRanking();
@@ -2409,7 +2468,7 @@ window.__game = {
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
       grenades, gMode, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
-      seenRects: seenRects.size, hitArrows: hitArrows.length,
+      seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
@@ -2454,6 +2513,7 @@ window.__game = {
   addMines(n = 1) { mines += n; updateMineSlot(); },
   placeMine() { placeMine(); },
   spawnBeacon() { spawnBeacon(); return window.__game.state.beacon; },
+  buildSeed(seed) { mapMode = 'random'; clearWorld(); seenRects.clear(); buildRandom(seed); return mapSeed; },
   walkable(x, z) { return !cellSolid(x, z); },
   setPos(x, y, z) { player.pos.set(x, y, z); player.vy = 0; player.onGround = true; },
   toss() { throwGrenade(); },
