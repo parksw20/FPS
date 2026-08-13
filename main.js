@@ -403,7 +403,7 @@ function makePortal(x, z) {              // 다음 층으로 가는 문
   lamp.position.y = 2;
   grp.add(lamp);
   const lock = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: lockTexture(), transparent: true, depthWrite: false, depthTest: false, fog: false, toneMapped: false
+    map: lockTexture(), transparent: true, depthWrite: false, fog: false, toneMapped: false
   }));
   lock.scale.set(2.2, 2.2, 1);
   lock.position.y = 3.2;
@@ -1867,12 +1867,46 @@ function nextFloor() {
   sfxChest();
   startFloor();
 }
+const ROOM_DENSITY = 100;                // 1마리 / 10m×10m
+const ROOM_CAP = 8, FLOOR_CAP = 44;      // 방당·층당 초기 배치 상한 (성능)
+function populateRooms() {               // 빈 방이 없도록 면적 비례 배치
+  if (!walkGrid) return 0;
+  const rooms = mapRects.filter(r => r.room);
+  // 면적 비례로 뽑되, 상한을 넘으면 방마다 1마리는 보장하고 나머지만 비례 축소
+  const want = rooms.map(r => Math.min(ROOM_CAP, Math.max(1, Math.round((r.x1 - r.x0) * (r.z1 - r.z0) / ROOM_DENSITY))));
+  const sum = want.reduce((a, b) => a + b, 0);
+  if (sum > FLOOR_CAP && sum > rooms.length) {
+    const k = Math.max(0, (FLOOR_CAP - rooms.length) / (sum - rooms.length));
+    for (let i = 0; i < want.length; i++) want[i] = 1 + Math.floor((want[i] - 1) * k);
+  }
+  let total = 0, delay = 0;
+  for (let ri = 0; ri < rooms.length; ri++) {
+    const r = rooms[ri];
+    const w = r.x1 - r.x0, d = r.z1 - r.z0;
+    for (let i = 0; i < want[ri]; i++) {
+      let x = 0, z = 0, ok = false;
+      for (let t = 0; t < 10 && !ok; t++) {
+        x = r.x0 + 1.5 + Math.random() * Math.max(0.1, w - 3);
+        z = r.z0 + 1.5 + Math.random() * Math.max(0.1, d - 3);
+        ok = !cellSolid(x, z) && Math.hypot(x - playerStart.x, z - playerStart.z) > 10;  // 시작 지점 바로 옆은 비움
+      }
+      if (!ok) continue;
+      total++;
+      const px = x, pz = z;
+      setTimeout(() => {                 // 한 번에 만들면 끊기니 조금씩
+        if (player.dead) return;
+        const e = spawnEnemy(floorNo, floorEnemyKind());
+        if (e) e.root.position.set(px, 0, pz);
+      }, delay += 45);
+    }
+  }
+  return total;
+}
 function startFloor() {                  // 층 시작 시 개체 배치
   spawnCd = 2.5;
   lastKillClock = gameTime;
   bossOfFloor = null;
-  const start = 4 + Math.min(8, floorNo);
-  for (let i = 0; i < start; i++) setTimeout(() => { if (!player.dead) spawnEnemy(floorNo, floorEnemyKind()); }, i * 260);
+  populateRooms();
   if (floorNo % 5 === 0) {               // 5층마다 보스 — 포탈 방을 지킨다
     setTimeout(() => {
       if (player.dead) return;
@@ -1951,7 +1985,7 @@ function floorEnemyKind() {              // 층에 따라 개체 해금: 러너 
 function roomSpawnTick(dt) {
   if (!walkGrid || player.dead) return;
   const alive = aliveCount();
-  const cap = Math.min(22, 8 + floorNo * 2);
+  const cap = Math.min(FLOOR_CAP + 6, 22 + floorNo * 2);
   spawnCd -= dt;
   if (spawnCd <= 0) {                    // 방마다 쿨타임으로 계속 유입
     spawnCd = Math.max(1.6, 5 - floorNo * 0.2);
@@ -2863,6 +2897,7 @@ window.__game = {
   spawnBeacon() { spawnBeacon(); return window.__game.state.beacon; },
   setFloorTime(t) { floorTime = t; },
   toFloor(f) { floorNo = f - 1; nextFloor(); },
+  populate() { return populateRooms(); },
   toPortal() { if (portal) player.pos.set(portal.x, 0, portal.z); },
   buildSeed(seed) { mapMode = 'random'; clearWorld(); seenRects.clear(); buildRandom(seed); return mapSeed; },
   walkable(x, z) { return !cellSolid(x, z); },
