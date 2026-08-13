@@ -337,7 +337,10 @@ function buildRandom(seed) {
     const d = (gi >= 0 && gj >= 0 && gi < gw && gj < gh) ? td[gj * gw + gi] : -1;
     if (d > farD) { farD = d; far = { x: cx, z: cz }; }
   }
-  if (far) { makePortal(far.x, far.z); portalTravel = farD; }
+  if (far) {
+    makePortal(far.x, far.z); portalTravel = farD;
+    if (floorNo % 5 === 0) setPortalLock(true);   // 보스 층: 보스를 잡아야 열린다
+  }
   mapRadius = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minZ), Math.abs(maxZ));
   scene.fog.far = 120;
   setSunBounds(Math.min(140, mapRadius + 14));
@@ -377,6 +380,14 @@ function travelDistances(sx, sz) {
   return dist;
 }
 function clearPortal() { if (portal) scene.remove(portal.grp); portal = null; }
+function lockTexture() {                 // 자물쇠 아이콘 (스프라이트)
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const c = cv.getContext('2d');
+  c.font = '92px system-ui, "Segoe UI Emoji"';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('🔒', 64, 70);
+  return new THREE.CanvasTexture(cv);
+}
 function makePortal(x, z) {              // 다음 층으로 가는 문
   clearPortal();
   const grp = new THREE.Group();
@@ -391,9 +402,34 @@ function makePortal(x, z) {              // 다음 층으로 가는 문
   const lamp = new THREE.PointLight(0x9b6bff, 4, 14);
   lamp.position.y = 2;
   grp.add(lamp);
+  const lock = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: lockTexture(), transparent: true, depthWrite: false, depthTest: false, fog: false, toneMapped: false
+  }));
+  lock.scale.set(2.2, 2.2, 1);
+  lock.position.y = 3.2;
+  lock.visible = false;
+  grp.add(lock);
   grp.position.set(x, 0, z);
   scene.add(grp);
-  portal = { grp, ring, x, z, t: 0 };
+  portal = { grp, col, ring, lamp, lock, x, z, t: 0, locked: false };
+}
+function setPortalLock(v) {              // 잠김: 빨강 · 더 투명 · 바닥 원 없음 · 자물쇠
+  if (!portal) return;
+  portal.locked = v;
+  portal.col.material.color.setHex(v ? 0xff2a1a : 0x8f5bff);
+  portal.col.material.opacity = v ? 0.22 : 0.5;
+  portal.ring.visible = !v;
+  portal.lamp.color.setHex(v ? 0xff3322 : 0x9b6bff);
+  portal.lamp.intensity = v ? 2.5 : 4;
+  portal.lock.visible = v;
+}
+function unlockPortal() {
+  if (!portal || !portal.locked) return;
+  setPortalLock(false);
+  burst(new THREE.Vector3(portal.x, 1.2, portal.z), 0xc79bff, 24);
+  banner('🔓 포탈 개방!');
+  toast('🔓 포탈이 열렸다');
+  sfxChest();
 }
 
 function buildMap() {
@@ -1790,6 +1826,7 @@ function killEnemy(en, scoreMult = 1) {
     banner('💠 보스 코어 획득 — ' + UPG_NAMES[k] + ' 강화!');
     toast('💠 코어: ' + UPG_NAMES[k] + ' +5% · +30초 · +500🪙');
     sfxChest();
+    setTimeout(unlockPortal, 700);       // 포탈 개방
   }
   // 드롭: 코인 100% + 포션 10% + 상자 5%
   const px = en.root.position.x, pz = en.root.position.z;
@@ -1836,8 +1873,14 @@ function startFloor() {                  // 층 시작 시 개체 배치
   bossOfFloor = null;
   const start = 4 + Math.min(8, floorNo);
   for (let i = 0; i < start; i++) setTimeout(() => { if (!player.dead) spawnEnemy(floorNo, floorEnemyKind()); }, i * 260);
-  if (floorNo % 5 === 0) {               // 5층마다 보스
-    setTimeout(() => { if (!player.dead) { spawnEnemy(floorNo, 'boss'); banner('⚠ BOSS 출현 — 코어를 빼앗아라'); sfxRoar(); } }, 900);
+  if (floorNo % 5 === 0) {               // 5층마다 보스 — 포탈 방을 지킨다
+    setTimeout(() => {
+      if (player.dead) return;
+      const b = spawnEnemy(floorNo, 'boss');
+      if (b && portal) b.root.position.set(portal.x + 3, 0, portal.z + 2);
+      banner('⚠ BOSS가 포탈을 지킨다');
+      sfxRoar();
+    }, 900);
   }
 }
 // 층 이동 연출 + 상점
@@ -1879,10 +1922,18 @@ function updateFloor(dt) {
   // 포탈 도달 → 다음 층
   if (portal) {
     portal.t += dt;
-    portal.ring.rotation.z += dt * 1.2;
+    if (portal.ring.visible) portal.ring.rotation.z += dt * 1.2;
     const k = 1 + Math.sin(portal.t * 2.5) * 0.08;
     portal.ring.scale.set(k, k, k);
-    if (!warping && Math.hypot(player.pos.x - portal.x, player.pos.z - portal.z) < 2.2) {
+    const nearPortal = Math.hypot(player.pos.x - portal.x, player.pos.z - portal.z) < 2.2;
+    if (portal.locked) {
+      portal.lock.position.y = 3.2 + Math.sin(portal.t * 3) * 0.18;
+      if (nearPortal && gameTime - (portal.warnT || 0) > 2.5) {
+        portal.warnT = gameTime;
+        toast('🔒 보스를 처치해야 열린다');
+        sfxTone(160, 0.25, 'square', 0.16, -40);
+      }
+    } else if (!warping && nearPortal) {
       warping = true;
       floorTransition();
       setTimeout(() => warping = false, 900);
@@ -2533,7 +2584,7 @@ function drawMinimap() {
   }
   if (portal) {                            // 포탈: 미니맵 범위 안에 들어와야만 보인다 (방향 표시 없음)
     const q = toMap(portal.x, portal.z);
-    if (Math.hypot(q[0] - C, q[1] - C) <= R - 6 * k) dot(q[0], q[1], '#c79bff', 6 * k);
+    if (Math.hypot(q[0] - C, q[1] - C) <= R - 6 * k) dot(q[0], q[1], portal.locked ? '#ff4d4d' : '#c79bff', 6 * k);
   }
   if (beacon) {                            // 비콘: 큰 노란 표식
     const b = toMap(beacon.x, beacon.z);
@@ -2764,13 +2815,13 @@ window.__game = {
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
       floorNo, floorTime: +floorTime.toFixed(1), portalTravel, cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
-      portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1) } : null,
+      portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1), locked: !!portal.locked } : null,
       hunter: hunter ? { pos: hunter.root.position.toArray().map(v => +v.toFixed(1)), speed: +hunter.speed.toFixed(1), stunAcc: hunter.stunAcc, stunT: +hunter.stunT.toFixed(2) } : null,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
       enemies: enemies.map(e => ({
-        state: e.state, hp: e.hp, runner: e.runner,
+        state: e.state, hp: e.hp, maxhp: e.maxhp, kind: e.kind, isBoss: e === bossOfFloor, runner: e.runner,
         pos: e.root.position.toArray().map(v => +v.toFixed(2)),
         clip: e.current?.getClip().name ?? null,
       })),
