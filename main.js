@@ -2339,10 +2339,8 @@ function updatePlayer(dt) {
     let sh = 0.95;                      // 어깨 오프셋
     if (walkGrid) {
       const blocked = t => cellSolid(player.pos.x + cy * t, player.pos.z - sy * t);
-      if (blocked(sh)) sh = blocked(-sh) ? 0 : -sh;   // 오른쪽이 벽이면 왼쪽 어깨로 전환
-      const sgn = Math.sign(sh) || 1;
-      for (let t = 0.25; t <= Math.abs(sh); t += 0.15) {
-        if (blocked(sgn * t)) { sh = sgn * Math.max(0, t - 0.3); break; }   // 그래도 가까우면 축소
+      for (let t = 0.25; t <= sh; t += 0.15) {          // 어깨 방향은 유지하고 벽에 닿으면 오프셋만 축소
+        if (blocked(t)) { sh = Math.max(0, t - 0.3); break; }
       }
     }
     const base = new THREE.Vector3(player.pos.x + cy * sh, player.pos.y + player.eyeH, player.pos.z - sy * sh);
