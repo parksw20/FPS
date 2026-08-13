@@ -72,6 +72,7 @@ const FLOOR_TIME = 60;                  // 층 제한시간(초)
 let floorTime = FLOOR_TIME;
 let hunter = null;                      // 제한시간 초과 시 등장하는 무적 추격자
 let warping = false, floorShopOpen = false;
+let portalTravel = 0;   // A→B 실제 이동거리(m)
 const playerStart = new THREE.Vector3(0, 0, 0);
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -196,12 +197,13 @@ function buildRandom(seed) {
   const w0 = rsize(), d0 = rsize();
   const rooms = [{ x0: -(w0 >> 1), z0: -(d0 >> 1), x1: -(w0 >> 1) + w0, z1: -(d0 >> 1) + d0 }];
   const cors = [];
-  const TARGET = 6 + Math.floor(srand() * 3);        // 방 6~8개
-  for (let guard = 0; rooms.length < TARGET && guard < 800; guard++) {
-    const base = rooms[(srand() * rooms.length) | 0];
+  const TARGET = 11 + Math.floor(srand() * 4) + Math.min(5, floorNo - 1);   // 방 11~14개 (+층당 1, 최대 +5)
+  for (let guard = 0; rooms.length < TARGET && guard < 2500; guard++) {
+    const tail = rooms.length > 3 && srand() < 0.75 ? rooms.slice(-3) : rooms;   // 최근 방에 이어 붙여 경로를 길게
+    const base = tail[(srand() * tail.length) | 0];
     const dir = (srand() * 4) | 0;                   // 0:+x 1:-x 2:+z 3:-z
     const w = rsize(), d = rsize();
-    const cw = ri(2, 4), cl = ri(2, 20);             // 복도 폭·길이
+    const cw = ri(2, 4), cl = ri(5, 20);             // 복도 폭·길이(간격 확보)
     let room, cor;
     if (dir < 2) {
       const z0 = ri(base.z0 - d + cw + 2, base.z1 - cw - 2);
@@ -327,7 +329,7 @@ function buildRandom(seed) {
   playerStart.set((rooms[0].x0 + rooms[0].x1) / 2, 0, (rooms[0].z0 + rooms[0].z1) / 2);
   // B 지점: A에서 실제 이동거리가 가장 먼 방의 중심에 포탈
   const td = travelDistances(playerStart.x, playerStart.z);
-  let far = null, farD = -1;
+  let far = null, farD = -1; portalTravel = 0;
   for (let i = 1; i < rooms.length; i++) {
     const r = rooms[i];
     const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
@@ -335,7 +337,7 @@ function buildRandom(seed) {
     const d = (gi >= 0 && gj >= 0 && gi < gw && gj < gh) ? td[gj * gw + gi] : -1;
     if (d > farD) { farD = d; far = { x: cx, z: cz }; }
   }
-  if (far) makePortal(far.x, far.z);
+  if (far) { makePortal(far.x, far.z); portalTravel = farD; }
   mapRadius = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minZ), Math.abs(maxZ));
   scene.fog.far = 120;
   setSunBounds(Math.min(140, mapRadius + 14));
@@ -2529,19 +2531,9 @@ function drawMinimap() {
     }
     mmCtx.restore();
   }
-  if (portal) {                            // 포탈: 가까우면 원, 멀면 가장자리 화살표
+  if (portal) {                            // 포탈: 미니맵 범위 안에 들어와야만 보인다 (방향 표시 없음)
     const q = toMap(portal.x, portal.z);
-    if (Math.hypot(q[0] - C, q[1] - C) > R - 6 * k) {
-      const a = Math.atan2(q[1] - C, q[0] - C);
-      const ax = C + Math.cos(a) * (R - 9 * k), ay = C + Math.sin(a) * (R - 9 * k);
-      mmCtx.save();
-      mmCtx.translate(ax, ay); mmCtx.rotate(a + Math.PI / 2);
-      mmCtx.fillStyle = '#c79bff';
-      mmCtx.beginPath();
-      mmCtx.moveTo(0, -9 * k); mmCtx.lineTo(-6.5 * k, 7 * k); mmCtx.lineTo(6.5 * k, 7 * k);
-      mmCtx.closePath(); mmCtx.fill();
-      mmCtx.restore();
-    } else dot(q[0], q[1], '#c79bff', 6 * k);
+    if (Math.hypot(q[0] - C, q[1] - C) <= R - 6 * k) dot(q[0], q[1], '#c79bff', 6 * k);
   }
   if (beacon) {                            // 비콘: 큰 노란 표식
     const b = toMap(beacon.x, beacon.z);
@@ -2771,7 +2763,7 @@ window.__game = {
       grenades, gMode, slot, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
-      floorNo, floorTime: +floorTime.toFixed(1), cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
+      floorNo, floorTime: +floorTime.toFixed(1), portalTravel, cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
       portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1) } : null,
       hunter: hunter ? { pos: hunter.root.position.toArray().map(v => +v.toFixed(1)), speed: +hunter.speed.toFixed(1), stunAcc: hunter.stunAcc, stunT: +hunter.stunT.toFixed(2) } : null,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
