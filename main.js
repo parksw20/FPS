@@ -3129,7 +3129,17 @@ window.__game = {
       pieces: m.sp.children.map(c => {
         const w = c.getWorldPosition(new THREE.Vector3());
         const n = c.getWorldDirection(new THREE.Vector3());
-        return { p: w.toArray().map(v => +v.toFixed(2)), n: n.toArray().map(v => +v.toFixed(2)) };
+        const uv = c.geometry.attributes.uv;
+        let u0 = 9, u1 = -9, v0 = 9, v1 = -9;
+        for (let i = 0; i < uv.count; i++) {
+          u0 = Math.min(u0, uv.getX(i)); u1 = Math.max(u1, uv.getX(i));
+          v0 = Math.min(v0, uv.getY(i)); v1 = Math.max(v1, uv.getY(i));
+        }
+        return {
+          p: w.toArray().map(v => +v.toFixed(2)), n: n.toArray().map(v => +v.toFixed(2)),
+          uv: [u0, u1, v0, v1].map(v => +v.toFixed(2)),
+          size: [+c.geometry.parameters.width.toFixed(2), +c.geometry.parameters.height.toFixed(2)],
+        };
       }),
     }));
   },
