@@ -45,6 +45,7 @@ let mapRadius = ARENA;                  // 미니맵·스폰 기준
 let mapRects = [];                      // 랜덤맵 바닥 사각형 {x0,z0,x1,z1,room}
 let walkGrid = null;                    // 랜덤맵 이동 가능 격자(1m)
 let spawnPoints = [];                   // 랜덤맵 적 스폰 후보
+const seenRects = new Set();            // 미니맵 안개: 가본 방·복도 인덱스
 const playerStart = new THREE.Vector3(0, 0, 0);
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -272,6 +273,7 @@ function buildRandom() {
 
 function buildMap() {
   clearWorld();
+  seenRects.clear();
   liftClock = 0;
   if (mapMode === 'random') buildRandom(); else buildPlaza();
 }
@@ -1062,7 +1064,7 @@ function updateEnemy(en, dt) {
       // 펀치 모션 중 투사체 발사 (플레이어의 발사 시점 위치를 조준 → 이동으로 회피 가능)
       if (!en.dealt && en.t > clipDur * 0.4) { en.dealt = true; fireProjectile(en); }
     } else if (!en.dealt && en.t > clipDur * (jumper ? 0.5 : 0.38) && dist < (jumper ? 3.0 : 2.6) * en.scale) {
-      en.dealt = true; damagePlayer(en.dmg);
+      en.dealt = true; damagePlayer(en.dmg, p.x, p.z);
     }
     if (en.t >= clipDur * 0.95) {
       en.state = 'chase';
@@ -1085,7 +1087,7 @@ function updateEnemy(en, dt) {
       p.y = 0;
       const d2 = Math.hypot(player.pos.x - en.aoeTarget.x, player.pos.z - en.aoeTarget.z);
       // 지면 충격파 — 오브젝트 위(높이 0.5m 이상)에 있으면 안 맞는다
-      if (!player.dead && d2 < 10 && player.pos.y < 0.5) damagePlayer(en.dmg);
+      if (!player.dead && d2 < 10 && player.pos.y < 0.5) damagePlayer(en.dmg, en.aoeTarget.x, en.aoeTarget.z);
       burst(new THREE.Vector3(en.aoeTarget.x, 0.4, en.aoeTarget.z), 0xff5533, 26);
       shake(0.45, 0.55);          // 착지 충격 — 화면 흔들림
       rockBurst(en.aoeTarget);    // 돌 파편
@@ -1331,6 +1333,38 @@ function updateDecals(dt) {
   }
 }
 
+// ---------- 미니맵 안개: 가본 방·복도만 드러난다 ----------
+function updateSeenRects() {
+  if (!walkGrid) return;
+  for (let i = 0; i < mapRects.length; i++) {
+    if (seenRects.has(i)) continue;
+    const r = mapRects[i];
+    if (player.pos.x >= r.x0 - 1 && player.pos.x <= r.x1 + 1 &&
+        player.pos.z >= r.z0 - 1 && player.pos.z <= r.z1 + 1) seenRects.add(i);
+  }
+}
+// ---------- 피격 방향 표시기 ----------
+const hitArrows = [];
+function showHitArrow(fromX, fromZ) {
+  const el = document.createElement('div');
+  el.className = 'hitDir';
+  document.getElementById('hud').appendChild(el);
+  hitArrows.push({ el, x: fromX, z: fromZ, t: 1.2 });
+}
+function updateHitArrows(dt) {
+  for (let i = hitArrows.length - 1; i >= 0; i--) {
+    const a = hitArrows[i];
+    a.t -= dt;
+    if (a.t <= 0) { a.el.remove(); hitArrows.splice(i, 1); continue; }
+    const dx = a.x - player.pos.x, dz = a.z - player.pos.z;
+    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+    const u = dx * cy - dz * sy, v = dx * sy + dz * cy;   // 우측 / 전방(음수)
+    const ang = Math.atan2(u, -v);                        // 화면 위쪽이 0
+    a.el.style.transform = 'translate(-50%,-50%) rotate(' + (ang * 180 / Math.PI) + 'deg)';
+    a.el.style.opacity = Math.min(1, a.t / 0.4) * 0.9;
+  }
+}
+
 // ---------- 비콘 이벤트: 3웨이브마다 먼 방에 표적, 제한시간 안에 도달하면 보상 ----------
 let beacon = null;                       // {grp, x, z, t, limit}
 const BEACON_LIMIT = 26, BEACON_COINS = 400;
@@ -1496,7 +1530,7 @@ function updateProjectiles(dt) {
     const dx = pr.m.position.x - player.pos.x, dz = pr.m.position.z - player.pos.z;
     const dy = pr.m.position.y - (player.pos.y + 1.1);
     const hit = !player.dead && Math.hypot(dx, dz) < 0.75 && Math.abs(dy) < 1.1;
-    if (hit) damagePlayer(pr.dmg);
+    if (hit) damagePlayer(pr.dmg, pr.m.position.x, pr.m.position.z);
     const wallHit = walkGrid && pr.m.position.y < WALL_H && cellSolid(pr.m.position.x, pr.m.position.z);
     if (hit || wallHit || pr.life <= 0) {
       burst(pr.m.position, 0x5affd0, 8);
@@ -2023,8 +2057,9 @@ function hitmark(head) {
 }
 
 // ---------- player damage ----------
-function damagePlayer(n) {
+function damagePlayer(n, fromX, fromZ) {
   if (player.dead) return;
+  if (fromX !== undefined) showHitArrow(fromX, fromZ);
   player.hp -= n;
   sfxHurt();
   const f = document.getElementById('dmgflash');
@@ -2135,11 +2170,11 @@ function drawMinimap() {
     mmCtx.fillStyle = color;
     mmCtx.beginPath(); mmCtx.arc(x, y, r, 0, Math.PI * 2); mmCtx.fill();
   };
-  if (walkGrid) {                          // 랜덤맵: 방·복도 윤곽
+  if (walkGrid) {                          // 랜덤맵: 가본 곳만 드러나는 안개 미니맵
     mmCtx.save();
     mmCtx.beginPath(); mmCtx.arc(C, C, R - 1, 0, Math.PI * 2); mmCtx.clip();
     mmCtx.fillStyle = 'rgba(126,224,163,.16)';
-    for (const r of mapRects) {
+    for (const r of mapRects.filter((_, i) => seenRects.has(i))) {
       const q1 = toMap(r.x0, r.z0), q2 = toMap(r.x1, r.z0), q3 = toMap(r.x1, r.z1), q4 = toMap(r.x0, r.z1);
       mmCtx.beginPath();
       mmCtx.moveTo(q1[0], q1[1]); mmCtx.lineTo(q2[0], q2[1]); mmCtx.lineTo(q3[0], q3[1]); mmCtx.lineTo(q4[0], q4[1]);
@@ -2152,7 +2187,14 @@ function drawMinimap() {
     dot(b[0], b[1], '#ffe27a', 6 * k);
   }
   for (const d of drops) dot(...toMap(d.root.position.x, d.root.position.z), '#ffd76b');
-  for (const en of enemies) if (en.state !== 'dead') dot(...toMap(en.root.position.x, en.root.position.z), '#ff5555');
+  for (const en of enemies) {
+    if (en.state === 'dead') continue;
+    if (walkGrid) {                        // 랜덤맵: 보이거나 가까운 적만 표시
+      const d = Math.hypot(en.root.position.x - player.pos.x, en.root.position.z - player.pos.z);
+      if (d > 15 && !losClear(player.pos.x, player.pos.z, en.root.position.x, en.root.position.z)) continue;
+    }
+    dot(...toMap(en.root.position.x, en.root.position.z), '#ff5555');
+  }
   // 플레이어(중앙 화살표, 위 = 전방)
   mmCtx.fillStyle = '#7ee0a3';
   mmCtx.beginPath();
@@ -2283,6 +2325,8 @@ function updatePlayer(dt) {
     flashSprite.material.opacity = flashT > 0 ? 0.9 : 0;
   } else { flashLight.intensity = 0; flashSprite.material.opacity = 0; }
   if (gMode) updateTrajectory();
+  updateSeenRects();
+  updateHitArrows(dt);
   drawMinimap();
 }
 
@@ -2365,6 +2409,7 @@ window.__game = {
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
       grenades, gMode, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
+      seenRects: seenRects.size, hitArrows: hitArrows.length,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
