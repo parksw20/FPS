@@ -1623,18 +1623,18 @@ function aimHitPoint(maxT = 70, fromEye = false) {  // 크로스헤어가 닿는
   const origin = fromEye
     ? new THREE.Vector3(player.pos.x, player.pos.y + player.eyeH, player.pos.z)
     : raycaster.ray.origin.clone();
-  let bestT = maxT, kind = null;
+  let bestT = maxT, kind = null, hitObj = null;
   if (dir.y < -0.01) {                   // 바닥
     const t = -origin.y / dir.y;
     if (t > 0.3 && t < bestT) { bestT = t; kind = 'floor'; }
   }
   const gt = gridRayT(origin, dir, bestT); // 벽
-  if (gt !== null) { bestT = gt; kind = 'wall'; }
+  if (gt !== null) { bestT = gt; kind = 'wall'; hitObj = null; }
   for (const o of obstacles) {           // 승강 오브젝트
     const min = new THREE.Vector3(o.x - o.w / 2, o.yOff, o.z - o.d / 2);
     const max = new THREE.Vector3(o.x + o.w / 2, o.yOff + o.h, o.z + o.d / 2);
     const t = rayAABB(origin, dir, min, max);
-    if (t !== null && t > 0.3 && t < bestT) { bestT = t; kind = 'box'; }
+    if (t !== null && t > 0.3 && t < bestT) { bestT = t; kind = 'box'; hitObj = o; }
   }
   if (!kind) return null;
   const p = origin.clone().addScaledVector(dir, bestT);
@@ -1649,11 +1649,53 @@ function aimHitPoint(maxT = 70, fromEye = false) {  // 크로스헤어가 닿는
     else nrm = Math.abs(dir.x) > Math.abs(dir.z)
       ? new THREE.Vector3(-Math.sign(dir.x), 0, 0)
       : new THREE.Vector3(0, 0, -Math.sign(dir.z));
-  } else nrm = new THREE.Vector3(-dir.x, 0, -dir.z).normalize();
-  return { p, n: nrm };
+  } else {                               // 박스: 맞은 면의 법선을 축별로 판정
+    const dx = Math.min(Math.abs(p.x - (hitObj.x - hitObj.w / 2)), Math.abs(p.x - (hitObj.x + hitObj.w / 2)));
+    const dy = Math.min(Math.abs(p.y - hitObj.yOff), Math.abs(p.y - (hitObj.yOff + hitObj.h)));
+    const dz = Math.min(Math.abs(p.z - (hitObj.z - hitObj.d / 2)), Math.abs(p.z - (hitObj.z + hitObj.d / 2)));
+    if (dy <= dx && dy <= dz) nrm = new THREE.Vector3(0, p.y > hitObj.yOff + hitObj.h / 2 ? 1 : -1, 0);
+    else if (dx <= dz) nrm = new THREE.Vector3(Math.sign(p.x - hitObj.x) || 1, 0, 0);
+    else nrm = new THREE.Vector3(0, 0, Math.sign(p.z - hitObj.z) || 1);
+  }
+  return { p, n: nrm, obj: kind === 'box' ? hitObj : null };
 }
 const markerGeo = new THREE.PlaneGeometry(1.7, 1.7);
-function placeMarker() {                 // 조준한 면에 데칼처럼 표시를 남긴다
+const MARK_S = 1.7;                      // 마커 한 변 (m)
+function solidAt(x, y, z) {              // 그 점이 지형(바닥·벽·박스) 속인가
+  if (y < 0) return true;
+  if (walkGrid && y <= WALL_H && cellSolid(x, z)) return true;
+  for (const o of obstacles) {
+    if (x >= o.x - o.w / 2 && x <= o.x + o.w / 2 && z >= o.z - o.d / 2 && z <= o.z + o.d / 2 &&
+      y >= o.yOff && y <= o.yOff + o.h) return true;
+  }
+  return false;
+}
+function onSurface(q, n) {               // q가 법선 n인 면 위에 놓이는가 (뒤는 막히고 앞은 비었는가)
+  return solidAt(q.x - n.x * 0.06, q.y - n.y * 0.06, q.z - n.z * 0.06) &&
+    !solidAt(q.x + n.x * 0.06, q.y + n.y * 0.06, q.z + n.z * 0.06);
+}
+function faceExtent(p, n, dir) {         // 면이 dir 방향으로 이어지는 거리 (최대 반쪽)
+  const q = new THREE.Vector3();
+  let e = 0;
+  for (let s = 0.05; s <= MARK_S / 2 + 1e-6; s += 0.05) {
+    q.copy(p).addScaledVector(dir, s);
+    if (!onSurface(q, n)) break;
+    e = s;
+  }
+  return e;
+}
+function decalPiece(mat, center, ax, ay, az, w, h, u0, u1, v0, v1) {
+  const g = new THREE.PlaneGeometry(w, h);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
+  }
+  const m = new THREE.Mesh(g, mat);
+  m.applyMatrix4(new THREE.Matrix4().makeBasis(ax, ay, az));
+  m.position.copy(center);
+  return m;
+}
+function placeMarker() {                 // 조준한 면에 데칼처럼 표시를 남긴다 (모서리는 옆면으로 이어 그린다)
   if (player.dead) return;
   let h = aimHitPoint(MARKER_RANGE, true);
   if (!h) {                              // 2m 안에 조준한 면이 없으면 바라보는 쪽 바닥에 칠한다
@@ -1667,26 +1709,77 @@ function placeMarker() {                 // 조준한 면에 데칼처럼 표시
     const r = gt === null ? MARKER_RANGE : Math.max(0.4, gt - 0.3);
     h = { p: new THREE.Vector3(player.pos.x + dh.x * r, 0, player.pos.z + dh.z * r), n: new THREE.Vector3(0, 1, 0) };
   }
-  const m = new THREE.Mesh(markerGeo, new THREE.MeshBasicMaterial({
+  const mat = new THREE.MeshBasicMaterial({
     map: markerTexture(), transparent: true, depthWrite: false, opacity: 0.95,
     side: THREE.DoubleSide, fog: false, toneMapped: false
-  }));
-  m.position.copy(h.p).addScaledVector(h.n, 0.08);
-  m.lookAt(m.position.clone().add(h.n));
-  scene.add(m);
-  markers.push({ sp: m, x: h.p.x, z: h.p.z, t: 0 });
-  if (markers.length > MARKER_MAX) { const old = markers.shift(); scene.remove(old.sp); }
+  });
+  const S = MARK_S, half = S / 2, OFF = 0.05;
+  const p = h.p, n = h.n;
+  const u = Math.abs(n.y) > 0.5
+    ? new THREE.Vector3(1, 0, 0)
+    : new THREE.Vector3(0, 1, 0).cross(n).normalize();
+  const v = new THREE.Vector3().crossVectors(n, u).normalize();
+  const nu = u.clone().negate(), nv = v.clone().negate();
+  const eU = faceExtent(p, n, u), eNU = faceExtent(p, n, nu);
+  const eV = faceExtent(p, n, v), eNV = faceExtent(p, n, nv);
+  const grp = new THREE.Group();
+  const cU = (eU - eNU) / 2, cV = (eV - eNV) / 2;   // 잘린 만큼 중심이 밀린다
+  if (eU + eNU > 0.05 && eV + eNV > 0.05) {         // 면에 붙는 본체
+    grp.add(decalPiece(mat,
+      p.clone().addScaledVector(u, cU).addScaledVector(v, cV).addScaledVector(n, OFF),
+      u, v, n, eU + eNU, eV + eNV,
+      (half - eNU) / S, (half + eU) / S, (half - eNV) / S, (half + eV) / S));
+  }
+  // 삐져나온 쪽은 이어지는 면(볼록: 옆면 / 오목: 마주보는 벽)에 계속 그린다
+  const folds = [
+    { dir: u, e: eU, along: 'u' }, { dir: nu, e: eNU, along: 'u' },
+    { dir: v, e: eV, along: 'v' }, { dir: nv, e: eNV, along: 'v' },
+  ];
+  for (const f of folds) {
+    const rem = half - f.e;
+    if (rem < 0.08) continue;
+    const edge = p.clone().addScaledVector(f.dir, f.e);
+    const probe = edge.clone().addScaledVector(f.dir, 0.12).addScaledVector(n, 0.06);
+    const concave = solidAt(probe.x, probe.y, probe.z);
+    const axis = concave ? n.clone() : n.clone().negate();      // 모서리를 돌아 이어지는 방향
+    const fn = concave ? f.dir.clone().negate() : f.dir.clone();// 이어진 면의 법선
+    const wide = f.along === 'u' ? eV + eNV : eU + eNU;         // 모서리와 나란한 쪽 길이
+    if (wide < 0.05) continue;
+    const side = f.along === 'u' ? v : u;
+    const cSide = f.along === 'u' ? cV : cU;
+    const edgeUV = f.dir === u ? (half + eU) / S
+      : f.dir === nu ? (half - eNU) / S
+        : f.dir === v ? (half + eV) / S : (half - eNV) / S;
+    const endUV = (f.dir === u || f.dir === v) ? 1 : 0;
+    const sideUV0 = f.along === 'u' ? (half - eNV) / S : (half - eNU) / S;
+    const sideUV1 = f.along === 'u' ? (half + eV) / S : (half + eU) / S;
+    const center = edge.clone().addScaledVector(axis, rem / 2).addScaledVector(side, cSide).addScaledVector(fn, OFF);
+    grp.add(f.along === 'u'
+      ? decalPiece(mat, center, axis, side, fn, rem, wide, edgeUV, endUV, sideUV0, sideUV1)
+      : decalPiece(mat, center, side, axis, fn, wide, rem, sideUV0, sideUV1, edgeUV, endUV));
+  }
+  if (!grp.children.length) { toast("여기엔 칠할 수 없습니다"); return; }
+  if (h.obj) {                           // 움직이는 오브젝트에 칠하면 함께 움직인다
+    h.obj.grp.add(grp);
+    grp.position.sub(h.obj.grp.position);
+  } else scene.add(grp);
+  markers.push({ sp: grp, mat, obj: h.obj || null, x: p.x, z: p.z, t: 0 });
+  if (markers.length > MARKER_MAX) removeMarker(markers.shift());
   sfxTone(1200, 0.07, "sine", 0.12);
   toast("📍 마커 (" + markers.length + "/" + MARKER_MAX + ")");
 }
-function clearMarkers() { for (const m of markers) scene.remove(m.sp); markers.length = 0; }
+function removeMarker(m) {
+  m.sp.parent?.remove(m.sp);
+  m.sp.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  m.mat.dispose();
+}
+function clearMarkers() { for (const m of markers) removeMarker(m); markers.length = 0; }
 function updateMarkers(dt) {
   for (const m of markers) {
     m.t += dt;
-    m.sp.material.opacity = 0.7 + Math.sin(m.t * 3) * 0.25;
+    m.mat.opacity = 0.7 + Math.sin(m.t * 3) * 0.25;
   }
 }
-
 // ---------- 비콘 이벤트: 3웨이브마다 먼 방에 표적, 제한시간 안에 도달하면 보상 ----------
 let beacon = null;                       // {grp, x, z, t, limit}
 const BEACON_LIMIT = 26, BEACON_COINS = 400;
@@ -3030,6 +3123,16 @@ window.__game = {
   toFloor(f) { floorNo = f - 1; nextFloor(); },
   populate() { return populateRooms(); },
   placeMarker() { placeMarker(); return markers.length; },
+  markerInfo() {
+    return markers.map(m => ({
+      onObj: !!m.obj, objY: m.obj ? +m.obj.yOff.toFixed(2) : null,
+      pieces: m.sp.children.map(c => {
+        const w = c.getWorldPosition(new THREE.Vector3());
+        const n = c.getWorldDirection(new THREE.Vector3());
+        return { p: w.toArray().map(v => +v.toFixed(2)), n: n.toArray().map(v => +v.toFixed(2)) };
+      }),
+    }));
+  },
   aim() {
     const h = aimHitPoint(MARKER_RANGE, true);
     if (!h) return null;
