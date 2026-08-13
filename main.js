@@ -37,9 +37,19 @@ sun.shadow.camera.top = 45; sun.shadow.camera.bottom = -45;
 sun.shadow.bias = -0.0004;
 scene.add(sun);
 
-// ---------- arena ----------
-const ARENA = 40;
-function groundTexture() {
+// ---------- map: 광장 / 절차적 랜덤(방+복도) ----------
+const ARENA = 40;                       // 광장 반경
+const WALL_H = 6;                       // 랜덤맵 벽 높이 (천장 없음 — 위는 뚫려 있다)
+let mapMode = localStorage.getItem('fps.map') || 'plaza';  // 'plaza' | 'random'
+let mapRadius = ARENA;                  // 미니맵·스폰 기준
+let mapRects = [];                      // 랜덤맵 바닥 사각형 {x0,z0,x1,z1,room}
+let walkGrid = null;                    // 랜덤맵 이동 가능 격자(1m)
+let spawnPoints = [];                   // 랜덤맵 적 스폰 후보
+const playerStart = new THREE.Vector3(0, 0, 0);
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+
+function groundTexture(rep) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 512;
   const g = cv.getContext('2d');
   g.fillStyle = '#151a22'; g.fillRect(0, 0, 512, 512);
@@ -51,56 +61,33 @@ function groundTexture() {
   g.fillStyle = 'rgba(126,224,163,0.05)';
   for (let i = 0; i < 40; i++) g.fillRect(Math.random() * 512, Math.random() * 512, 3, 3);
   const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(20, 20);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep);
   return t;
 }
-const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(ARENA + 6, 64).rotateX(-Math.PI / 2),
-  new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 0.95 })
-);
-ground.receiveShadow = true;
-scene.add(ground);
-
+const groundMat = new THREE.MeshStandardMaterial({ map: groundTexture(20), roughness: 0.95 });
+const floorMat = new THREE.MeshStandardMaterial({ map: groundTexture(1), roughness: 0.95 });
 const wallMat = new THREE.MeshStandardMaterial({ color: 0x2b3547, roughness: 0.8 });
 const edgeMat = new THREE.MeshStandardMaterial({ color: 0x2a7a52, emissive: 0x1f5c3d, emissiveIntensity: 1.2 });
-for (let i = 0; i < 24; i++) {
-  const a = i / 24 * Math.PI * 2;
-  const wall = new THREE.Mesh(new THREE.BoxGeometry(3, 7, 11.5), wallMat);
-  wall.position.set(Math.cos(a) * (ARENA + 1.5), 3.5, Math.sin(a) * (ARENA + 1.5));
-  wall.rotation.y = -a; wall.castShadow = true; wall.receiveShadow = true;
-  scene.add(wall);
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.15, 11.6), edgeMat);
-  strip.position.copy(wall.position).y = 7.05; strip.rotation.y = -a;
-  scene.add(strip);
-}
+const obMat = new THREE.MeshStandardMaterial({ color: 0x3a4759, roughness: 0.7, metalness: 0.15 });
+const platMat = new THREE.MeshStandardMaterial({ color: 0x2f5946, roughness: 0.6, metalness: 0.1 });
 
 // ---------- 지형 오브젝트: 10초 주기로 위/아래 이동(2초 내) ----------
 const obstacles = [];
-const obMat = new THREE.MeshStandardMaterial({ color: 0x3a4759, roughness: 0.7, metalness: 0.15 });
 const LIFT_H = 2.6, LIFT_PERIOD = 10, LIFT_DUR = 2;
-const platMat = new THREE.MeshStandardMaterial({ color: 0x2f5946, roughness: 0.6, metalness: 0.1 });
-(function genObstacles() {
-  const rnd = (a, b) => a + Math.random() * (b - a);
-  for (let i = 0; i < 14; i++) {
-    const a = Math.random() * Math.PI * 2, r = rnd(9, ARENA - 6);
-    const platform = i % 3 === 0;                 // 1/3은 점프로 올라갈 수 있는 낮은 플랫폼
-    const w = rnd(platform ? 2.4 : 1.6, 4), d = rnd(platform ? 2.4 : 1.6, 4);
-    const h = platform ? rnd(0.8, 1.0) : rnd(1.2, 4.2);
-    const grp = new THREE.Group();
-    const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), platform ? platMat : obMat);
-    box.position.y = h / 2;
-    box.castShadow = true; box.receiveShadow = true;
-    grp.add(box);
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 1.03, 0.08, d * 1.03), edgeMat);
-    strip.position.y = h + 0.04;
-    grp.add(strip);
-    grp.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
-    scene.add(grp);
-    // 짝수는 0초, 홀수는 5초 오프셋으로 번갈아 오르내림. 내려오면 바닥(yOff 0)이라 적이 접근·공격 가능
-    obstacles.push({ grp, x: grp.position.x, z: grp.position.z, w, d, h, platform, yOff: 0, raised: false, phase: (i % 2) * (LIFT_PERIOD / 2), moving: false, from: 0, to: 0, t: 0 });
-  }
-})();
 let liftClock = 0;
+function addLiftBox(x, z, w, d, h, platform, i) {
+  const grp = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), platform ? platMat : obMat);
+  box.position.y = h / 2; box.castShadow = true; box.receiveShadow = true;
+  grp.add(box);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 1.03, 0.08, d * 1.03), edgeMat);
+  strip.position.y = h + 0.04;
+  grp.add(strip);
+  grp.position.set(x, 0, z);
+  worldGroup.add(grp);
+  // 짝수는 0초, 홀수는 5초 오프셋으로 번갈아 오르내림. 내려오면 바닥(yOff 0)이라 적이 접근·공격 가능
+  obstacles.push({ grp, x, z, w, d, h, platform, yOff: 0, raised: false, phase: (i % 2) * (LIFT_PERIOD / 2), moving: false, from: 0, to: 0, t: 0 });
+}
 function updateObstacles(dt) {
   liftClock += dt;
   for (const o of obstacles) {
@@ -121,9 +108,261 @@ function updateObstacles(dt) {
   }
 }
 
+// 바닥 조각 (타일 UV를 실제 크기에 맞춰 반복)
+function floorMesh(w, d) {
+  const geo = new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2);
+  const uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * w / 8, uv.getY(i) * d / 8);
+  const m = new THREE.Mesh(geo, floorMat);
+  m.receiveShadow = true;
+  return m;
+}
+function setSunBounds(ext) {
+  sun.shadow.camera.left = -ext; sun.shadow.camera.right = ext;
+  sun.shadow.camera.top = ext; sun.shadow.camera.bottom = -ext;
+  sun.shadow.camera.updateProjectionMatrix();
+}
+function clearWorld() {
+  for (const o of [...worldGroup.children]) {
+    worldGroup.remove(o);
+    o.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+  }
+  obstacles.length = 0; mapRects = []; walkGrid = null; spawnPoints = []; flowField = null;
+}
+
+function buildPlaza() {
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(ARENA + 6, 64).rotateX(-Math.PI / 2), groundMat);
+  ground.receiveShadow = true; worldGroup.add(ground);
+  for (let i = 0; i < 24; i++) {
+    const a = i / 24 * Math.PI * 2;
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(3, 7, 11.5), wallMat);
+    wall.position.set(Math.cos(a) * (ARENA + 1.5), 3.5, Math.sin(a) * (ARENA + 1.5));
+    wall.rotation.y = -a; wall.castShadow = true; wall.receiveShadow = true;
+    worldGroup.add(wall);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.15, 11.6), edgeMat);
+    strip.position.set(wall.position.x, 7.05, wall.position.z); strip.rotation.y = -a;
+    worldGroup.add(strip);
+  }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2, r = rnd(9, ARENA - 6);
+    const platform = i % 3 === 0;                 // 1/3은 점프로 올라갈 수 있는 낮은 플랫폼
+    const w = rnd(platform ? 2.4 : 1.6, 4), d = rnd(platform ? 2.4 : 1.6, 4);
+    const h = platform ? rnd(0.8, 1.0) : rnd(1.2, 4.2);
+    addLiftBox(Math.cos(a) * r, Math.sin(a) * r, w, d, h, platform, i);
+  }
+  mapRadius = ARENA;
+  playerStart.set(0, 0, 0);
+  scene.fog.far = 90;
+  setSunBounds(45);
+}
+
+// 절차 생성: 방(10~50m) + 복도(폭 2~4m, 길이 2~20m). 좌표는 전부 정수 → 격자와 정확히 일치
+function buildRandom() {
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const rsize = () => Math.round(10 + Math.pow(Math.random(), 1.7) * 40);   // 10~50m (작은 방 비중 높게)
+  const over = (a, b, m) => a.x0 - m < b.x1 && b.x0 - m < a.x1 && a.z0 - m < b.z1 && b.z0 - m < a.z1;
+  const w0 = rsize(), d0 = rsize();
+  const rooms = [{ x0: -(w0 >> 1), z0: -(d0 >> 1), x1: -(w0 >> 1) + w0, z1: -(d0 >> 1) + d0 }];
+  const cors = [];
+  const TARGET = 6 + Math.floor(Math.random() * 3);   // 방 6~8개
+  for (let guard = 0; rooms.length < TARGET && guard < 800; guard++) {
+    const base = rooms[(Math.random() * rooms.length) | 0];
+    const dir = (Math.random() * 4) | 0;             // 0:+x 1:-x 2:+z 3:-z
+    const w = rsize(), d = rsize();
+    const cw = ri(2, 4), cl = ri(2, 20);             // 복도 폭·길이
+    let room, cor;
+    if (dir < 2) {
+      const z0 = ri(base.z0 - d + cw + 2, base.z1 - cw - 2);
+      room = dir === 0
+        ? { x0: base.x1 + cl, z0, x1: base.x1 + cl + w, z1: z0 + d }
+        : { x0: base.x0 - cl - w, z0, x1: base.x0 - cl, z1: z0 + d };
+      const lo = Math.max(base.z0, room.z0), hi = Math.min(base.z1, room.z1) - cw;
+      if (hi < lo) continue;
+      const cz = ri(lo, hi);
+      cor = dir === 0
+        ? { x0: base.x1, z0: cz, x1: base.x1 + cl, z1: cz + cw }
+        : { x0: base.x0 - cl, z0: cz, x1: base.x0, z1: cz + cw };
+    } else {
+      const x0 = ri(base.x0 - w + cw + 2, base.x1 - cw - 2);
+      room = dir === 2
+        ? { x0, z0: base.z1 + cl, x1: x0 + w, z1: base.z1 + cl + d }
+        : { x0, z0: base.z0 - cl - d, x1: x0 + w, z1: base.z0 - cl };
+      const lo = Math.max(base.x0, room.x0), hi = Math.min(base.x1, room.x1) - cw;
+      if (hi < lo) continue;
+      const cx = ri(lo, hi);
+      cor = dir === 2
+        ? { x0: cx, z0: base.z1, x1: cx + cw, z1: base.z1 + cl }
+        : { x0: cx, z0: base.z0 - cl, x1: cx + cw, z1: base.z0 };
+    }
+    if (rooms.some(r => over(r, room, 2))) continue;                    // 방끼리 최소 2m 이격
+    if (rooms.some(r => r !== base && over(r, cor, 0))) continue;       // 복도가 다른 방을 관통 금지
+    if (cors.some(c => over(c, cor, 0))) continue;
+    rooms.push(room); cors.push(cor);
+  }
+  mapRects = [...rooms.map(r => ({ ...r, room: true })), ...cors.map(c => ({ ...c, room: false }))];
+
+  // 격자 래스터화 (1m 셀)
+  let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const r of mapRects) {
+    minX = Math.min(minX, r.x0); maxX = Math.max(maxX, r.x1);
+    minZ = Math.min(minZ, r.z0); maxZ = Math.max(maxZ, r.z1);
+  }
+  const pad = 3;
+  const ox = minX - pad, oz = minZ - pad;
+  const gw = (maxX + pad) - ox, gh = (maxZ + pad) - oz;
+  const cells = new Uint8Array(gw * gh);
+  for (const r of mapRects)
+    for (let j = r.z0 - oz; j < r.z1 - oz; j++)
+      for (let i = r.x0 - ox; i < r.x1 - ox; i++) cells[j * gw + i] = 1;
+  walkGrid = { cells, gw, gh, ox, oz };
+
+  // 바닥
+  for (const r of mapRects) {
+    const m = floorMesh(r.x1 - r.x0, r.z1 - r.z0);
+    m.position.set((r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2);
+    worldGroup.add(m);
+  }
+  // 벽 (바닥에 인접한 빈 셀 — 8방향으로 모서리까지 채운다)
+  const wc = [];
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    if (cells[j * gw + i]) continue;
+    let touch = false;
+    for (let b = -1; b <= 1 && !touch; b++) for (let a = -1; a <= 1; a++) {
+      const ni = i + a, nj = j + b;
+      if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
+      if (cells[nj * gw + ni]) { touch = true; break; }
+    }
+    if (touch) wc.push([ox + i + 0.5, oz + j + 0.5]);
+  }
+  const wi = new THREE.InstancedMesh(new THREE.BoxGeometry(1.02, WALL_H, 1.02), wallMat, wc.length);
+  const ci = new THREE.InstancedMesh(new THREE.BoxGeometry(1.06, 0.14, 1.06), edgeMat, wc.length);
+  wi.castShadow = true; wi.receiveShadow = true;
+  const m4 = new THREE.Matrix4();
+  wc.forEach(([x, z], k) => {
+    m4.makeTranslation(x, WALL_H / 2, z); wi.setMatrixAt(k, m4);
+    m4.makeTranslation(x, WALL_H + 0.07, z); ci.setMatrixAt(k, m4);
+  });
+  wi.instanceMatrix.needsUpdate = true; ci.instanceMatrix.needsUpdate = true;
+  worldGroup.add(wi); worldGroup.add(ci);
+
+  // 방 안에 승강 오브젝트 + 스폰 지점
+  let li = 0;
+  spawnPoints = [];
+  for (const r of rooms) {
+    const w = r.x1 - r.x0, d = r.z1 - r.z0;
+    if (Math.min(w, d) >= 14) {
+      const n = Math.min(3, Math.floor(Math.min(w, d) / 12));
+      for (let k = 0; k < n; k++) {
+        const platform = li % 3 === 0;
+        const bw = rnd(platform ? 2.4 : 1.6, 4), bd = rnd(platform ? 2.4 : 1.6, 4);
+        const bh = platform ? rnd(0.8, 1.0) : rnd(1.2, 4.2);
+        addLiftBox(rnd(r.x0 + 3, r.x1 - 3), rnd(r.z0 + 3, r.z1 - 3), bw, bd, bh, platform, li++);
+      }
+    }
+    const sn = Math.max(2, Math.floor(w * d / 300));
+    for (let k = 0; k < sn; k++) spawnPoints.push({ x: rnd(r.x0 + 2, r.x1 - 2), z: rnd(r.z0 + 2, r.z1 - 2) });
+  }
+  playerStart.set((rooms[0].x0 + rooms[0].x1) / 2, 0, (rooms[0].z0 + rooms[0].z1) / 2);
+  mapRadius = Math.max(Math.abs(minX), Math.abs(maxX), Math.abs(minZ), Math.abs(maxZ));
+  scene.fog.far = 120;
+  setSunBounds(Math.min(140, mapRadius + 14));
+}
+
+function buildMap() {
+  clearWorld();
+  liftClock = 0;
+  if (mapMode === 'random') buildRandom(); else buildPlaza();
+}
+
+// ---------- 격자 헬퍼 ----------
+function cellSolid(x, z) {
+  const g = walkGrid; if (!g) return false;
+  const i = Math.floor(x - g.ox), j = Math.floor(z - g.oz);
+  if (i < 0 || j < 0 || i >= g.gw || j >= g.gh) return true;
+  return !g.cells[j * g.gw + i];
+}
+function gridRayT(o, d, maxT) {       // 벽에 막히는 거리(없으면 null)
+  if (!walkGrid) return null;
+  for (let t = 0.4; t < maxT; t += 0.25) {
+    const y = o.y + d.y * t;
+    if (y > WALL_H) continue;
+    if (cellSolid(o.x + d.x * t, o.z + d.z * t)) return t;
+  }
+  return null;
+}
+function pickSpawn() {                // 적 스폰 위치 (규칙은 광장과 동일, 위치만 맵에 맞춤)
+  if (walkGrid && spawnPoints.length) {
+    let best = spawnPoints[0], bestScore = -1e9;
+    for (let i = 0; i < 10; i++) {
+      const c = spawnPoints[(Math.random() * spawnPoints.length) | 0];
+      const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z);
+      const score = d < 12 ? d - 100 : -Math.abs(d - 28);   // 12m 이상, 28m 부근 선호
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return { x: best.x + (Math.random() - 0.5) * 3, z: best.z + (Math.random() - 0.5) * 3 };
+  }
+  const a = Math.random() * Math.PI * 2, r = ARENA - 10;   // 광장: 외벽 10m 안쪽
+  return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+}
+
+// ---------- 플로우 필드: 적이 방·복도를 따라 플레이어에게 접근 ----------
+let flowField = null, flowTimer = 0;
+const FLOW_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+function rebuildFlow() {
+  const g = walkGrid; if (!g) { flowField = null; return; }
+  const N = g.gw * g.gh;
+  if (!flowField || flowField.length !== N) flowField = new Int8Array(N);
+  flowField.fill(-1);
+  const pi = Math.floor(player.pos.x - g.ox), pj = Math.floor(player.pos.z - g.oz);
+  if (pi < 0 || pj < 0 || pi >= g.gw || pj >= g.gh || !g.cells[pj * g.gw + pi]) return;
+  const seen = new Uint8Array(N), q = new Int32Array(N);
+  let head = 0, tail = 0;
+  const s = pj * g.gw + pi; seen[s] = 1; q[tail++] = s;
+  while (head < tail) {
+    const cur = q[head++], ci = cur % g.gw, cj = (cur / g.gw) | 0;
+    for (let k = 0; k < 4; k++) {
+      const ni = ci + FLOW_DIRS[k][0], nj = cj + FLOW_DIRS[k][1];
+      if (ni < 0 || nj < 0 || ni >= g.gw || nj >= g.gh) continue;
+      const idx = nj * g.gw + ni;
+      if (seen[idx] || !g.cells[idx]) continue;
+      seen[idx] = 1;
+      flowField[idx] = k ^ 1;          // 이웃 → 현재 셀(=플레이어 쪽) 방향
+      q[tail++] = idx;
+    }
+  }
+}
+function flowVec(x, z) {               // 다음 셀 중심을 향한 단위벡터
+  const g = walkGrid; if (!g || !flowField) return null;
+  const i = Math.floor(x - g.ox), j = Math.floor(z - g.oz);
+  if (i < 0 || j < 0 || i >= g.gw || j >= g.gh) return null;
+  const f = flowField[j * g.gw + i];
+  if (f < 0) return null;
+  const dx = (g.ox + i + FLOW_DIRS[f][0] + 0.5) - x, dz = (g.oz + j + FLOW_DIRS[f][1] + 0.5) - z;
+  const L = Math.hypot(dx, dz) || 1;
+  return { x: dx / L, z: dz / L };
+}
+
 function collideCircle(pos, radius, height = 1.7, feetY = 0) {
-  const R = Math.hypot(pos.x, pos.z);
-  if (R > ARENA - 1) { pos.x *= (ARENA - 1) / R; pos.z *= (ARENA - 1) / R; }
+  if (walkGrid) {                       // 랜덤맵: 벽 격자 밀어내기
+    const g = walkGrid;
+    const ci = Math.floor(pos.x - g.ox), cj = Math.floor(pos.z - g.oz);
+    for (let j = cj - 1; j <= cj + 1; j++) for (let i = ci - 1; i <= ci + 1; i++) {
+      const solid = (i < 0 || j < 0 || i >= g.gw || j >= g.gh) ? true : !g.cells[j * g.gw + i];
+      if (!solid) continue;
+      const cx = g.ox + i + 0.5, cz = g.oz + j + 0.5;
+      const hw = 0.5 + radius, dx = pos.x - cx, dz = pos.z - cz;
+      if (Math.abs(dx) < hw && Math.abs(dz) < hw) {
+        const px = hw - Math.abs(dx), pz = hw - Math.abs(dz);
+        if (px < pz) pos.x += dx > 0 ? px : -px;
+        else pos.z += dz > 0 ? pz : -pz;
+      }
+    }
+  } else {                              // 광장: 원형 경계
+    const R = Math.hypot(pos.x, pos.z);
+    if (R > ARENA - 1) { pos.x *= (ARENA - 1) / R; pos.z *= (ARENA - 1) / R; }
+  }
   for (const o of obstacles) {
     if (o.yOff - feetY > height) continue;    // 떠 있는 박스 아래로 통과 가능
     if (o.yOff + o.h <= feetY + 0.45) continue; // 발밑(올라선/넘을 수 있는) 박스는 밀어내지 않음
@@ -146,6 +385,7 @@ function supportHeight(pos) {
   }
   return s;
 }
+buildMap();
 
 // ---------- audio (절차 생성) ----------
 let AC = null, masterGain = null;
@@ -624,10 +864,10 @@ function spawnEnemy(waveN, variant = 'walker') {
   const root = skClone(enemyGltf.scene);
   prepShadows(root);
   root.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; } });
-  const a = Math.random() * Math.PI * 2, r = ARENA - 10; // 외벽 기준 10m 안쪽에서 스폰
+  const sp = pickSpawn();
   const s = boss ? 1.6 : 0.92 + Math.random() * 0.28; // 보스는 타 개체(평균 1.06) 대비 약 1.5배
   root.scale.setScalar(s);
-  root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  root.position.set(sp.x, 0, sp.z);
   scene.add(root);
   const mixer = new THREE.AnimationMixer(root);
   const acts = {};
@@ -744,7 +984,12 @@ function updateEnemy(en, dt) {
       sfxRoar();
     } else if (dist > atkRange) {
       toP.normalize();
-      p.x += toP.x * en.speed * dt; p.z += toP.z * en.speed * dt;
+      let mvx = toP.x, mvz = toP.z;
+      if (walkGrid && dist > 5) {                    // 랜덤맵: 방·복도를 따라 우회
+        const f = flowVec(p.x, p.z);
+        if (f) { mvx = f.x; mvz = f.z; en.root.rotation.y = Math.atan2(f.x, f.z); }
+      }
+      p.x += mvx * en.speed * dt; p.z += mvz * en.speed * dt;
       collideCircle(p, 0.6, 2.4 * en.scale, 0);
       for (const o of enemies) {
         if (o === en || o.state === 'dead') continue;
@@ -972,7 +1217,8 @@ function updateGrenades(dt) {
     gr.root.position.addScaledVector(gr.vel, dt);
     gr.vel.y -= 13.5 * dt;
     gr.root.rotation.x += dt * 7; gr.root.rotation.z += dt * 5;
-    if (gr.root.position.y <= 0.15 || gr.t > 4) {
+    const gWall = walkGrid && gr.root.position.y < WALL_H && cellSolid(gr.root.position.x, gr.root.position.z);
+    if (gr.root.position.y <= 0.15 || gWall || gr.t > 4) {
       // 폭발: 반경 5.5m 광역 250 데미지
       const bp = gr.root.position.clone(); bp.y = 0.4;
       burst(bp, 0xffaa33, 30);
@@ -1078,7 +1324,8 @@ function updateProjectiles(dt) {
     const dy = pr.m.position.y - (player.pos.y + 1.1);
     const hit = !player.dead && Math.hypot(dx, dz) < 0.75 && Math.abs(dy) < 1.1;
     if (hit) damagePlayer(pr.dmg);
-    if (hit || pr.life <= 0) {
+    const wallHit = walkGrid && pr.m.position.y < WALL_H && cellSolid(pr.m.position.x, pr.m.position.z);
+    if (hit || wallHit || pr.life <= 0) {
       burst(pr.m.position, 0x5affd0, 8);
       scene.remove(pr.m);
       projectiles.splice(i, 1);
@@ -1216,9 +1463,31 @@ optMenu.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click',
 optMenu.querySelectorAll('[data-ctrl]').forEach(b => b.addEventListener('click', () => {
   ctrlMode = b.dataset.ctrl; localStorage.setItem('fps.ctrl', ctrlMode); syncOptUI(); applyCtrl();
 }));
+optMenu.querySelectorAll('[data-map]').forEach(b => b.addEventListener('click', () => {
+  if (mapMode === b.dataset.map) return;
+  mapMode = b.dataset.map; localStorage.setItem('fps.map', mapMode); syncOptUI(); applyMap();
+}));
+// 맵 교체: 지형을 다시 만들고 진행 중인 개체·아이템을 정리한 뒤 1웨이브부터
+function applyMap() {
+  buildMap();
+  clearSpawnTimers();
+  for (const en of enemies) { scene.remove(en.root); clearAoe(en); }
+  enemies.length = 0;
+  for (const d of drops) scene.remove(d.root); drops.length = 0;
+  for (const c of coinFx) scene.remove(c.root); coinFx.length = 0;
+  for (const pr of projectiles) scene.remove(pr.m); projectiles.length = 0;
+  for (const gr of liveGrenades) { scene.remove(gr.root); if (gr.circle) scene.remove(gr.circle); }
+  liveGrenades.length = 0;
+  player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
+  rebuildFlow();
+  wave = 0;
+  updateHudWave();
+  nextWave();
+}
 function syncOptUI() {
   optMenu.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === camMode));
   optMenu.querySelectorAll('[data-ctrl]').forEach(b => b.classList.toggle('on', b.dataset.ctrl === ctrlMode));
+  optMenu.querySelectorAll('[data-map]').forEach(b => b.classList.toggle('on', b.dataset.map === mapMode));
 }
 function applyView() {
   // 1인칭이 아니면 숨겼던 머리·머리카락 본 복원 (1인칭은 프레임마다 hideBones 재적용)
@@ -1464,6 +1733,14 @@ function shoot(now) {
     const t = rayAABB(origin, dir, min, max);
     if (t !== null && t < wallT) wallT = t;
   }
+  if (walkGrid) {                       // 벽 차폐: 카메라가 아니라 플레이어 가슴 기준
+    const chest = new THREE.Vector3(player.pos.x, player.pos.y + 1.35, player.pos.z);
+    const gt = gridRayT(chest, dir, 90);
+    if (gt !== null) {
+      const t = chest.addScaledVector(dir, gt).sub(origin).dot(dir);
+      if (t > 0 && t < wallT) wallT = t;
+    }
+  }
   const muzzle = muzzleTip(dir);
   lastMuzzle.copy(muzzle);
   window.__lastShot = { origin: origin.toArray().map(v => +v.toFixed(2)), dir: dir.toArray().map(v => +v.toFixed(3)), bestT: +bestT.toFixed(2), wallT: +wallT.toFixed(2), hit: !!hitEn };
@@ -1576,7 +1853,7 @@ function damagePlayer(n) {
   }
 }
 function restart(toMenu = false) {
-  player.dead = false; player.pos.set(0, 0, 0); player.vy = 0;
+  player.dead = false; player.pos.copy(playerStart); player.vy = 0;
   player.oneShot = null;
   // 사망 포즈(clampWhenFinished) 잔존 방지 — 전체 액션 정지 후 idle 새로 시작
   if (player.mixer) player.mixer.stopAllAction();
@@ -1627,6 +1904,7 @@ const mmCv = document.getElementById('minimap');
 const mmCtx = mmCv.getContext('2d');
 function drawMinimap() {
   const S = mmCv.width, C = S / 2, R = C - 4, k = S / 150; // k: 150px 기준 스케일
+  const MM_VIEW = walkGrid ? 55 : ARENA;   // 표시 반경(m)
   mmCtx.clearRect(0, 0, S, S);
   // 동심원
   mmCtx.strokeStyle = 'rgba(126,224,163,.35)';
@@ -1641,7 +1919,7 @@ function drawMinimap() {
     const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
     const u = dx * cy - dz * sy;        // 우측 성분 → 화면 +x
     const v = dx * sy + dz * cy;        // 전방 성분의 음수 → 화면 +y(아래)
-    return [C + u / ARENA * R, C + v / ARENA * R];
+    return [C + u / MM_VIEW * R, C + v / MM_VIEW * R];
   };
   const dot = (x, y, color, r = 3 * k) => {
     if (Math.hypot(x - C, y - C) > R - 1) { // 범위 밖은 가장자리에 클램프
@@ -1651,6 +1929,18 @@ function drawMinimap() {
     mmCtx.fillStyle = color;
     mmCtx.beginPath(); mmCtx.arc(x, y, r, 0, Math.PI * 2); mmCtx.fill();
   };
+  if (walkGrid) {                          // 랜덤맵: 방·복도 윤곽
+    mmCtx.save();
+    mmCtx.beginPath(); mmCtx.arc(C, C, R - 1, 0, Math.PI * 2); mmCtx.clip();
+    mmCtx.fillStyle = 'rgba(126,224,163,.16)';
+    for (const r of mapRects) {
+      const q1 = toMap(r.x0, r.z0), q2 = toMap(r.x1, r.z0), q3 = toMap(r.x1, r.z1), q4 = toMap(r.x0, r.z1);
+      mmCtx.beginPath();
+      mmCtx.moveTo(q1[0], q1[1]); mmCtx.lineTo(q2[0], q2[1]); mmCtx.lineTo(q3[0], q3[1]); mmCtx.lineTo(q4[0], q4[1]);
+      mmCtx.closePath(); mmCtx.fill();
+    }
+    mmCtx.restore();
+  }
   for (const d of drops) dot(...toMap(d.root.position.x, d.root.position.z), '#ffd76b');
   for (const en of enemies) if (en.state !== 'dead') dot(...toMap(en.root.position.x, en.root.position.z), '#ff5555');
   // 플레이어(중앙 화살표, 위 = 전방)
@@ -1662,6 +1952,7 @@ function drawMinimap() {
 
 function updatePlayer(dt) {
   gameTime += dt;
+  if (walkGrid) { flowTimer -= dt; if (flowTimer <= 0) { rebuildFlow(); flowTimer = 0.3; } }
   const mobile = isMobileCtrl();
   if (mobile) player.zooming = zoomTog;
   const sp = 7.2; // 기본 이동 = 달리기
@@ -1735,7 +2026,13 @@ function updatePlayer(dt) {
   } else {
     // 숄더뷰: 카메라를 오른쪽 어깨 위로 → 플레이어는 화면 좌측
     const base = new THREE.Vector3(player.pos.x + cy * 0.95, player.pos.y + player.eyeH, player.pos.z - sy * 0.95);
-    const camPos = base.clone().addScaledVector(look, -2.7);
+    let camDist = 2.7;
+    if (walkGrid) {                     // 벽에 막히면 카메라를 앞으로 당긴다
+      for (let t = 0.4; t <= camDist; t += 0.2) {
+        if (base.y - look.y * t < WALL_H && cellSolid(base.x - look.x * t, base.z - look.z * t)) { camDist = Math.max(0.5, t - 0.3); break; }
+      }
+    }
+    const camPos = base.clone().addScaledVector(look, -camDist);
     camPos.y = Math.max(0.3, camPos.y);
     camera.position.copy(camPos); // 지연 없이 플레이어와 함께 이동
   }
@@ -1843,7 +2140,7 @@ window.__game = {
   get state() {
     return {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
-      wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
+      wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
       grenades, gMode, liveGrenades: liveGrenades.length,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
@@ -1885,6 +2182,7 @@ window.__game = {
   hurt(n) { damagePlayer(n); },
   skipWave() { skipWave(); },
   addGrenades(n = 1) { grenades += n; updateGSlot(); },
+  walkable(x, z) { return !cellSolid(x, z); },
   setPos(x, y, z) { player.pos.set(x, y, z); player.vy = 0; player.onGround = true; },
   toss() { throwGrenade(); },
   revive() { player.dead = false; player.hp = maxHp(); msgEl.style.display = 'none'; updateHpHud(); },
