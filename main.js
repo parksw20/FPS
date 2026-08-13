@@ -191,7 +191,7 @@ function buildRandom(seed) {
   rngState = seedFromString(mapSeed);
   const rnd = (a, b) => a + srand() * (b - a);
   const ri = (a, b) => a + Math.floor(srand() * (b - a + 1));
-  const rsize = () => Math.round(10 + Math.pow(srand(), 1.7) * 40);   // 10~50m (작은 방 비중 높게)
+  const rsize = () => Math.round(10 + Math.pow(srand(), 1.15) * 40);  // 10~50m (고르게 — 평균 약 30m)
   const over = (a, b, m) => a.x0 - m < b.x1 && b.x0 - m < a.x1 && a.z0 - m < b.z1 && b.z0 - m < a.z1;
   const w0 = rsize(), d0 = rsize();
   const rooms = [{ x0: -(w0 >> 1), z0: -(d0 >> 1), x1: -(w0 >> 1) + w0, z1: -(d0 >> 1) + d0 }];
@@ -1342,13 +1342,18 @@ function updateTrajectory() {
   aimCircle.position.set(end.x, 0.045, end.z);
   aimCircle.visible = true;
 }
-function toggleGMode() {
-  if (!gMode && grenades <= 0) { toast('수류탄이 없습니다'); return; }
-  gMode = !gMode;
+let slot = 'gun';                        // 'gun' | 'grenade' | 'mine'
+function selectSlot(name) {
+  if (name === 'grenade' && grenades <= 0) { toast('수류탄이 없습니다'); return; }
+  if (name === 'mine' && mines <= 0) { toast('지뢰가 없습니다'); return; }
+  slot = name;
+  gMode = (name === 'grenade');
   trajLine.visible = gMode;
   aimCircle.visible = gMode;
-  updateGSlot();
+  if (name !== 'grenade' && gWindup) releaseGrenadeWindup();
+  updateGSlot(); updateMineSlot();
 }
+function toggleGMode() { selectSlot(gMode ? 'gun' : 'grenade'); }
 function hideWeapon(sec) {
   for (const m of weaponMeshes) m.visible = false;
   clearTimeout(hideWeapon._t);
@@ -1364,7 +1369,7 @@ function startGrenadeWindup() {
   const a = player.actions['toss grenade'];
   if (a) {
     a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.paused = false;
-    a.timeScale = 2;                    // 대기 자세까지 2배 빠르게
+    a.timeScale = 4;                    // 대기 자세까지 4배 빠르게 (약 0.37초)
     play('toss grenade', 0.08);
     player.oneShot = 'toss grenade';
   }
@@ -1389,7 +1394,7 @@ function releaseGrenadeWindup() {
   if (a) a.paused = false; // 나머지 모션 재생
   grenades--;
   // 수류탄 모드는 F를 다시 누를 때까지 유지 (남은 수류탄이 없으면 총으로 복귀)
-  if (grenades <= 0) { gMode = false; trajLine.visible = false; aimCircle.visible = false; }
+  if (grenades <= 0) { gMode = false; slot = 'gun'; trajLine.visible = false; aimCircle.visible = false; }
   updateGSlot();
   persistProgress();
   pendingThrows.push({ t: 0.5 });
@@ -1605,10 +1610,12 @@ function updateMineSlot() {
   if (!el) return;
   document.getElementById('mCnt').textContent = mines;
   el.classList.toggle('empty', mines === 0);
+  el.classList.toggle('active', slot === 'mine');
 }
 function placeMine() {
   if (mines <= 0 || player.dead) return;
   mines--;
+  if (mines <= 0 && slot === 'mine') { slot = 'gun'; }
   updateMineSlot(); persistProgress();
   const grp = new THREE.Group();
   const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.1, 16),
@@ -1964,7 +1971,8 @@ document.getElementById('optBtn').addEventListener('click', e => {
   if (document.pointerLockElement) document.exitPointerLock();
 });
 // 수류탄 슬롯 클릭/탭으로도 토글
-document.getElementById('gSlot').addEventListener('pointerdown', e => { e.stopPropagation(); toggleGMode(); });
+document.getElementById('gSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(slot === 'grenade' ? 'gun' : 'grenade'); });
+document.getElementById('mSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(slot === 'mine' ? 'gun' : 'mine'); });
 
 // 디버그 버튼 — 로컬(localhost/127.*)에서만 노출
 const IS_LOCAL = /^(localhost|127\.|\[::1\])/.test(location.hostname) || location.hostname.endsWith('.local');
@@ -2170,7 +2178,12 @@ const lookEnd = e => { if (e.pointerId === lookId) { lookId = null; lastLook = n
 canvas.addEventListener('pointerup', lookEnd); canvas.addEventListener('pointercancel', lookEnd);
 // 버튼
 const mb = id => document.getElementById(id);
-mb('mbFire').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if (gMode) { startGrenadeWindup(); return; } firing = true; });
+mb('mbFire').addEventListener('pointerdown', e => {
+  e.preventDefault(); audioInit();
+  if (slot === 'mine') { placeMine(); return; }
+  if (gMode) { startGrenadeWindup(); return; }
+  firing = true;
+});
 mb('mbFire').addEventListener('pointerup', () => { if (gMode) releaseGrenadeWindup(); firing = false; });
 mb('mbFire').addEventListener('pointercancel', () => firing = false);
 mb('mbJump').addEventListener('pointerdown', e => { e.preventDefault(); keys['Space'] = true; });
@@ -2188,8 +2201,11 @@ document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyR' && !reloading && ammo < magSize()) reload();
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
-  if (e.code === 'KeyF' && !e.repeat) toggleGMode();
-  if (e.code === 'KeyG' && !e.repeat) placeMine();
+  if (!e.repeat) {                       // 1 총 · 2 수류탄 · 3 지뢰
+    if (e.code === 'Digit1' || e.code === 'Numpad1') selectSlot('gun');
+    if (e.code === 'Digit2' || e.code === 'Numpad2' || e.code === 'KeyF') selectSlot('grenade');
+    if (e.code === 'Digit3' || e.code === 'Numpad3' || e.code === 'KeyG') selectSlot('mine');
+  }
   // ESC 토글: 일시정지 ↔ 재개 (잠금 중 ESC는 브라우저가 소비 → pointerlockchange 경로로 일시정지됨)
   if (e.code === 'Escape' && !e.repeat && inRun && !player.dead) {
     if (paused) {
@@ -2215,7 +2231,11 @@ document.addEventListener('keyup', e => {
 });
 document.addEventListener('mousedown', e => {
   if (!locked) return; // 사망 후 재시작은 [확인] 버튼으로만
-  if (e.button === 0) { if (gMode) { startGrenadeWindup(); return; } firing = true; } // 수류탄: 다운=와인드업
+  if (e.button === 0) {
+    if (slot === 'mine') { placeMine(); return; }        // 지뢰: 즉시 설치
+    if (gMode) { startGrenadeWindup(); return; }         // 수류탄: 다운=와인드업
+    firing = true;
+  }
   if (e.button === 2) player.zooming = true;
 });
 document.addEventListener('mouseup', e => {
@@ -2748,7 +2768,7 @@ window.__game = {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
-      grenades, gMode, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
+      grenades, gMode, slot, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
       floorNo, floorTime: +floorTime.toFixed(1), cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
@@ -2805,6 +2825,7 @@ window.__game = {
   walkable(x, z) { return !cellSolid(x, z); },
   setPos(x, y, z) { player.pos.set(x, y, z); player.vy = 0; player.onGround = true; },
   toss() { throwGrenade(); },
+  selectSlot(name) { selectSlot(name); return slot; },
   revive() { player.dead = false; player.hp = maxHp(); msgEl.style.display = 'none'; updateHpHud(); },
   buy(k) { buyUpg(k); },
   addCoins(n) { coins += n; document.getElementById('coinN').textContent = coins; renderUpg(); persistProgress(); },
