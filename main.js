@@ -71,6 +71,7 @@ let floorNo = 1;                        // 현재 층
 const FLOOR_TIME = 60;                  // 층 제한시간(초)
 let floorTime = FLOOR_TIME;
 let hunter = null;                      // 제한시간 초과 시 등장하는 무적 추격자
+let warping = false, floorShopOpen = false;
 const playerStart = new THREE.Vector3(0, 0, 0);
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
@@ -1083,11 +1084,13 @@ function spawnEnemy(waveN, variant = 'walker') {
     en.hpBar.fill.material.color.set(0xc04dff); // 보스 HP는 보라색
   }
   root.add(en.hpBar.grp);
+  if (variant === 'boss') bossOfFloor = en;
   enPlay(en, Math.random() < 0.5 ? 'mutant roaring' : 'mutant idle');
   if (en.current === en.acts['mutant roaring']) sfxRoar();
   en.spawnHold = en.current === en.acts['mutant roaring'] ? 1.6 : 0.5;
   enemies.push(en);
   updateHudWave();
+  return en;
 }
 function enPlay(en, name, fade = 0.22, once = false) {
   const next = en.acts[name];
@@ -1361,6 +1364,7 @@ function startGrenadeWindup() {
   const a = player.actions['toss grenade'];
   if (a) {
     a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.paused = false;
+    a.timeScale = 2;                    // 대기 자세까지 2배 빠르게
     play('toss grenade', 0.08);
     player.oneShot = 'toss grenade';
   }
@@ -1371,7 +1375,8 @@ function releaseGrenadeWindup() {
   if (!gWindup) return;
   gWindup = false;
   const a = player.actions['toss grenade'];
-  // 준비자세(1.5초) 도달 전 릴리즈 → 투척 취소 (수류탄 미소모, 총 복원)
+  if (a) a.timeScale = 1;
+  // 준비자세 도달 전 릴리즈 → 투척 취소 (수류탄 미소모, 총 복원)
   if (a && a.time < WIND_HOLD_T - 0.02) {
     a.stop();
     player.oneShot = null;
@@ -1728,7 +1733,8 @@ function killEnemy(en, scoreMult = 1) {
   enPlay(en, 'mutant dying', 0.1, true);
   sfxDie();
   kills++;
-  if (walkGrid) floorTime = Math.min(FLOOR_TIME * 2, floorTime + 5);   // 처치마다 +5초
+  if (walkGrid) floorTime = Math.min(FLOOR_TIME * 2, floorTime + 3);   // 처치마다 +3초
+  lastKillClock = gameTime;                                            // 소강 상태 감지용
   // 7초 내 연속킬 → 콤보. 점수는 콤보 배율 적용 (100 × 웨이브 × 콤보)
   combo = (gameTime - lastKillT <= 7) ? combo + 1 : 1;
   lastKillT = gameTime;
@@ -1760,6 +1766,22 @@ function killEnemy(en, scoreMult = 1) {
   document.getElementById('kills').textContent = kills;
   flashChip('scoreN'); flashChip('kills');
   updateHudWave();
+  if (en === bossOfFloor) {              // 보스 코어: 영구 강화 + 시간 확보
+    bossOfFloor = null;
+    cores++;
+    const keys = Object.keys(upg);
+    const k = keys[(Math.random() * keys.length) | 0];
+    upg[k]++;
+    if (k === 'hp') { player.hp = Math.min(maxHp(), player.hp + 10); updateHpHud(); }
+    if (k === 'mag') updateAmmo();
+    floorTime = Math.min(FLOOR_TIME * 2, floorTime + 30);
+    coins += 500;
+    document.getElementById('coinN').textContent = coins;
+    flashChip('coinN'); persistProgress(); renderUpg();
+    banner('💠 보스 코어 획득 — ' + UPG_NAMES[k] + ' 강화!');
+    toast('💠 코어: ' + UPG_NAMES[k] + ' +5% · +30초 · +500🪙');
+    sfxChest();
+  }
   // 드롭: 코인 100% + 포션 10% + 상자 5%
   const px = en.root.position.x, pz = en.root.position.z;
   dropCoins(px, pz);
@@ -1767,7 +1789,7 @@ function killEnemy(en, scoreMult = 1) {
   if (roll < 0.10) dropItem('potion', px + 0.7, pz);
   else if (roll < 0.15) dropItem('chest', px + 0.9, pz);
   else if (roll < 0.20) dropItem('grenade', px + 0.7, pz); // 수류탄 5%
-  if (aliveCount() === 0) setTimeout(nextWave, 1600);
+  if (!walkGrid && aliveCount() === 0) setTimeout(nextWave, 1600);   // 웨이브는 광장 전용
 }
 const aliveCount = () => enemies.filter(e => e.state !== 'dead' && !e.invuln).length;
 function updateHudWave() { document.getElementById('left').textContent = aliveCount(); }
@@ -1797,7 +1819,35 @@ function nextFloor() {
   banner('FLOOR ' + floorNo);
   toast('🌀 다음 층 — +200🪙');
   sfxChest();
-  nextWave();
+  startFloor();
+}
+function startFloor() {                  // 층 시작 시 개체 배치
+  spawnCd = 2.5;
+  lastKillClock = gameTime;
+  bossOfFloor = null;
+  const start = 4 + Math.min(8, floorNo);
+  for (let i = 0; i < start; i++) setTimeout(() => { if (!player.dead) spawnEnemy(floorNo, floorEnemyKind()); }, i * 260);
+  if (floorNo % 5 === 0) {               // 5층마다 보스
+    setTimeout(() => { if (!player.dead) { spawnEnemy(floorNo, 'boss'); banner('⚠ BOSS 출현 — 코어를 빼앗아라'); sfxRoar(); } }, 900);
+  }
+}
+// 층 이동 연출 + 상점
+function floorTransition() {
+  const fx = document.getElementById('warpFx');
+  fx.classList.remove('go'); void fx.offsetWidth; fx.classList.add('go');
+  sfxTone(300, 0.25, 'sine', 0.2, 900);
+  setTimeout(() => sfxTone(900, 0.3, 'sine', 0.16, -400), 120);
+  shake(0.3, 0.4);
+  setTimeout(() => {                     // 화면이 하얗게 덮인 순간에 맵 교체
+    nextFloor();
+    openFloorShop();
+  }, 240);
+}
+function openFloorShop() {               // 층 시작 시에만 상점을 연다
+  floorShopOpen = true;
+  paused = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  refreshOverlay();
 }
 function updateFloor(dt) {
   if (!walkGrid) { document.getElementById('floorHud').style.display = 'none'; return; }
@@ -1823,11 +1873,48 @@ function updateFloor(dt) {
     portal.ring.rotation.z += dt * 1.2;
     const k = 1 + Math.sin(portal.t * 2.5) * 0.08;
     portal.ring.scale.set(k, k, k);
-    if (Math.hypot(player.pos.x - portal.x, player.pos.z - portal.z) < 2.2) nextFloor();
+    if (!warping && Math.hypot(player.pos.x - portal.x, player.pos.z - portal.z) < 2.2) {
+      warping = true;
+      floorTransition();
+      setTimeout(() => warping = false, 900);
+    }
+  }
+}
+// ---------- 랜덤맵: 웨이브 없이 방별 쿨타임 스폰 ----------
+let spawnCd = 3, lastKillClock = 0, bossOfFloor = null, cores = 0;
+function floorEnemyKind() {              // 층에 따라 개체 해금: 러너 1층~, 점퍼 3층~, 원거리 4층~
+    const pool = ['walker', 'walker', 'runner'];
+  if (floorNo >= 3) pool.push('jumper');
+  if (floorNo >= 4) pool.push('ranged');
+  return pool[(Math.random() * pool.length) | 0];
+}
+function roomSpawnTick(dt) {
+  if (!walkGrid || player.dead) return;
+  const alive = aliveCount();
+  const cap = Math.min(22, 8 + floorNo * 2);
+  spawnCd -= dt;
+  if (spawnCd <= 0) {                    // 방마다 쿨타임으로 계속 유입
+    spawnCd = Math.max(1.6, 5 - floorNo * 0.2);
+    if (alive < cap) {
+      const k = 1 + (Math.random() < 0.35 ? 1 : 0);
+      for (let i = 0; i < k; i++) spawnEnemy(floorNo, floorEnemyKind());
+    }
+  }
+  // 소강 방지: 마지막 처치 후 10초간 킬이 없으면 근처에 2마리
+  if (gameTime - lastKillClock > 10) {
+    lastKillClock = gameTime;
+    for (let i = 0; i < 2; i++) {
+      const e = spawnEnemy(floorNo, floorEnemyKind());
+      if (!e) continue;
+      const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 6;
+      const x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
+      if (!cellSolid(x, z)) e.root.position.set(x, 0, z);
+    }
+    toast('적 증원!');
   }
 }
 function nextWave() {
-  if (player.dead) return;
+  if (player.dead || walkGrid) return;   // 랜덤맵은 층·쿨타임 스폰을 쓴다
   wave++;
   document.getElementById('waveN').textContent = wave;
   const runners = Math.max(0, wave - 2) + (wave >= 3 ? 3 : 0); // 웨이브3부터 1마리+추가분 3마리 전부 러너, 이후 +1
@@ -1943,9 +2030,10 @@ function applyMap() {
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
   floorNo = 1; floorTime = FLOOR_TIME; hunter = null;
+  spawnCd = 3; lastKillClock = 0; bossOfFloor = null; warping = false; floorShopOpen = false;
   wave = 0;
   updateHudWave();
-  nextWave();
+  if (walkGrid) startFloor(); else nextWave();
 }
 function syncOptUI() {
   optMenu.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === camMode));
@@ -1982,7 +2070,8 @@ function refreshOverlay() {
   if (p) p.style.display = pauseUI ? 'block' : 'none';
   // 일시정지 화면: 되돌아가기 버튼 100px 아래에 상점 패널 상시 표시
   const sm = document.getElementById('shopMenu');
-  if (pauseUI && sm) {
+  const allowShop = !walkGrid || floorShopOpen;   // 랜덤맵은 층 이동 시에만 상점
+  if (pauseUI && sm && allowShop) {
     renderUpg();
     const rb = document.getElementById('btnResume').getBoundingClientRect();
     sm.style.display = 'block';
@@ -1992,8 +2081,8 @@ function refreshOverlay() {
     sm.style.transform = 'translateX(-50%)';
     sm.style.maxHeight = Math.max(160, innerHeight - rb.bottom - 120) + 'px';
     sm.style.overflowY = 'auto';
-  } else if (!pauseUI && inRun && sm) {
-    sm.style.display = 'none'; // 일시정지 해제 시 닫기 (타이틀에서는 버튼 토글 유지)
+  } else if (inRun && sm) {
+    sm.style.display = 'none'; // 일시정지 해제·랜덤맵 일반 정지에서는 닫기
   }
 }
 syncOptUI();
@@ -2004,6 +2093,7 @@ let locked = false, firing = false, lastShot = 0;
 const startEl = document.getElementById('start');
 const msgEl = document.getElementById('msg');
 function enterGame() {
+  floorShopOpen = false;
   audioInit();
   shopMenu.style.display = 'none'; // 게임 진입 시 열린 패널 닫기
   rankMenu.style.display = 'none';
@@ -2419,9 +2509,19 @@ function drawMinimap() {
     }
     mmCtx.restore();
   }
-  if (portal) {                            // 포탈: 보라 표식 (항상 보인다)
+  if (portal) {                            // 포탈: 가까우면 원, 멀면 가장자리 화살표
     const q = toMap(portal.x, portal.z);
-    dot(q[0], q[1], '#c79bff', 6 * k);
+    if (Math.hypot(q[0] - C, q[1] - C) > R - 6 * k) {
+      const a = Math.atan2(q[1] - C, q[0] - C);
+      const ax = C + Math.cos(a) * (R - 9 * k), ay = C + Math.sin(a) * (R - 9 * k);
+      mmCtx.save();
+      mmCtx.translate(ax, ay); mmCtx.rotate(a + Math.PI / 2);
+      mmCtx.fillStyle = '#c79bff';
+      mmCtx.beginPath();
+      mmCtx.moveTo(0, -9 * k); mmCtx.lineTo(-6.5 * k, 7 * k); mmCtx.lineTo(6.5 * k, 7 * k);
+      mmCtx.closePath(); mmCtx.fill();
+      mmCtx.restore();
+    } else dot(q[0], q[1], '#c79bff', 6 * k);
   }
   if (beacon) {                            // 비콘: 큰 노란 표식
     const b = toMap(beacon.x, beacon.z);
@@ -2566,6 +2666,7 @@ function updatePlayer(dt) {
   if (gMode) updateTrajectory();
   updateSeenRects();
   updateFloor(dt);
+  roomSpawnTick(dt);
   updateHitArrows(dt);
   drawMinimap();
 }
@@ -2647,10 +2748,10 @@ window.__game = {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(),
-      grenades, gMode, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
+      grenades, gMode, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
-      floorNo, floorTime: +floorTime.toFixed(1),
+      floorNo, floorTime: +floorTime.toFixed(1), cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
       portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1) } : null,
       hunter: hunter ? { pos: hunter.root.position.toArray().map(v => +v.toFixed(1)), speed: +hunter.speed.toFixed(1), stunAcc: hunter.stunAcc, stunT: +hunter.stunT.toFixed(2) } : null,
       hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, fov: +camera.fov.toFixed(1),
@@ -2698,6 +2799,7 @@ window.__game = {
   placeMine() { placeMine(); },
   spawnBeacon() { spawnBeacon(); return window.__game.state.beacon; },
   setFloorTime(t) { floorTime = t; },
+  toFloor(f) { floorNo = f - 1; nextFloor(); },
   toPortal() { if (portal) player.pos.set(portal.x, 0, portal.z); },
   buildSeed(seed) { mapMode = 'random'; clearWorld(); seenRects.clear(); buildRandom(seed); return mapSeed; },
   walkable(x, z) { return !cellSolid(x, z); },

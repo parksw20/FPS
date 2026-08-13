@@ -67,15 +67,15 @@
     background:conic-gradient(from -14deg, rgba(255,60,50,.85), rgba(255,60,50,0) 28deg);
     -webkit-mask:radial-gradient(circle, transparent 118px, #000 122px, #000 168px, transparent 172px);
     mask:radial-gradient(circle, transparent 118px, #000 122px, #000 168px, transparent 172px)}
-  #floorHud{position:absolute; left:50%; top:40px; transform:translateX(-50%); display:none;
-    background:rgba(10,14,20,.6); border:1px solid rgba(199,155,255,.5); border-radius:10px; padding:6px 16px;
-    color:#d9c2ff; font-size:1rem; letter-spacing:.1em; font-variant-numeric:tabular-nums}
-  #floorHud b{color:#fff; font-size:1.15rem}
+  #floorHud{position:absolute; left:50%; top:calc(50% - 300px); transform:translate(-50%,-50%); display:none;
+    background:rgba(10,14,20,.7); border:1px solid rgba(199,155,255,.6); border-radius:12px; padding:10px 26px;
+    color:#d9c2ff; font-size:1.5rem; letter-spacing:.12em; font-variant-numeric:tabular-nums; text-shadow:0 0 12px rgba(160,110,255,.6)}
+  #floorHud b{color:#fff; font-size:1.8rem}
   #floorHud.danger{border-color:rgba(255,70,70,.8); color:#ff9a9a; animation:floorPulse 1s infinite}
   @keyframes floorPulse{0%,100%{box-shadow:0 0 6px rgba(255,60,60,.4)}50%{box-shadow:0 0 22px rgba(255,60,60,.9)}}
   #seedTag{position:absolute; left:18px; top:330px; display:none; font-size:.78rem; letter-spacing:.18em;
     color:#7ee0a3; opacity:.8; text-shadow:0 0 8px rgba(0,0,0,.9)}
-  #beaconHud{position:absolute; left:50%; top:64px; transform:translateX(-50%); display:none;
+  #beaconHud{position:absolute; left:50%; top:calc(50% - 240px); transform:translate(-50%,-50%); display:none;
     background:rgba(10,14,20,.6); border:1px solid rgba(255,213,74,.5); border-radius:10px; padding:7px 16px;
     color:#ffe27a; font-size:1rem; letter-spacing:.06em; font-variant-numeric:tabular-nums; text-shadow:0 0 10px rgba(255,213,74,.6)}
   #beaconHud b{font-size:1.2rem}
@@ -100,6 +100,11 @@
   #hitmark::before,#hitmark::after{content:""; position:absolute; background:#fff}
   #hitmark::before{left:50%; top:0; width:2px; height:100%; transform:translateX(-50%)}
   #hitmark::after{top:50%; left:0; height:2px; width:100%; transform:translateY(-50%)}
+  #warpFx{position:fixed; inset:0; pointer-events:none; opacity:0; z-index:9;
+    background:radial-gradient(circle at center, rgba(220,200,255,.98), rgba(150,90,255,.85) 45%, rgba(60,20,120,.9))}
+  #warpFx.go{animation:warpFlash .9s ease-out}
+  @keyframes warpFlash{0%{opacity:0; transform:scale(1.4)}18%{opacity:1; transform:scale(1)}
+    45%{opacity:1}100%{opacity:0; transform:scale(1)}}
   #dmgflash{position:fixed; inset:0; background:radial-gradient(ellipse at center, transparent 55%, rgba(217,83,79,.45)); opacity:0; pointer-events:none; transition:opacity .25s}
   #zoomVig{position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .18s;
     background:radial-gradient(ellipse at center, transparent 32%, rgba(0,0,0,.5) 62%, rgba(0,0,0,.92) 95%)}
@@ -236,6 +241,7 @@
   <div id="mSlot" class="empty"><span class="gKey">G</span><span class="mIcon">🧨</span><span class="gCnt" id="mCnt">0</span></div>
   <div id="msg" class="panel"><h2>YOU DIED</h2><div id="rankList"></div><button id="deathOk">확인</button></div>
 </div>
+<div id="warpFx"></div>
 <div id="dmgflash"></div>
 <div id="zoomVig"></div>
 <div id="aura"></div>
