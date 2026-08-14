@@ -1607,6 +1607,96 @@ function updateHitArrows(dt) {
   }
 }
 
+// ---------- 점프대: 3층부터 맵에 2곳, 가운데로 들어가면 5m 도약 (1회용) ----------
+const jumpPads = [];
+const PAD_R = 2.4, PAD_H = 5, PAD_FLOOR = 3, PAD_COUNT = 2;
+let padTex = null;
+function padTexture() {                  // 하늘색 동심원 + JUMP 글자
+  if (padTex) return padTex;
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const c = cv.getContext('2d');
+  c.translate(128, 128);
+  for (const [r, w, a] of [[120, 6, .85], [96, 3, .5], [74, 10, .7], [46, 3, .45]]) {
+    c.strokeStyle = `rgba(120,220,255,${a})`; c.lineWidth = w;
+    c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.stroke();
+  }
+  c.fillStyle = 'rgba(160,235,255,.95)';
+  c.font = '800 46px system-ui, sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.letterSpacing = '8px';
+  c.fillText('JUMP', 0, 2);
+  padTex = new THREE.CanvasTexture(cv);
+  return padTex;
+}
+function makeJumpPad(x, z) {
+  const grp = new THREE.Group();
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(PAD_R * 2, PAD_R * 2).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({
+      map: padTexture(), transparent: true, opacity: 0.9, depthWrite: false,
+      blending: THREE.AdditiveBlending, fog: false, toneMapped: false,
+    }));
+  disc.position.y = 0.04;
+  grp.add(disc);
+  const lamp = new THREE.PointLight(0x6fd8ff, 2.2, 9);
+  lamp.position.y = 1.2;
+  grp.add(lamp);
+  grp.position.set(x, 0, z);
+  scene.add(grp);
+  jumpPads.push({ grp, disc, lamp, x, z, t: 0, used: false, fade: 0 });
+}
+function clearJumpPads() {
+  for (const p of jumpPads) scene.remove(p.grp);
+  jumpPads.length = 0;
+}
+function spawnJumpPads() {               // 서로 다른 방에, 시작 지점과 떨어뜨려 배치
+  clearJumpPads();
+  if (!walkGrid || floorNo < PAD_FLOOR) return 0;
+  const rooms = mapRects.filter(r => r.room && r.x1 - r.x0 > 8 && r.z1 - r.z0 > 8);
+  const used = new Set();
+  for (let n = 0; n < PAD_COUNT && rooms.length; n++) {
+    for (let t = 0; t < 40; t++) {
+      const ri = (Math.random() * rooms.length) | 0;
+      if (used.has(ri) && used.size < rooms.length) continue;
+      const r = rooms[ri];
+      const x = r.x0 + 3 + Math.random() * (r.x1 - r.x0 - 6);
+      const z = r.z0 + 3 + Math.random() * (r.z1 - r.z0 - 6);
+      if (cellSolid(x, z)) continue;
+      if (Math.hypot(x - playerStart.x, z - playerStart.z) < 10) continue;
+      if (portal && Math.hypot(x - portal.x, z - portal.z) < 5) continue;
+      if (jumpPads.some(p => Math.hypot(p.x - x, p.z - z) < 20)) continue;
+      used.add(ri);
+      makeJumpPad(x, z);
+      break;
+    }
+  }
+  return jumpPads.length;
+}
+function updateJumpPads(dt) {
+  for (let i = jumpPads.length - 1; i >= 0; i--) {
+    const p = jumpPads[i];
+    p.t += dt;
+    if (p.used) {                        // 쓰고 나면 사라진다
+      p.fade += dt * 1.6;
+      p.disc.material.opacity = Math.max(0, 0.9 * (1 - p.fade));
+      p.lamp.intensity = Math.max(0, 2.2 * (1 - p.fade));
+      p.grp.scale.setScalar(1 + p.fade * 0.5);
+      if (p.fade >= 1) { scene.remove(p.grp); jumpPads.splice(i, 1); }
+      continue;
+    }
+    p.disc.material.opacity = 0.75 + Math.sin(p.t * 3) * 0.2;
+    p.disc.rotation.y += dt * 0.5;      // 바닥에 누운 채로 천천히 회전
+    p.lamp.intensity = 1.8 + Math.sin(p.t * 3) * 0.8;
+    if (player.dead || player.pos.y > 0.6) continue;
+    if (Math.hypot(player.pos.x - p.x, player.pos.z - p.z) > PAD_R * 0.6) continue;  // 가운데만 발동
+    p.used = true;
+    player.vy = Math.sqrt(2 * 13.5 * PAD_H);   // 5m 도약
+    player.onGround = false;
+    if (camMode !== 'fps') oneShot('rifle jump', 0.9);
+    sfxTone(420, 0.28, 'sine', 0.18, 900);
+    toast('⤴ 점프대!');
+  }
+}
+
 // ---------- 마커: 조준점이 닿은 바닥·벽에 표시를 남겨 길을 잃지 않게 ----------
 const markers = [];
 const MARKER_MAX = Infinity;             // 개수 제한 없음 (층을 넘으면 초기화)
@@ -2099,6 +2189,7 @@ function nextFloor() {
   liveMines.length = 0;
   clearBeacon();
   clearMarkers();
+  clearJumpPads();
   buildMap();                            // 새 랜덤맵 (새 시드)
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
@@ -2152,6 +2243,7 @@ function startFloor() {                  // 층 시작 시 개체 배치
   bossOfFloor = null;
   safeRoom = roomAt(playerStart.x, playerStart.z);   // 도착한 방은 10초간 무스폰
   safeUntil = gameTime + SAFE_T;
+  spawnJumpPads();                                  // 3층부터 점프대 2곳
   populateRooms();
   if (floorNo % 5 === 0) {               // 5층마다 보스 — 포탈 방을 지킨다
     setTimeout(() => {
@@ -2385,6 +2477,7 @@ function applyMap() {
   liveMines.length = 0;
   clearBeacon();
   clearMarkers();
+  clearJumpPads();
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
   floorNo = 1; floorTime = FLOOR_TIME; hunter = null;
@@ -3134,6 +3227,7 @@ function updatePlayer(dt) {
   if (gMode) updateTrajectory();
   updateSeenRects();
   updateMarkers(dt);
+  updateJumpPads(dt);
   updateFloor(dt);
   roomSpawnTick(dt);
   updateHitArrows(dt);
@@ -3158,6 +3252,7 @@ function tick() {
     updateMines(dt);
     updateBeacon(dt);
     updateDecals(dt);
+    updateJumpPads(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
   } else if (player.root) {
@@ -3254,6 +3349,7 @@ window.__game = {
     updateMines(dt);
     updateBeacon(dt);
     updateDecals(dt);
+    updateJumpPads(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
     if (opts.shoot) { lastShot = 0; shoot(performance.now()); }
@@ -3273,6 +3369,8 @@ window.__game = {
   setFloorTime(t) { floorTime = t; },
   toFloor(f) { floorNo = f - 1; nextFloor(); },
   populate() { return populateRooms(); },
+  jumpPads() { return jumpPads.map(p => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1), used: p.used })); },
+  spawnPads() { return spawnJumpPads(); },
   placeMarker() { placeMarker(); return markers.length; },
   markerInfo() {
     return markers.map(m => ({
