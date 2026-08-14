@@ -1765,15 +1765,22 @@ function placeMarker() {                 // 조준한 면에 데칼처럼 표시
   } else scene.add(grp);
   markers.push({ sp: grp, mat, obj: h.obj || null, x: p.x, z: p.z, t: 0 });
   if (markers.length > MARKER_MAX) removeMarker(markers.shift());
+  updateMarkerSlot();
   sfxTone(1200, 0.07, "sine", 0.12);
   toast("📍 마커 (" + markers.length + "/" + MARKER_MAX + ")");
+}
+function updateMarkerSlot() {
+  const el = document.getElementById('kSlot');
+  if (!el) return;
+  document.getElementById('kCnt').textContent = markers.length + '/' + MARKER_MAX;
+  el.classList.toggle('empty', markers.length === 0);
 }
 function removeMarker(m) {
   m.sp.parent?.remove(m.sp);
   m.sp.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   m.mat.dispose();
 }
-function clearMarkers() { for (const m of markers) removeMarker(m); markers.length = 0; }
+function clearMarkers() { for (const m of markers) removeMarker(m); markers.length = 0; updateMarkerSlot(); }
 function updateMarkers(dt) {
   for (const m of markers) {
     m.t += dt;
@@ -2278,6 +2285,7 @@ document.getElementById('optBtn').addEventListener('click', e => {
 // 수류탄 슬롯 클릭/탭으로도 토글
 document.getElementById('gSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(slot === 'grenade' ? 'gun' : 'grenade'); });
 document.getElementById('mSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(slot === 'mine' ? 'gun' : 'mine'); });
+document.getElementById('kSlot').addEventListener('pointerdown', e => { e.stopPropagation(); audioInit(); placeMarker(); });
 
 // 디버그 버튼 — 로컬(localhost/127.*)에서만 노출
 const IS_LOCAL = /^(localhost|127\.|\[::1\])/.test(location.hostname) || location.hostname.endsWith('.local');
