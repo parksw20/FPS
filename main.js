@@ -2444,16 +2444,44 @@ const mapPick = document.getElementById('mapPick');
 document.getElementById('btnStart').addEventListener('click', e => {
   e.stopPropagation();
   shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; optMenu.style.display = 'none';
+  brief.style.display = 'none';
   mapPick.style.display = 'flex';     // 시작 전 맵 선택
 });
+const brief = document.getElementById('brief');
+const BRIEF = {                        // 모드별 규칙 안내
+  plaza: {
+    title: '🏛 광장',
+    lines: ['웨이브 중 <b>언제든 업그레이드</b> 가능', '<b>10웨이브</b>마다 보스 등장'],
+  },
+  random: {
+    title: '🎲 랜덤 맵',
+    lines: ['제한시간 <b>1분</b>', '적 처치 시 <b>+2초</b>', '제한시간 소진 시 <b>추적자</b> 등장',
+      '<b>5층</b>마다 보스 등장'],
+  },
+};
+let pickedMap = 'plaza';
 mapPick.querySelectorAll('[data-startmap]').forEach(b => b.addEventListener('click', e => {
   e.stopPropagation();
-  mapMode = b.dataset.startmap;
-  localStorage.setItem('fps.map', mapMode);
+  pickedMap = b.dataset.startmap;
+  const info = BRIEF[pickedMap];
+  document.getElementById('briefTitle').innerHTML = info.title;
+  document.getElementById('briefList').innerHTML = info.lines.map(t => '<li>' + t + '</li>').join('');
   mapPick.style.display = 'none';
+  brief.style.display = 'flex';        // 시작 전 규칙 안내
+}));
+document.getElementById('briefBack').addEventListener('click', e => {
+  e.stopPropagation();
+  brief.style.display = 'none';
+  mapPick.style.display = 'flex';
+});
+document.getElementById('briefGo').addEventListener('click', e => {
+  e.stopPropagation();
+  mapMode = pickedMap;
+  localStorage.setItem('fps.map', mapMode);
+  brief.style.display = 'none';
   applyMap();                          // 지형 재생성(랜덤은 매번 새 맵) + 1웨이브부터
   enterGame();
-}));
+});
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
 document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; paused = false; restart(true); });
 document.getElementById('btnOptions').addEventListener('click', e => {
@@ -2802,7 +2830,7 @@ function restart(toMenu = false) {
   document.getElementById('ammo').classList.remove('inf');
   updateAmmo();
   msgEl.style.display = 'none';
-  if (toMenu) { started = false; inRun = false; paused = false; document.getElementById('mapPick').style.display = 'none'; refreshOverlay(); } // 확인 → 메인 화면
+  if (toMenu) { started = false; inRun = false; paused = false; document.getElementById('mapPick').style.display = 'none'; document.getElementById('brief').style.display = 'none'; refreshOverlay(); } // 확인 → 메인 화면
   else if (isMobileCtrl()) { started = true; refreshOverlay(); }
   else canvas.requestPointerLock();
   nextWave();
