@@ -1607,6 +1607,178 @@ function updateHitArrows(dt) {
   }
 }
 
+// ---------- 문 · 스위치: 6층부터 방 하나에 최대 3세트, 벽 스위치를 쏘면 열린다 ----------
+const doors = [];
+const DOOR_FLOOR = 6, DOOR_MAX = 3, DOOR_H = 5.6;
+function cellIdx(x, z) {
+  if (!walkGrid) return -1;
+  const i = Math.floor(x - walkGrid.ox), j = Math.floor(z - walkGrid.oz);
+  if (i < 0 || j < 0 || i >= walkGrid.gw || j >= walkGrid.gh) return -1;
+  return j * walkGrid.gw + i;
+}
+function setCells(list, walkable) {
+  for (const k of list) walkGrid.cells[k] = walkable ? 1 : 0;
+}
+function reachable(fromX, fromZ, toX, toZ) {   // 닫힌 상태로도 갈 수 있는가 (BFS)
+  const { cells, gw, gh } = walkGrid;
+  const s = cellIdx(fromX, fromZ), t = cellIdx(toX, toZ);
+  if (s < 0 || t < 0 || !cells[s] || !cells[t]) return false;
+  const seen = new Uint8Array(cells.length);
+  const q = [s]; seen[s] = 1;
+  for (let h = 0; h < q.length; h++) {
+    const c = q[h];
+    if (c === t) return true;
+    const i = c % gw, j = (c / gw) | 0;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di, nj = j + dj;
+      if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
+      const n = nj * gw + ni;
+      if (seen[n] || !cells[n]) continue;
+      seen[n] = 1; q.push(n);
+    }
+  }
+  return false;
+}
+function doorCandidates() {               // 복도 입구 + 그 복도가 물린 방
+  const rooms = mapRects.filter(r => r.room), out = [];
+  for (const c of mapRects) {
+    if (c.room) continue;
+    const axis = (c.x1 - c.x0) > (c.z1 - c.z0) ? 'x' : 'z';
+    for (const near of [0, 1]) {
+      const r = rooms.find(r => axis === 'x'
+        ? (near ? r.x0 === c.x1 : r.x1 === c.x0) && r.z0 <= c.z0 && c.z1 <= r.z1
+        : (near ? r.z0 === c.z1 : r.z1 === c.z0) && r.x0 <= c.x0 && c.x1 <= r.x1);
+      if (!r) continue;
+      const slab = axis === 'x'
+        ? { x0: near ? c.x1 - 1 : c.x0, x1: near ? c.x1 : c.x0 + 1, z0: c.z0, z1: c.z1 }
+        : { x0: c.x0, x1: c.x1, z0: near ? c.z1 - 1 : c.z0, z1: near ? c.z1 : c.z0 + 1 };
+      out.push({ cor: c, room: r, axis, slab });
+    }
+  }
+  return out;
+}
+function makeDoor(cand) {
+  const { slab, axis, room } = cand;
+  const w = slab.x1 - slab.x0, d = slab.z1 - slab.z0;
+  const cells = [];
+  for (let z = slab.z0; z < slab.z1; z++) for (let x = slab.x0; x < slab.x1; x++) {
+    const k = cellIdx(x + 0.5, z + 0.5);
+    if (k >= 0) cells.push(k);
+  }
+  const grp = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, DOOR_H, d),
+    new THREE.MeshStandardMaterial({ color: 0x3a1410, emissive: 0x882216, emissiveIntensity: 0.7, roughness: 0.5, metalness: 0.3 }));
+  body.position.y = DOOR_H / 2;
+  grp.add(body);
+  for (const sy of [1.4, 2.8, 4.2]) {     // 경고 띠
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(w * 1.01, 0.18, d * 1.01),
+      new THREE.MeshBasicMaterial({ color: 0xff5a3c, fog: false, toneMapped: false }));
+    bar.position.y = sy;
+    grp.add(bar);
+  }
+  grp.position.set((slab.x0 + slab.x1) / 2, 0, (slab.z0 + slab.z1) / 2);
+  scene.add(grp);
+  const sw = makeSwitch(room, axis);
+  if (!sw) { scene.remove(grp); return null; }
+  const door = { grp, body, cells, sw, room, open: false, t: 0, x: grp.position.x, z: grp.position.z };
+  setCells(cells, false);                 // 닫힘 = 벽
+  doors.push(door);
+  return door;
+}
+function makeSwitch(r) {                  // 방 안쪽 벽에 붙는 스위치
+  for (let t = 0; t < 60; t++) {
+    const side = (Math.random() * 4) | 0;
+    let x, z, n;
+    if (side === 0) { x = r.x0 + 0.15; z = r.z0 + 1.5 + Math.random() * Math.max(0.1, r.z1 - r.z0 - 3); n = new THREE.Vector3(1, 0, 0); }
+    else if (side === 1) { x = r.x1 - 0.15; z = r.z0 + 1.5 + Math.random() * Math.max(0.1, r.z1 - r.z0 - 3); n = new THREE.Vector3(-1, 0, 0); }
+    else if (side === 2) { z = r.z0 + 0.15; x = r.x0 + 1.5 + Math.random() * Math.max(0.1, r.x1 - r.x0 - 3); n = new THREE.Vector3(0, 0, 1); }
+    else { z = r.z1 - 0.15; x = r.x0 + 1.5 + Math.random() * Math.max(0.1, r.x1 - r.x0 - 3); n = new THREE.Vector3(0, 0, -1); }
+    if (!cellSolid(x - n.x * 0.7, z - n.z * 0.7)) continue;   // 등 뒤가 벽이어야 한다
+    if (cellSolid(x + n.x * 0.8, z + n.z * 0.8)) continue;    // 앞은 트여 있어야 한다
+    const grp = new THREE.Group();
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.16),
+      new THREE.MeshStandardMaterial({ color: 0x14202a, roughness: 0.6, metalness: 0.4 }));
+    grp.add(plate);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff3b2f, fog: false, toneMapped: false }));
+    core.position.z = 0.16;
+    grp.add(core);
+    const lamp = new THREE.PointLight(0xff4a33, 2.4, 8);
+    lamp.position.z = 0.6;
+    grp.add(lamp);
+    grp.position.set(x + n.x * 0.1, 1.6, z + n.z * 0.1);
+    grp.lookAt(grp.position.clone().add(n));
+    scene.add(grp);
+    return { grp, core, lamp, x: grp.position.x, y: 1.6, z: grp.position.z, hit: false };
+  }
+  return null;
+}
+function spawnDoors() {
+  clearDoors();
+  if (!walkGrid || floorNo < DOOR_FLOOR) return 0;
+  const cands = doorCandidates().sort(() => Math.random() - 0.5);
+  for (const c of cands) {
+    if (doors.length >= DOOR_MAX) break;
+    if (doors.some(d => d.room === c.room || d.cor === c.cor)) continue;   // 방·복도당 하나
+    const d = makeDoor(c);
+    if (!d) continue;
+    d.cor = c.cor;
+  }
+  // 문을 다 놓은 뒤, 잠긴 상태에서 스위치까지 갈 수 없는 문은 뺀다 (나중 문이 앞선 문의 길을 막을 수 있다)
+  for (let guard = 0; guard < DOOR_MAX + 1; guard++) {
+    const bad = doors.find(d => !reachable(playerStart.x, playerStart.z, d.sw.x, d.sw.z));
+    if (!bad) break;
+    removeDoor(bad);
+  }
+  rebuildFlow();
+  return doors.length;
+}
+function removeDoor(d) {
+  setCells(d.cells, true);
+  scene.remove(d.grp); scene.remove(d.sw.grp);
+  const i = doors.indexOf(d);
+  if (i >= 0) doors.splice(i, 1);
+}
+function clearDoors() {
+  for (const d of doors) { setCells(d.cells, true); scene.remove(d.grp); scene.remove(d.sw.grp); }
+  doors.length = 0;
+}
+function openDoor(d) {
+  if (d.open) return;
+  d.open = true; d.t = 0;
+  setCells(d.cells, true);
+  d.sw.core.material.color.setHex(0x4dff9b);
+  d.sw.lamp.color.setHex(0x4dff9b);
+  rebuildFlow();
+  banner('🔓 문이 열렸다');
+  sfxChest(); shake(0.18, 0.35);
+}
+function hitSwitch(origin, dir, maxT) {   // 사격 판정용 — 맞은 스위치의 문을 연다
+  for (const d of doors) {
+    if (d.open) continue;
+    const oc = new THREE.Vector3(d.sw.x, d.sw.y, d.sw.z).sub(origin);
+    const t = oc.dot(dir);
+    if (t < 0 || t > maxT) continue;
+    if (oc.lengthSq() - t * t > 0.45 * 0.45) continue;
+    burst(new THREE.Vector3(d.sw.x, d.sw.y, d.sw.z), 0x4dff9b, 16);
+    openDoor(d);
+    return t;
+  }
+  return null;
+}
+function updateDoors(dt) {
+  for (let i = doors.length - 1; i >= 0; i--) {
+    const d = doors[i];
+    if (!d.open) {                        // 잠긴 동안 스위치가 깜빡인다
+      d.sw.lamp.intensity = 1.8 + Math.sin(gameTime * 4) * 1.0;
+      continue;
+    }
+    d.t += dt;                            // 바닥으로 내려간다
+    d.grp.position.y = -DOOR_H * Math.min(1, d.t / 0.8);
+    if (d.t > 1.1) { scene.remove(d.grp); scene.remove(d.sw.grp); doors.splice(i, 1); }
+  }
+}
+
 // ---------- 점프대: 3층부터 맵에 2곳, 가운데로 들어가면 5m 도약 (1회용) ----------
 const jumpPads = [];
 const PAD_R = 2.4, PAD_H = 5, PAD_FLOOR = 3, PAD_COUNT = 2;
@@ -2190,6 +2362,7 @@ function nextFloor() {
   clearBeacon();
   clearMarkers();
   clearJumpPads();
+  clearDoors();
   buildMap();                            // 새 랜덤맵 (새 시드)
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
@@ -2244,6 +2417,7 @@ function startFloor() {                  // 층 시작 시 개체 배치
   safeRoom = roomAt(playerStart.x, playerStart.z);   // 도착한 방은 10초간 무스폰
   safeUntil = gameTime + SAFE_T;
   spawnJumpPads();                                  // 3층부터 점프대 2곳
+  spawnDoors();                                     // 6층부터 스위치로 여는 문
   populateRooms();
   if (floorNo % 5 === 0) {               // 5층마다 보스 — 포탈 방을 지킨다
     setTimeout(() => {
@@ -2422,8 +2596,18 @@ document.getElementById('dbgCoins').addEventListener('click', e => {
 });
 document.getElementById('dbgWave').addEventListener('click', e => {
   e.stopPropagation();
-  skipWave();
+  if (walkGrid) { warping = true; floorTransition(); setTimeout(() => warping = false, 900); }  // 랜덤맵: 다음 층
+  else skipWave();
 });
+let dbgPortal = false, dbgGod = false, dbgFast = false;
+const dbgTog = (id, get, set) => document.getElementById(id).addEventListener('click', e => {
+  e.stopPropagation();
+  set(!get());
+  document.getElementById(id).classList.toggle('on', get());
+});
+dbgTog('dbgPortal', () => dbgPortal, v => { dbgPortal = v; toast(v ? '포탈 표시 ON' : '포탈 표시 OFF'); });
+dbgTog('dbgGod', () => dbgGod, v => { dbgGod = v; toast(v ? '무적 ON' : '무적 OFF'); });
+dbgTog('dbgFast', () => dbgFast, v => { dbgFast = v; toast(v ? '이동 3배속 ON' : '이동 3배속 OFF'); });
 
 const shopMenu = document.getElementById('shopMenu');
 // 시작 화면 패널: 화면 중앙에서 100px 아래 배치 (넘치면 스크롤)
@@ -2478,6 +2662,7 @@ function applyMap() {
   clearBeacon();
   clearMarkers();
   clearJumpPads();
+  clearDoors();
   player.pos.copy(playerStart); player.vy = 0; player.onGround = true;
   rebuildFlow();
   floorNo = 1; floorTime = FLOOR_TIME; hunter = null;
@@ -2485,8 +2670,11 @@ function applyMap() {
   wave = 0;
   updateHudWave();
   if (walkGrid) startFloor(); else nextWave();
+  syncOptUI();
 }
 function syncOptUI() {
+  const dw = document.getElementById('dbgWave');
+  if (dw) dw.textContent = mapMode === 'random' ? '층 넘기기' : '웨이브 스킵';
   optMenu.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === camMode));
   optMenu.querySelectorAll('[data-ctrl]').forEach(b => b.classList.toggle('on', b.dataset.ctrl === ctrlMode));
   optMenu.querySelectorAll('[data-map]').forEach(b => b.classList.toggle('on', b.dataset.map === mapMode));
@@ -2873,8 +3061,10 @@ function shoot(now) {
     const gt = gridRayT(origin, dir, Math.min(wallT, 90));
     if (gt !== null) wallT = gt;
   }
+  const swT = hitSwitch(origin, dir, Math.min(wallT, hitEn ? bestT : 120));  // 벽·적보다 가까운 스위치
   const muzzle = muzzleTip(dir);
   lastMuzzle.copy(muzzle);
+  if (swT !== null) { addTracer(muzzle, origin.clone().addScaledVector(dir, swT)); shotsHit++; return; }
   window.__lastShot = { origin: origin.toArray().map(v => +v.toFixed(2)), dir: dir.toArray().map(v => +v.toFixed(3)), bestT: +bestT.toFixed(2), wallT: +wallT.toFixed(2), hit: !!hitEn };
   if (hitEn && bestT < wallT) {
     // 머리 명중 세분화: 외곽 = 크리티컬(34), 중심(정밀) = 헤드샷 원샷킬
@@ -2953,7 +3143,7 @@ function hitmark(head) {
 
 // ---------- player damage ----------
 function damagePlayer(n, fromX, fromZ) {
-  if (player.dead) return;
+  if (player.dead || dbgGod) return;     // 디버그 무적
   if (fromX !== undefined) showHitArrow(fromX, fromZ);
   player.hp -= n;
   sfxHurt();
@@ -3080,7 +3270,12 @@ function drawMinimap() {
   }
   if (portal) {                            // 포탈: 미니맵 범위 안에 들어와야만 보인다 (방향 표시 없음)
     const q = toMap(portal.x, portal.z);
-    if (Math.hypot(q[0] - C, q[1] - C) <= R - 6 * k) dot(q[0], q[1], portal.locked ? '#ff4d4d' : '#c79bff', 6 * k);
+    const pd = Math.hypot(q[0] - C, q[1] - C), col = portal.locked ? '#ff4d4d' : '#c79bff';
+    if (pd <= R - 6 * k) dot(q[0], q[1], col, 6 * k);
+    else if (dbgPortal) {                // 디버그: 멀어도 가장자리에 표시
+      const s2 = (R - 8 * k) / (pd || 1);
+      dot(C + (q[0] - C) * s2, C + (q[1] - C) * s2, col, 6 * k);
+    }
   }
   if (beacon) {                            // 비콘: 큰 노란 표식
     const b = toMap(beacon.x, beacon.z);
@@ -3108,7 +3303,7 @@ function updatePlayer(dt) {
   if (walkGrid) { flowTimer -= dt; if (flowTimer <= 0) { rebuildFlow(); flowTimer = 0.3; } }
   const mobile = isMobileCtrl();
   if (mobile) player.zooming = zoomTog;
-  const sp = 7.2; // 기본 이동 = 달리기
+  const sp = 7.2 * (dbgFast ? 3 : 1); // 기본 이동 = 달리기 (디버그 3배속)
   let mx = 0, mz = 0;
   if (mobile) { mx = touchMove.x; mz = touchMove.z; }
   else {
@@ -3228,6 +3423,7 @@ function updatePlayer(dt) {
   updateSeenRects();
   updateMarkers(dt);
   updateJumpPads(dt);
+  updateDoors(dt);
   updateFloor(dt);
   roomSpawnTick(dt);
   updateHitArrows(dt);
@@ -3253,6 +3449,7 @@ function tick() {
     updateBeacon(dt);
     updateDecals(dt);
     updateJumpPads(dt);
+    updateDoors(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
   } else if (player.root) {
@@ -3350,6 +3547,7 @@ window.__game = {
     updateBeacon(dt);
     updateDecals(dt);
     updateJumpPads(dt);
+    updateDoors(dt);
     for (const en of enemies) updateEnemy(en, dt);
     for (let i = enemies.length - 1; i >= 0; i--) if (enemies[i].gone) enemies.splice(i, 1);
     if (opts.shoot) { lastShot = 0; shoot(performance.now()); }
@@ -3371,6 +3569,10 @@ window.__game = {
   populate() { return populateRooms(); },
   jumpPads() { return jumpPads.map(p => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1), used: p.used })); },
   spawnPads() { return spawnJumpPads(); },
+  doors() { return doors.map(d => ({ x: +d.x.toFixed(1), z: +d.z.toFixed(1), open: d.open, sw: [+d.sw.x.toFixed(1), +d.sw.z.toFixed(1)] })); },
+  spawnDoors() { return spawnDoors(); },
+  reach(x, z) { return reachable(playerStart.x, playerStart.z, x, z); },
+  openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },
   markerInfo() {
     return markers.map(m => ({
