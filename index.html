@@ -180,6 +180,24 @@
   #srSizes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srSizes button.buy{border-color:rgba(255,215,107,.45)}
   #srFurn{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  #srSlots{display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
+  #srSlots button{padding:8px 4px; cursor:pointer; font-size:.78rem; color:#bfe9f7; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  #srSlots button i{display:block; font-style:normal; font-size:.64rem; color:#9fb0c4}
+  #srSlots button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
+  #srSlots button.on i{color:#0a3540}
+  #srSlots button.buy{border-color:rgba(255,215,107,.45)}
+  #srSlots button.buy i{color:#ffd76b}
+  #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  #srCtx{position:fixed; z-index:24; display:none; min-width:118px; padding:5px; border-radius:8px;
+    background:rgba(5,14,20,.96); border:1.5px solid rgba(64,214,255,.45); box-shadow:0 6px 20px rgba(0,0,0,.5)}
+  #srCtx.on{display:block}
+  #srCtx button{display:block; width:100%; text-align:left; padding:7px 10px; cursor:pointer; font-size:.82rem;
+    color:#dff3ff; background:transparent; border:0; border-radius:6px}
+  #srCtx button:hover{background:rgba(64,214,255,.18)}
+  #srRoomBtns2{display:flex; gap:6px; margin-top:6px}
+  #srRoomBtns2 button{flex:1; padding:8px 0; cursor:pointer; font-size:.78rem; color:#bfe9f7; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
   #srRoomBtns{display:flex; gap:6px; margin-top:10px}
   #srRoomBtns button{flex:1; padding:8px 0; cursor:pointer; font-size:.8rem; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
@@ -428,23 +446,36 @@
     </div>
     <div id="srInv"></div>
     <div id="srRoomPane">
+      <div class="srHead">내 방</div>
+      <div id="srSlots"></div>
       <div class="srHead">방 이름</div>
       <input id="srRoomName" maxlength="16" placeholder="MY ROOM">
       <div class="srHead">방 크기 (높이 3m)</div>
       <div id="srSizes"></div>
+      <div class="srHead">창밖 풍경</div>
+      <div id="srBg"></div>
       <div class="srHead">가구</div>
       <div id="srFurn"></div>
       <div id="srRoomBtns">
         <button id="srRot">회전 R</button>
         <button id="srDel">제거 Del</button>
       </div>
-      <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 벽·다른 가구에 가까우면 딱 붙습니다.</p>
+      <div id="srRoomBtns2">
+        <button id="srSave">💾 방 저장</button>
+        <button id="srClear">🧹 방 비우기</button>
+      </div>
+      <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 놓인 가구를 클릭하면 회전·제거 메뉴가 뜹니다.</p>
     </div>
   </div>
   <div id="srBottom">
     <div class="srBtn" id="srSpin">회전 ⟳</div>
     <div class="srBtn" id="srPose">포즈 바꾸기</div>
     <div class="srBtn" id="srReset">전신 보기</div>
+  </div>
+  <div id="srCtx">
+    <button data-ctx="rot">⟳ 회전</button>
+    <button data-ctx="del">🗑 제거</button>
+    <button data-ctx="close">✕ 닫기</button>
   </div>
   <div id="srHint">좌드래그 회전 · 우드래그 카메라 이동 · 휠 확대(쇄골 기준) · 좌측 슬롯을 누르면 해당 부위를 비춥니다</div>
 </div>
