@@ -1599,11 +1599,12 @@ function updateHitArrows(dt) {
 
 // ---------- 마커: 조준점이 닿은 바닥·벽에 표시를 남겨 길을 잃지 않게 ----------
 const markers = [];
-const MARKER_MAX = 12;
-let markerTex = null;
+const MARKER_MAX = Infinity;             // 개수 제한 없음 (층을 넘으면 초기화)
+let markerTex = null, markerCanvas = null;
 function markerTexture() {
   if (markerTex) return markerTex;
   const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  markerCanvas = cv;
   const c = cv.getContext('2d');
   c.strokeStyle = '#39f6ff'; c.lineWidth = 9; c.lineCap = 'round';
   c.beginPath(); c.arc(64, 64, 40, 0, Math.PI * 2); c.stroke();
@@ -1767,14 +1768,24 @@ function placeMarker() {                 // 조준한 면에 데칼처럼 표시
   if (markers.length > MARKER_MAX) removeMarker(markers.shift());
   updateMarkerSlot();
   sfxTone(1200, 0.07, "sine", 0.12);
-  toast("📍 마커 (" + markers.length + "/" + MARKER_MAX + ")");
+  toast("📍 마커 " + markers.length + "개");
 }
 function updateMarkerSlot() {
   const el = document.getElementById('kSlot');
   if (!el) return;
-  document.getElementById('kCnt').textContent = markers.length + '/' + MARKER_MAX;
+  const icon = el.querySelector('.mIcon');
+  if (icon && !icon.firstElementChild) {   // 슬롯 아이콘도 실제로 찍히는 문양으로
+    markerTexture();
+    icon.textContent = '';
+    const img = document.createElement('img');
+    img.src = markerCanvas.toDataURL();
+    img.alt = '';
+    icon.appendChild(img);
+  }
+  document.getElementById('kCnt').textContent = markers.length;
   el.classList.toggle('empty', markers.length === 0);
 }
+updateMarkerSlot();                      // 시작 시 아이콘·개수 표시
 function removeMarker(m) {
   m.sp.parent?.remove(m.sp);
   m.sp.traverse(o => { if (o.geometry) o.geometry.dispose(); });

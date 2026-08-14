@@ -64,7 +64,8 @@
   #mSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#ff8a5c; border-radius:4px; padding:1px 5px}
   #kSlot{position:absolute; left:50%; margin-left:314px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
-  #kSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
+  #kSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem; line-height:0}
+  #kSlot .mIcon img{width:46px; height:46px; display:block}
   #kSlot.empty{opacity:.35; filter:grayscale(.8)}
   #kSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#39f6ff; border-radius:4px; padding:1px 5px}
   #kSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#9beeff; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
@@ -248,7 +249,7 @@
   <div id="ammo"><span class="gKey ammoKey">1</span><span id="ammoN">20</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
   <div id="gSlot"><span class="gKey">2</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
   <div id="mSlot" class="empty"><span class="gKey">3</span><span class="mIcon">🧨</span><span class="gCnt" id="mCnt">0</span></div>
-  <div id="kSlot" class="empty"><span class="gKey">F</span><span class="mIcon">📍</span><span class="gCnt" id="kCnt">0/12</span></div>
+  <div id="kSlot" class="empty"><span class="gKey">F</span><span class="mIcon">📍</span><span class="gCnt" id="kCnt">0</span></div>
   <div id="msg" class="panel"><h2>YOU DIED</h2><div id="rankList"></div><button id="deathOk">확인</button></div>
 </div>
 <div id="warpFx"></div>
