@@ -169,6 +169,22 @@
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
   #srTabs button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srInv{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+  #srRoomPane{display:none}
+  #srRoomPane.on{display:block}
+  #srRoomName{width:100%; box-sizing:border-box; padding:8px 10px; margin-bottom:4px; border-radius:7px;
+    background:rgba(4,16,24,.9); border:1.5px solid rgba(64,214,255,.35); color:#eaf9ff; font:inherit; font-size:.9rem}
+  #srSizes{display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
+  #srSizes button{padding:8px 0; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
+  #srSizes button i{display:block; font-style:normal; font-size:.66rem; color:#ffd76b}
+  #srSizes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
+  #srSizes button.buy{border-color:rgba(255,215,107,.45)}
+  #srFurn{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  #srRoomBtns{display:flex; gap:6px; margin-top:10px}
+  #srRoomBtns button{flex:1; padding:8px 0; cursor:pointer; font-size:.8rem; color:#bfe9f7; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
+  #srRoomBtns button.on{border-color:#ff8a5c; color:#ffd9c9}
+  .srTip{font-size:.66rem; color:#7aa8bd; line-height:1.5; margin:10px 0 0}
   #srPoses{display:grid; grid-template-columns:repeat(5,1fr); gap:6px}
   .srPose{aspect-ratio:1; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:1.05rem;
     background:rgba(8,20,28,.8); border:1.5px solid rgba(64,214,255,.22); border-radius:8px; position:relative}
@@ -408,8 +424,22 @@
     <div id="srTabs">
       <button data-tab="gear" class="on">장비</button>
       <button data-tab="wear">의상</button>
+      <button data-tab="room">공간</button>
     </div>
     <div id="srInv"></div>
+    <div id="srRoomPane">
+      <div class="srHead">방 이름</div>
+      <input id="srRoomName" maxlength="16" placeholder="MY ROOM">
+      <div class="srHead">방 크기 (높이 3m)</div>
+      <div id="srSizes"></div>
+      <div class="srHead">가구</div>
+      <div id="srFurn"></div>
+      <div id="srRoomBtns">
+        <button id="srRot">회전 R</button>
+        <button id="srDel">제거 Del</button>
+      </div>
+      <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 벽·다른 가구에 가까우면 딱 붙습니다.</p>
+    </div>
   </div>
   <div id="srBottom">
     <div class="srBtn" id="srSpin">회전 ⟳</div>
