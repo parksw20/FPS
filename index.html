@@ -145,7 +145,7 @@
   /* 쇼룸 (디버그 전용) */
   #showroom{position:fixed; inset:0; display:none; z-index:22; color:#eaf9ff;
     user-select:none; -webkit-user-select:none; -ms-user-select:none;
-    background:radial-gradient(circle at 50% 40%, rgba(12,26,36,.55), rgba(3,8,12,.94) 70%)}
+    background:transparent}          /* 3D를 덮지 않는다 — 배경은 쇼룸 씬이 직접 그린다 */
   #showroom.on{display:block}
   body.showroom #start, body.showroom #hud, body.showroom #optBtn{display:none !important}
   #srTop{position:absolute; left:0; right:0; top:0; display:flex; align-items:center; justify-content:center; gap:16px; padding:16px}

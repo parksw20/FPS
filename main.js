@@ -3503,7 +3503,16 @@ const SR_INV = {                          // 지금은 기본 파츠만 (교체 
 const srEquip = { gun: '기본 소총', grenade: '기본 수류탄', mine: '기본 지뢰', head: '기본 머리', top: '기본 상의', bottom: '기본 하의', glove: '기본 장갑', boots: '기본 부츠' };
 let srOn = false, srScene = null, srCam = null, srRoot = null, srMixer = null, srActions = {}, srCurrent = null;
 let srYaw = 0, srSpin = true, srDrag = null, srSel = null, srTab = 'gear';
-const SR_FULL = { y: 0.95, dist: 4.2 };
+const SR_FULL = { y: 0.95, dist: 4.2 }, SR_FOV = 38;
+const srHalfH = d => d * Math.tan(SR_FOV * Math.PI / 360);   // 화면 절반 높이(m)
+function srClampView() {                 // 확대한 만큼만 상하·좌우로 움직일 수 있다
+  const h = srHalfH(srTarget.dist), fh = srHalfH(SR_FULL.dist);
+  const limY = Math.max(0, fh - h);
+  const aspect = srCam ? srCam.aspect : 1.7;
+  const limX = Math.max(0, (fh - h) * aspect);
+  srTarget.y = Math.max(SR_FULL.y - limY, Math.min(SR_FULL.y + limY, srTarget.y));
+  srPan.x = Math.max(-limX, Math.min(limX, srPan.x));
+}
 let srPan = { x: 0 }, srPanDrag = null, srPanned = false;   // 우클릭 드래그로 카메라 이동
 let srTarget = { ...SR_FULL }, srView = { ...SR_FULL };
 const SR_POSES = ['rifle aiming idle', 'walking', 'strafe', 'reloading', 'toss grenade'];
@@ -3519,7 +3528,7 @@ let srPose = 0;
 function srBuild() {
   if (srScene || !playerGltf) return;
   srScene = new THREE.Scene();
-  srScene.background = null;
+  srScene.background = new THREE.Color(0x070d13);   // 어두운 무대 배경 (CSS 덮개 없음)
   srCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 60);
   // 인게임과 같은 대비를 유지하고(반구광 + 태양광) 스포트는 액센트로만
   srScene.add(new THREE.HemisphereLight(0x9db2d8, 0x3a4a30, 1.1));
@@ -3703,6 +3712,7 @@ function srUpdate(dt) {
   srView.dist += (srTarget.dist - srView.dist) * Math.min(1, dt * 6);
   srCam.aspect = innerWidth / innerHeight;
   srCam.updateProjectionMatrix();
+  srClampView();
   srCam.position.set(srPan.x, srView.y + srView.dist * 0.12, srView.dist);
   srCam.lookAt(srPan.x, srView.y, 0);
   renderer.render(srScene, srCam);
@@ -3721,10 +3731,12 @@ function srUpdate(dt) {
     if (!srOn) return;
     if (srPanDrag) {                     // 좌우 = 평행 이동, 상하 = 높이
       const k = 0.0022 * srView.dist;
-      srPan.x = Math.max(-2.5, Math.min(2.5, srPan.x - (e.clientX - srPanDrag[0]) * k));
-      srTarget.y = Math.max(-0.2, Math.min(3, srTarget.y + (e.clientY - srPanDrag[1]) * k));
+      const y0 = srTarget.y, x0 = srPan.x;
+      srPan.x -= (e.clientX - srPanDrag[0]) * k;
+      srTarget.y += (e.clientY - srPanDrag[1]) * k;
+      srClampView();
       srPanDrag = [e.clientX, e.clientY];
-      srPanned = true;                   // 직접 옮긴 뒤에는 확대해도 높이를 건드리지 않는다
+      if (srTarget.y !== y0 || srPan.x !== x0) srPanned = true;   // 실제로 움직였을 때만
       return;
     }
     if (srDrag === null) return;
@@ -3739,6 +3751,7 @@ function srUpdate(dt) {
       const k = Math.min(1, Math.max(0, (SR_FULL.dist - srTarget.dist) / (SR_FULL.dist - 0.7)));
       srTarget.y = SR_FULL.y + (srClavicleY() - SR_FULL.y) * k;
     }
+    srClampView();                       // 축소하면 다시 가운데로 모인다
   }, { passive: false });
   document.getElementById('srClose').addEventListener('click', e => { e.stopPropagation(); closeShowroom(); });
   document.getElementById('srSpin').addEventListener('click', e => { e.stopPropagation(); srSpin = !srSpin; });
