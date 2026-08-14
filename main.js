@@ -3504,23 +3504,40 @@ const srEquip = { gun: '기본 소총', grenade: '기본 수류탄', mine: '기�
 let srOn = false, srScene = null, srCam = null, srRoot = null, srMixer = null, srActions = {}, srCurrent = null;
 let srYaw = 0, srSpin = true, srDrag = null, srSel = null, srTab = 'gear';
 const SR_FULL = { y: 0.95, dist: 4.2 };
+let srPan = { x: 0 }, srPanDrag = null, srPanned = false;   // 우클릭 드래그로 카메라 이동
 let srTarget = { ...SR_FULL }, srView = { ...SR_FULL };
 const SR_POSES = ['rifle aiming idle', 'walking', 'strafe', 'reloading', 'toss grenade'];
+const SR_SPECIAL = [                      // 스페셜 포즈 — 아직 전부 잠금
+  { key: 'sp1', icon: '🕺', name: '승리 포즈', locked: true },
+  { key: 'sp2', icon: '🎯', name: '조준 포즈', locked: true },
+  { key: 'sp3', icon: '🧊', name: '아이들 포즈', locked: true },
+  { key: 'sp4', icon: '💃', name: '댄스 포즈', locked: true },
+  { key: 'sp5', icon: '👑', name: '엠블럼 포즈', locked: true },
+];
+let srSpecial = null;
 let srPose = 0;
 function srBuild() {
   if (srScene || !playerGltf) return;
   srScene = new THREE.Scene();
   srScene.background = null;
   srCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 60);
-  srScene.add(new THREE.HemisphereLight(0xcfe6ff, 0x20303c, 1.1));
-  const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(2.4, 4, 3); srScene.add(key);
-  const rim = new THREE.DirectionalLight(0x7fd8ff, 1.5); rim.position.set(-3, 2.2, -2.4); srScene.add(rim);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x16222c, roughness: 0.55, metalness: 0.3 }));
+  srScene.add(new THREE.HemisphereLight(0xbcd8ee, 0x121a22, 0.55));
+  const key = new THREE.SpotLight(0xffffff, 90, 14, 0.62, 0.55, 1.6);   // 정면 위 스포트
+  key.position.set(1.6, 4.4, 3.2); key.target.position.set(0, 1.15, 0);
+  srScene.add(key, key.target);
+  const fill = new THREE.SpotLight(0x9fd8ff, 45, 14, 0.7, 0.6, 1.6);    // 좌측 채움
+  fill.position.set(-3.2, 3.0, 1.6); fill.target.position.set(0, 1.1, 0);
+  srScene.add(fill, fill.target);
+  const rim = new THREE.SpotLight(0x7fe6ff, 60, 14, 0.6, 0.5, 1.6);     // 뒤 림라이트
+  rim.position.set(-1.6, 3.4, -3.4); rim.target.position.set(0, 1.3, 0);
+  srScene.add(rim, rim.target);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.7, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: 0x16222c, roughness: 0.5, metalness: 0.35 }));
   srScene.add(disc);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.03, 8, 64).rotateX(-Math.PI / 2),
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.025, 8, 64).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0x39f6ff, fog: false, toneMapped: false }));
   ring.position.y = 0.01; srScene.add(ring);
+  srGodRays();
   srRoot = skClone(playerGltf.scene);
   srRoot.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; } });
   srScene.add(srRoot);
@@ -3530,6 +3547,48 @@ function srBuild() {
     if (c) srActions[n] = srMixer.clipAction(c);
   }
   srPlay('rifle aiming idle');
+}
+let srRays = null, srDust = null;
+function srRayTexture() {                // 위는 밝고 아래로 사라지는 그라데이션
+  const cv = document.createElement('canvas'); cv.width = 8; cv.height = 128;
+  const c = cv.getContext('2d');
+  const g2 = c.createLinearGradient(0, 0, 0, 128);
+  g2.addColorStop(0, 'rgba(190,235,255,.55)');
+  g2.addColorStop(0.45, 'rgba(150,215,255,.22)');
+  g2.addColorStop(1, 'rgba(120,200,255,0)');
+  c.fillStyle = g2; c.fillRect(0, 0, 8, 128);
+  return new THREE.CanvasTexture(cv);
+}
+function srGodRays() {                   // 스포트라이트를 따라 내려오는 빛기둥
+  srRays = new THREE.Group();
+  const tex = srRayTexture();
+  const mk = (rTop, rBot, h, x, z, tilt) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 28, 1, true),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.55, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false,
+      }));
+    m.position.set(x, h / 2 - 0.2, z);
+    m.rotation.z = tilt;
+    srRays.add(m);
+    return m;
+  };
+  mk(0.35, 2.1, 5.2, 0.5, 0.9, -0.06);
+  mk(0.22, 1.5, 4.8, -1.1, -0.6, 0.09);
+  mk(0.18, 1.0, 4.4, 0.9, -1.0, -0.12);
+  srScene.add(srRays);
+  const n = 90, pos = new Float32Array(n * 3);   // 빛 속 먼지
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 1.8;
+    pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = 0.2 + Math.random() * 3.4; pos[i * 3 + 2] = Math.sin(a) * r;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  srDust = new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xbfe9ff, size: 0.022, transparent: true, opacity: 0.75, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false,
+  }));
+  srScene.add(srDust);
 }
 function srPlay(name) {
   const next = srActions[name];
@@ -3545,6 +3604,10 @@ function srBoneY(re) {                    // 슬롯이 가리키는 본의 실�
   if (!hit) return null;
   return hit.getWorldPosition(new THREE.Vector3()).y;
 }
+function srClavicleY() {                  // 쇄골(없으면 목·가슴) 높이 — 확대 기준점
+  const y = srBoneY(/clavicle|shoulder(?!.*end)/i) ?? srBoneY(/neck/i) ?? srBoneY(/spine2|spine1/i);
+  return y ?? 1.35;
+}
 function srSelect(slot) {
   srSel = slot.key;
   const y = srBoneY(slot.bone);
@@ -3554,7 +3617,7 @@ function srSelect(slot) {
   srRenderSlots();
 }
 function srReset() {
-  srSel = null; srTarget = { ...SR_FULL };
+  srSel = null; srTarget = { ...SR_FULL }; srPan.x = 0; srPanned = false;
   srPlay('rifle aiming idle');
   srRenderSlots();
 }
@@ -3570,6 +3633,22 @@ function srRenderSlots() {
       const all = [...SR_GEAR, ...SR_WEAR];
       const s = all.find(x => x.key === el.dataset.slot);
       if (s) srSelect(s);
+    });
+  }
+}
+function srRenderPoses() {
+  const el = document.getElementById('srPoses');
+  if (!el) return;
+  el.innerHTML = SR_SPECIAL.map(p =>
+    `<div class="srPose${p.locked ? ' lock' : ''}${srSpecial === p.key ? ' on' : ''}" data-pose="${p.key}" title="${p.name}">${p.icon}</div>`).join('');
+  for (const b of el.querySelectorAll('.srPose')) {
+    b.addEventListener('click', () => {
+      const p = SR_SPECIAL.find(x => x.key === b.dataset.pose);
+      if (!p) return;
+      if (p.locked) { toast('🔒 ' + p.name + ' — 아직 잠겨 있습니다'); return; }
+      srSpecial = p.key;
+      if (p.clip) srPlay(p.clip);
+      srRenderPoses();
     });
   }
 }
@@ -3595,7 +3674,7 @@ function openShowroom() {
   document.getElementById('showroom').classList.add('on');
   document.body.classList.add('showroom');   // 뒤의 타이틀·HUD를 가려 캔버스를 보이게
   shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; optMenu.style.display = 'none';
-  srReset(); srRenderInv(); srSpin = true;
+  srReset(); srRenderInv(); srRenderPoses(); srSpin = true;
 }
 function closeShowroom() {
   srOn = false;
@@ -3608,27 +3687,61 @@ function srUpdate(dt) {
   if (srSpin && !srDrag) srYaw += dt * 0.5;
   srRoot.rotation.y = srYaw;
   srMixer.update(dt);
+  if (srRays) {
+    srRays.rotation.y += dt * 0.06;
+    for (let i = 0; i < srRays.children.length; i++)
+      srRays.children[i].material.opacity = 0.42 + Math.sin(gameTime * (0.7 + i * 0.23) + i) * 0.12;
+  }
+  if (srDust) {
+    const p = srDust.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      let y = p.getY(i) - dt * 0.12;
+      if (y < 0.1) y = 3.6;
+      p.setY(i, y);
+      p.setX(i, p.getX(i) + Math.sin(gameTime * 0.5 + i) * dt * 0.02);
+    }
+    p.needsUpdate = true;
+  }
   srView.y += (srTarget.y - srView.y) * Math.min(1, dt * 6);       // 부드럽게 줌인
   srView.dist += (srTarget.dist - srView.dist) * Math.min(1, dt * 6);
   srCam.aspect = innerWidth / innerHeight;
   srCam.updateProjectionMatrix();
-  srCam.position.set(0, srView.y + srView.dist * 0.12, srView.dist);
-  srCam.lookAt(0, srView.y, 0);
+  srCam.position.set(srPan.x, srView.y + srView.dist * 0.12, srView.dist);
+  srCam.lookAt(srPan.x, srView.y, 0);
   renderer.render(srScene, srCam);
 }
 // 입력: 드래그 회전 · 휠 확대 · 버튼
 (function srBindUI() {
   const sr = document.getElementById('showroom');
+  sr.addEventListener('contextmenu', e => { if (srOn) e.preventDefault(); });
   sr.addEventListener('pointerdown', e => {
     if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop')) return;
+    e.preventDefault();                  // 드래그 중 텍스트가 잡히지 않게
+    if (e.button === 2) { srPanDrag = [e.clientX, e.clientY]; return; }   // 우클릭: 카메라 이동
     srDrag = e.clientX; srSpin = false;
   });
-  addEventListener('pointermove', e => { if (srDrag === null || !srOn) return; srYaw += (e.clientX - srDrag) * 0.01; srDrag = e.clientX; });
-  addEventListener('pointerup', () => srDrag = null);
+  addEventListener('pointermove', e => {
+    if (!srOn) return;
+    if (srPanDrag) {                     // 좌우 = 평행 이동, 상하 = 높이
+      const k = 0.0022 * srView.dist;
+      srPan.x = Math.max(-2.5, Math.min(2.5, srPan.x - (e.clientX - srPanDrag[0]) * k));
+      srTarget.y = Math.max(-0.2, Math.min(3, srTarget.y + (e.clientY - srPanDrag[1]) * k));
+      srPanDrag = [e.clientX, e.clientY];
+      srPanned = true;                   // 직접 옮긴 뒤에는 확대해도 높이를 건드리지 않는다
+      return;
+    }
+    if (srDrag === null) return;
+    srYaw += (e.clientX - srDrag) * 0.01; srDrag = e.clientX;
+  });
+  addEventListener('pointerup', e => { srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null; });
   sr.addEventListener('wheel', e => {
     if (!srOn) return;
     e.preventDefault();
     srTarget.dist = Math.max(0.7, Math.min(6, srTarget.dist + Math.sign(e.deltaY) * 0.25));
+    if (!srSel && !srPanned) {           // 부위를 고르지 않았으면 쇄골을 중심으로 당긴다
+      const k = Math.min(1, Math.max(0, (SR_FULL.dist - srTarget.dist) / (SR_FULL.dist - 0.7)));
+      srTarget.y = SR_FULL.y + (srClavicleY() - SR_FULL.y) * k;
+    }
   }, { passive: false });
   document.getElementById('srClose').addEventListener('click', e => { e.stopPropagation(); closeShowroom(); });
   document.getElementById('srSpin').addEventListener('click', e => { e.stopPropagation(); srSpin = !srSpin; });
@@ -3744,7 +3857,7 @@ window.__game = {
   doors() { return doors.map(d => ({ x: +d.x.toFixed(1), z: +d.z.toFixed(1), open: d.open, sw: [+d.sw.x.toFixed(1), +d.sw.z.toFixed(1)] })); },
   spawnDoors() { return spawnDoors(); },
   reach(x, z) { return reachable(playerStart.x, playerStart.z, x, z); },
-  showroom() { return { on: srOn, sel: srSel, target: srTarget, view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
+  showroom() { return { on: srOn, sel: srSel, target: { y: +srTarget.y.toFixed(2), dist: +srTarget.dist.toFixed(2) }, pan: +srPan.x.toFixed(2), view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
   openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },
   markerInfo() {
