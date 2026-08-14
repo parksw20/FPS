@@ -3521,15 +3521,14 @@ function srBuild() {
   srScene = new THREE.Scene();
   srScene.background = null;
   srCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 60);
-  srScene.add(new THREE.HemisphereLight(0xbcd8ee, 0x121a22, 0.55));
-  const key = new THREE.SpotLight(0xffffff, 90, 14, 0.62, 0.55, 1.6);   // 정면 위 스포트
-  key.position.set(1.6, 4.4, 3.2); key.target.position.set(0, 1.15, 0);
+  // 인게임과 같은 대비를 유지하고(반구광 + 태양광) 스포트는 액센트로만
+  srScene.add(new THREE.HemisphereLight(0x9db2d8, 0x3a4a30, 1.1));
+  const sunL = new THREE.DirectionalLight(0xffeedd, 2.6); sunL.position.set(2.6, 4, 2.4); srScene.add(sunL);
+  const key = new THREE.SpotLight(0xffffff, 45, 16, 0.66, 0.5, 1.2);    // 정면 위 스포트
+  key.position.set(1.2, 4.6, 3.0); key.target.position.set(0, 1.15, 0);
   srScene.add(key, key.target);
-  const fill = new THREE.SpotLight(0x9fd8ff, 45, 14, 0.7, 0.6, 1.6);    // 좌측 채움
-  fill.position.set(-3.2, 3.0, 1.6); fill.target.position.set(0, 1.1, 0);
-  srScene.add(fill, fill.target);
-  const rim = new THREE.SpotLight(0x7fe6ff, 60, 14, 0.6, 0.5, 1.6);     // 뒤 림라이트
-  rim.position.set(-1.6, 3.4, -3.4); rim.target.position.set(0, 1.3, 0);
+  const rim = new THREE.SpotLight(0xdff2ff, 40, 16, 0.6, 0.5, 1.2);     // 뒤 림라이트
+  rim.position.set(-1.6, 3.6, -3.2); rim.target.position.set(0, 1.35, 0);
   srScene.add(rim, rim.target);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(1.7, 48).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: 0x16222c, roughness: 0.5, metalness: 0.35 }));
@@ -3565,7 +3564,7 @@ function srGodRays() {                   // 스포트라이트를 따라 내려�
   const mk = (rTop, rBot, h, x, z, tilt) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 28, 1, true),
       new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, opacity: 0.55, depthWrite: false,
+        map: tex, transparent: true, opacity: 0.38, depthWrite: false,
         blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false,
       }));
     m.position.set(x, h / 2 - 0.2, z);
@@ -3573,9 +3572,7 @@ function srGodRays() {                   // 스포트라이트를 따라 내려�
     srRays.add(m);
     return m;
   };
-  mk(0.35, 2.1, 5.2, 0.5, 0.9, -0.06);
-  mk(0.22, 1.5, 4.8, -1.1, -0.6, 0.09);
-  mk(0.18, 1.0, 4.4, 0.9, -1.0, -0.12);
+  mk(0.3, 1.7, 5.2, 0, -0.5, 0);        // 캐릭터 뒤에서 내려오는 빛기둥 하나
   srScene.add(srRays);
   const n = 90, pos = new Float32Array(n * 3);   // 빛 속 먼지
   for (let i = 0; i < n; i++) {
@@ -3688,9 +3685,9 @@ function srUpdate(dt) {
   srRoot.rotation.y = srYaw;
   srMixer.update(dt);
   if (srRays) {
-    srRays.rotation.y += dt * 0.06;
+    srRays.rotation.y += dt * 0.04;
     for (let i = 0; i < srRays.children.length; i++)
-      srRays.children[i].material.opacity = 0.42 + Math.sin(gameTime * (0.7 + i * 0.23) + i) * 0.12;
+      srRays.children[i].material.opacity = 0.32 + Math.sin(gameTime * 0.7) * 0.07;
   }
   if (srDust) {
     const p = srDust.geometry.attributes.position;
