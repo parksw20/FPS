@@ -469,13 +469,21 @@ function losClear(ax, az, bx, bz) {
   for (let t = 0.4; t < L; t += 0.4) if (cellSolid(ax + dx * t / L, az + dz * t / L)) return false;
   return true;
 }
+const SAFE_T = 10;                      // 층 도착 후 이 시간 동안은 도착한 방에 스폰하지 않는다
+let safeRoom = null, safeUntil = 0;
+function roomAt(x, z) { return mapRects.find(r => r.room && x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) || null; }
+function inSafeRoom(x, z) {
+  if (!safeRoom || gameTime >= safeUntil) return false;
+  return x >= safeRoom.x0 - 1 && x <= safeRoom.x1 + 1 && z >= safeRoom.z0 - 1 && z <= safeRoom.z1 + 1;
+}
 function pickSpawn() {                // 적 스폰 위치 (규칙은 광장과 동일, 위치만 맵에 맞춤)
   if (walkGrid && spawnPoints.length) {
     let best = spawnPoints[0], bestScore = -1e9;
     for (let i = 0; i < 10; i++) {
       const c = spawnPoints[(Math.random() * spawnPoints.length) | 0];
       const d = Math.hypot(c.x - player.pos.x, c.z - player.pos.z);
-      const score = d < 12 ? d - 100 : -Math.abs(d - 28);   // 12m 이상, 28m 부근 선호
+      let score = d < 12 ? d - 100 : -Math.abs(d - 28);     // 12m 이상, 28m 부근 선호
+      if (inSafeRoom(c.x, c.z)) score -= 1000;              // 도착 직후의 방은 피한다
       if (score > bestScore) { bestScore = score; best = c; }
     }
     return { x: best.x + (Math.random() - 0.5) * 3, z: best.z + (Math.random() - 0.5) * 3 };
@@ -675,8 +683,10 @@ function updateHpHud() {
 }
 function renderUpg() {
   const el = document.getElementById('upgList');
+  const items = document.getElementById('itemList');   // 소모품은 아래 줄에 따로
   if (!el) return;
   el.innerHTML = '';
+  if (items) items.innerHTML = '';
   for (const k of Object.keys(upg)) {
     const btn = document.createElement('button');
     btn.innerHTML = `<span>${UPG_NAMES[k]} Lv.${upg[k]} <small>(+${upg[k] * 5}%)</small> <b>${upgCost(k)}🪙</b></span>`;
@@ -698,7 +708,7 @@ function renderUpg() {
     renderUpg();
     persistProgress();
   });
-  el.appendChild(gb);
+  (items || el).appendChild(gb);
   // 지뢰: 정가 150코인, 최대 5개 보유
   const mb2 = document.createElement('button');
   mb2.innerHTML = `<span>🧨 지뢰 +1 <small>(${mines}/${MINE_MAX})</small> <b>${MINE_COST}🪙</b></span>`;
@@ -709,7 +719,7 @@ function renderUpg() {
     document.getElementById('coinN').textContent = coins;
     updateMineSlot(); sfxPotion(); renderUpg(); persistProgress();
   });
-  el.appendChild(mb2);
+  (items || el).appendChild(mb2);
   const cn = document.getElementById('shopCoinN');
   if (cn) cn.textContent = coins;
 }
@@ -2126,11 +2136,12 @@ function populateRooms() {               // 빈 방이 없도록 면적 비례 �
       if (!ok) continue;
       total++;
       const px = x, pz = z;
+      const wait = inSafeRoom(px, pz) ? SAFE_T * 1000 : 0;  // 도착한 방은 유예 뒤에 채운다
       setTimeout(() => {                 // 한 번에 만들면 끊기니 조금씩
         if (player.dead) return;
         const e = spawnEnemy(floorNo, floorEnemyKind());
         if (e) e.root.position.set(px, 0, pz);
-      }, delay += 45);
+      }, wait + (delay += 45));
     }
   }
   return total;
@@ -2139,6 +2150,8 @@ function startFloor() {                  // 층 시작 시 개체 배치
   spawnCd = 2.5;
   lastKillClock = gameTime;
   bossOfFloor = null;
+  safeRoom = roomAt(playerStart.x, playerStart.z);   // 도착한 방은 10초간 무스폰
+  safeUntil = gameTime + SAFE_T;
   populateRooms();
   if (floorNo % 5 === 0) {               // 5층마다 보스 — 포탈 방을 지킨다
     setTimeout(() => {
@@ -2236,9 +2249,13 @@ function roomSpawnTick(dt) {
     for (let i = 0; i < 2; i++) {
       const e = spawnEnemy(floorNo, floorEnemyKind());
       if (!e) continue;
-      const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 6;
-      const x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
-      if (!cellSolid(x, z)) e.root.position.set(x, 0, z);
+      for (let t = 0; t < 8; t++) {
+        const a = Math.random() * Math.PI * 2, r = 14 + Math.random() * 6;
+        const x = player.pos.x + Math.cos(a) * r, z = player.pos.z + Math.sin(a) * r;
+        if (cellSolid(x, z) || inSafeRoom(x, z)) continue;
+        e.root.position.set(x, 0, z);
+        break;
+      }
     }
     toast('적 증원!');
   }
@@ -2484,6 +2501,8 @@ document.getElementById('briefGo').addEventListener('click', e => {
 });
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
 document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; paused = false; restart(true); });
+document.getElementById('optClose').addEventListener('click', e => { e.stopPropagation(); optMenu.style.display = 'none'; });
+optMenu.addEventListener('click', e => { if (e.target === optMenu) optMenu.style.display = 'none'; });  // 바깥 클릭으로 닫기
 document.getElementById('btnOptions').addEventListener('click', e => {
   e.stopPropagation();
   optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
@@ -3117,6 +3136,7 @@ window.__game = {
       grenades, gMode, slot, markers: markers.length, projSpeed: projectiles[0] ? +projectiles[0].vel.length().toFixed(2) : null, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
+      safeRoom: safeRoom ? { until: +Math.max(0, safeUntil - gameTime).toFixed(1) } : null,
       floorNo, floorTime: +floorTime.toFixed(1), portalTravel, cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
       portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1), locked: !!portal.locked } : null,
       hunter: hunter ? { pos: hunter.root.position.toArray().map(v => +v.toFixed(1)), speed: +hunter.speed.toFixed(1), stunAcc: hunter.stunAcc, stunT: +hunter.stunT.toFixed(2) } : null,

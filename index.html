@@ -197,9 +197,14 @@
   #optBtn{position:fixed; right:18px; top:74px; z-index:40; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.7); border:1px solid rgba(126,224,163,.35); border-radius:10px; padding:10px 16px; color:#9fb0c4; font-size:.95rem; user-select:none}
   #optBtn:hover{color:#e8edf4; border-color:#7ee0a3}
-  #optMenu{position:fixed; right:18px; top:122px; z-index:40; pointer-events:auto; display:none;
-    background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 20px; color:#eaf9ff; min-width:240px;
-    box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
+  #optMenu{position:fixed; inset:0; z-index:41; pointer-events:auto; display:none;
+    background:rgba(3,8,12,.72); backdrop-filter:blur(3px); color:#eaf9ff}
+  #optPanel{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); min-width:min(380px,88vw); max-height:86vh; overflow:auto;
+    background:rgba(4,16,24,.95); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:22px 26px;
+    box-shadow:0 0 30px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
+  #optPanel .optTitle{font-size:1.05rem; letter-spacing:.28em; color:#7df3ff; text-align:center; margin:0 0 14px;
+    text-shadow:0 0 12px rgba(64,214,255,.8)}
+  #optClose{display:block; width:100%; margin-top:18px; text-align:center}
   #optMenu h3{font-size:.8rem; letter-spacing:.15em; color:#7df3ff; margin:10px 0 6px; text-transform:uppercase; text-shadow:0 0 8px rgba(64,214,255,.6)}
   #optMenu h3:first-child{margin-top:0}
   #optMenu .optRow{display:flex; gap:8px; flex-wrap:wrap}
@@ -208,21 +213,27 @@
   #optMenu button:hover{border-color:#7df3ff; background:rgba(64,214,255,.15)}
   #optMenu button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700; box-shadow:0 0 16px rgba(64,224,255,.7)}
   #shopMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
-    background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:16px 22px; color:#eaf9ff; text-align:center;
+    background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:18px 24px; color:#eaf9ff; text-align:center;
+    font-size:20px; max-width:min(96vw,1500px); box-sizing:border-box;
     box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
-  #shopMenu h3{font-size:1.05rem; letter-spacing:.15em; color:#7df3ff; margin-bottom:8px; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
-  #shopCoins{font-size:1.15rem; color:#9fb0c4; margin-bottom:10px}
+  #shopMenu h3{font-size:1.15em; letter-spacing:.15em; color:#7df3ff; margin-bottom:8px; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
+  #shopCoins{font-size:1.05em; color:#9fb0c4; margin-bottom:12px}
   #shopCoins b{color:#ffd76b; font-variant-numeric:tabular-nums}
-  #shopMenu .shopHint{margin-top:10px; font-size:.95rem; color:#9fb0c4}
+  #shopMenu .shopHint{margin-top:12px; font-size:.8em; color:#9fb0c4}
+  #itemList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center;
+    margin-top:14px; padding-top:12px; border-top:1px dashed rgba(64,214,255,.25)}
+  #itemLabel{font-size:.75em; letter-spacing:.25em; color:#7aa8bd; margin-bottom:8px}
   #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center}
-  #upgList button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.55); border-radius:8px;
-    padding:11px 18px; color:#eaf9ff; font-size:1.1rem; cursor:pointer; text-align:center;
+  #upgList button, #itemList button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.55); border-radius:8px;
+    padding:12px 20px; color:#eaf9ff; font-size:1em; cursor:pointer; text-align:center;
     box-shadow:0 0 10px rgba(64,214,255,.25), inset 0 0 8px rgba(64,214,255,.08)}
-  #upgList button>span{display:inline-block; transform:skewX(8deg)}
-  #upgList button b{color:#ffd76b; display:block; margin-top:3px}
-  #upgList button small{color:#9fb0c4}
-  #upgList button:hover:not(:disabled){border-color:#7df3ff; background:rgba(64,214,255,.18); box-shadow:0 0 18px rgba(64,214,255,.5)}
-  #upgList button:disabled{opacity:.4; cursor:default}
+  #upgList button>span, #itemList button>span{display:inline-block; transform:skewX(8deg)}
+  #upgList button b, #itemList button b{color:#ffd76b; display:block; margin-top:3px}
+  #upgList button small, #itemList button small{color:#9fb0c4; font-size:.8em}
+  #upgList button:hover:not(:disabled), #itemList button:hover:not(:disabled){border-color:#7df3ff; background:rgba(64,214,255,.18); box-shadow:0 0 18px rgba(64,214,255,.5)}
+  #upgList button:disabled, #itemList button:disabled{opacity:.4; cursor:default}
+  #itemList button{border-color:rgba(255,180,90,.5); box-shadow:0 0 10px rgba(255,170,80,.2), inset 0 0 8px rgba(255,170,80,.08)}
+  #itemList button:hover:not(:disabled){border-color:#ffc078; background:rgba(255,170,80,.16); box-shadow:0 0 18px rgba(255,170,80,.45)}
   #rankList{margin-top:14px; text-align:left; min-width:250px}
   #rankList h3{font-size:.8rem; letter-spacing:.2em; color:#9fb0c4; margin-bottom:6px; text-align:center}
   .rankRow{display:flex; gap:8px; align-items:baseline; padding:3px 6px; border-radius:6px; font-variant-numeric:tabular-nums}
@@ -291,6 +302,8 @@
 <div id="aura"></div>
 <div id="optBtn">⚙ 옵션</div>
 <div id="optMenu">
+  <div id="optPanel">
+  <p class="optTitle">옵션</p>
   <h3>시점</h3>
   <div class="optRow">
     <button data-view="fps">1인칭</button>
@@ -308,11 +321,14 @@
       <button id="dbgWave">웨이브 스킵</button>
     </div>
   </div>
+  <button id="optClose">닫기</button>
+  </div>
 </div>
 <div id="shopMenu">
   <h3>업그레이드 상점</h3>
   <div id="shopCoins">보유 코인: <b id="shopCoinN">0</b> 🪙</div>
   <div id="upgList"></div>
+  <div id="itemList"></div>
   <p class="shopHint">레벨당 기본 성능 +5% · 킬로 코인 획득</p>
 </div>
 <div id="mobileUI">
