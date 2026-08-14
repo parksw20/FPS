@@ -2585,7 +2585,10 @@ document.getElementById('kSlot').addEventListener('pointerdown', e => { e.stopPr
 
 // 디버그 버튼 — 로컬(localhost/127.*)에서만 노출
 const IS_LOCAL = /^(localhost|127\.|\[::1\])/.test(location.hostname) || location.hostname.endsWith('.local');
-if (!IS_LOCAL) document.getElementById('dbgWrap').style.display = 'none';
+if (!IS_LOCAL) {
+  document.getElementById('dbgWrap').style.display = 'none';
+  document.getElementById('startShowroom').style.display = 'none';   // 쇼룸은 디버그 전용
+}
 document.getElementById('dbgCoins').addEventListener('click', e => {
   e.stopPropagation();
   coins += 1000000;
@@ -3468,8 +3471,177 @@ function tick() {
     p.m.position.addScaledVector(p.v, dt);
     if (p.life <= 0 || p.m.position.y < 0) { scene.remove(p.m); particles.splice(i, 1); }
   }
+  if (srOn) { srUpdate(dt); return; }
   renderer.render(scene, camera);
 }
+
+// ---------- 쇼룸 (디버그 전용): 캐릭터를 세워두고 파츠 슬롯을 살펴본다 ----------
+// 파츠는 아직 나뉘어 있지 않아서 슬롯은 자리만 잡아두고, 카메라 줌·포즈로 부위를 보여준다.
+const SR_GEAR = [
+  { key: 'gun', name: '총', icon: '🔫', bone: /hand.*r|righthand/i, y: 1.25, dist: 1.5, clip: 'firing rifle' },
+  { key: 'grenade', name: '수류탄', icon: '💣', bone: /hand.*l|lefthand/i, y: 1.2, dist: 1.4, clip: 'toss grenade' },
+  { key: 'mine', name: '지뢰', icon: '🧨', bone: /hips|spine$/i, y: 0.95, dist: 1.6, clip: 'reloading' },
+];
+const SR_WEAR = [
+  { key: 'head', name: '머리', icon: '🎧', bone: /head/i, y: 1.62, dist: 0.9, clip: 'rifle aiming idle' },
+  { key: 'top', name: '상의', icon: '👕', bone: /spine2|spine1|spine$/i, y: 1.35, dist: 1.3, clip: 'strafe' },
+  { key: 'bottom', name: '하의', icon: '🩳', bone: /hips/i, y: 0.9, dist: 1.4, clip: 'walking' },
+  { key: 'glove', name: '장갑', icon: '🧤', bone: /forearm.*l|lowerarm.*l|hand.*l/i, y: 1.1, dist: 1.0, clip: 'reloading' },
+  { key: 'boots', name: '부츠', icon: '👟', bone: /foot.*l|leg.*l/i, y: 0.25, dist: 1.2, clip: 'rifle run' },
+];
+const SR_INV = {                          // 지금은 기본 파츠만 (교체 시스템은 이후)
+  gear: [
+    { key: 'gun', icon: '🔫', name: '기본 소총' }, { key: 'grenade', icon: '💣', name: '기본 수류탄' },
+    { key: 'mine', icon: '🧨', name: '기본 지뢰' },
+  ],
+  wear: [
+    { key: 'head', icon: '🎧', name: '기본 머리' }, { key: 'top', icon: '👕', name: '기본 상의' },
+    { key: 'bottom', icon: '🩳', name: '기본 하의' }, { key: 'glove', icon: '🧤', name: '기본 장갑' },
+    { key: 'boots', icon: '👟', name: '기본 부츠' },
+  ],
+};
+const srEquip = { gun: '기본 소총', grenade: '기본 수류탄', mine: '기본 지뢰', head: '기본 머리', top: '기본 상의', bottom: '기본 하의', glove: '기본 장갑', boots: '기본 부츠' };
+let srOn = false, srScene = null, srCam = null, srRoot = null, srMixer = null, srActions = {}, srCurrent = null;
+let srYaw = 0, srSpin = true, srDrag = null, srSel = null, srTab = 'gear';
+const SR_FULL = { y: 0.95, dist: 4.2 };
+let srTarget = { ...SR_FULL }, srView = { ...SR_FULL };
+const SR_POSES = ['rifle aiming idle', 'walking', 'strafe', 'reloading', 'toss grenade'];
+let srPose = 0;
+function srBuild() {
+  if (srScene || !playerGltf) return;
+  srScene = new THREE.Scene();
+  srScene.background = null;
+  srCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 60);
+  srScene.add(new THREE.HemisphereLight(0xcfe6ff, 0x20303c, 1.1));
+  const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(2.4, 4, 3); srScene.add(key);
+  const rim = new THREE.DirectionalLight(0x7fd8ff, 1.5); rim.position.set(-3, 2.2, -2.4); srScene.add(rim);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: 0x16222c, roughness: 0.55, metalness: 0.3 }));
+  srScene.add(disc);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.03, 8, 64).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x39f6ff, fog: false, toneMapped: false }));
+  ring.position.y = 0.01; srScene.add(ring);
+  srRoot = skClone(playerGltf.scene);
+  srRoot.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; } });
+  srScene.add(srRoot);
+  srMixer = new THREE.AnimationMixer(srRoot);
+  for (const n of [...SR_POSES, 'rifle run', 'firing rifle']) {
+    const c = clipOf(playerGltf, n);
+    if (c) srActions[n] = srMixer.clipAction(c);
+  }
+  srPlay('rifle aiming idle');
+}
+function srPlay(name) {
+  const next = srActions[name];
+  if (!next || srCurrent === next) return;
+  next.enabled = true; next.reset().play();
+  if (srCurrent) srCurrent.crossFadeTo(next, 0.25, false);
+  srCurrent = next;
+}
+function srBoneY(re) {                    // 슬롯이 가리키는 본의 실제 높이
+  if (!srRoot || !re) return null;
+  let hit = null;
+  srRoot.traverse(o => { if (!hit && o.isBone && re.test(o.name) && !/end/i.test(o.name)) hit = o; });
+  if (!hit) return null;
+  return hit.getWorldPosition(new THREE.Vector3()).y;
+}
+function srSelect(slot) {
+  srSel = slot.key;
+  const y = srBoneY(slot.bone);
+  srTarget = { y: y ?? slot.y, dist: slot.dist };
+  srSpin = false;
+  srPlay(slot.clip);                      // 파츠별 전용 모션 (지금은 기존 클립으로 대체)
+  srRenderSlots();
+}
+function srReset() {
+  srSel = null; srTarget = { ...SR_FULL };
+  srPlay('rifle aiming idle');
+  srRenderSlots();
+}
+function srSlotHtml(list) {
+  return list.map(s => `<div class="srSlot${srSel === s.key ? ' sel' : ''}" data-slot="${s.key}">
+    <div class="ic">${s.icon}</div><div class="nm">${s.name}</div><div class="eq">${srEquip[s.key] ?? '-'}</div></div>`).join('');
+}
+function srRenderSlots() {
+  document.getElementById('srGear').innerHTML = srSlotHtml(SR_GEAR);
+  document.getElementById('srWear').innerHTML = srSlotHtml(SR_WEAR);
+  for (const el of document.querySelectorAll('#srLeft .srSlot')) {
+    el.addEventListener('click', () => {
+      const all = [...SR_GEAR, ...SR_WEAR];
+      const s = all.find(x => x.key === el.dataset.slot);
+      if (s) srSelect(s);
+    });
+  }
+}
+function srRenderInv() {
+  const el = document.getElementById('srInv');
+  el.innerHTML = SR_INV[srTab].map(it =>
+    `<div class="srItem${srEquip[it.key] === it.name ? ' on' : ''}" data-item="${it.key}">${it.icon}<span>${it.name}</span></div>`).join('');
+  for (const b of el.querySelectorAll('.srItem')) {
+    b.addEventListener('click', () => {
+      const all = [...SR_GEAR, ...SR_WEAR];
+      const s = all.find(x => x.key === b.dataset.item);
+      if (s) srSelect(s);                 // 아직 교체 대상이 없어 미리보기만
+      toast('현재는 기본 파츠만 있습니다');
+    });
+  }
+  for (const t of document.querySelectorAll('#srTabs button'))
+    t.classList.toggle('on', t.dataset.tab === srTab);
+}
+function openShowroom() {
+  srBuild();
+  if (!srScene) { toast('모델 로딩 중입니다'); return; }
+  srOn = true;
+  document.getElementById('showroom').classList.add('on');
+  document.body.classList.add('showroom');   // 뒤의 타이틀·HUD를 가려 캔버스를 보이게
+  shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; optMenu.style.display = 'none';
+  srReset(); srRenderInv(); srSpin = true;
+}
+function closeShowroom() {
+  srOn = false;
+  document.getElementById('showroom').classList.remove('on');
+  document.body.classList.remove('showroom');
+  refreshOverlay();
+}
+function srUpdate(dt) {
+  if (!srOn || !srScene) return;
+  if (srSpin && !srDrag) srYaw += dt * 0.5;
+  srRoot.rotation.y = srYaw;
+  srMixer.update(dt);
+  srView.y += (srTarget.y - srView.y) * Math.min(1, dt * 6);       // 부드럽게 줌인
+  srView.dist += (srTarget.dist - srView.dist) * Math.min(1, dt * 6);
+  srCam.aspect = innerWidth / innerHeight;
+  srCam.updateProjectionMatrix();
+  srCam.position.set(0, srView.y + srView.dist * 0.12, srView.dist);
+  srCam.lookAt(0, srView.y, 0);
+  renderer.render(srScene, srCam);
+}
+// 입력: 드래그 회전 · 휠 확대 · 버튼
+(function srBindUI() {
+  const sr = document.getElementById('showroom');
+  sr.addEventListener('pointerdown', e => {
+    if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop')) return;
+    srDrag = e.clientX; srSpin = false;
+  });
+  addEventListener('pointermove', e => { if (srDrag === null || !srOn) return; srYaw += (e.clientX - srDrag) * 0.01; srDrag = e.clientX; });
+  addEventListener('pointerup', () => srDrag = null);
+  sr.addEventListener('wheel', e => {
+    if (!srOn) return;
+    e.preventDefault();
+    srTarget.dist = Math.max(0.7, Math.min(6, srTarget.dist + Math.sign(e.deltaY) * 0.25));
+  }, { passive: false });
+  document.getElementById('srClose').addEventListener('click', e => { e.stopPropagation(); closeShowroom(); });
+  document.getElementById('srSpin').addEventListener('click', e => { e.stopPropagation(); srSpin = !srSpin; });
+  document.getElementById('srReset').addEventListener('click', e => { e.stopPropagation(); srReset(); });
+  document.getElementById('srPose').addEventListener('click', e => {
+    e.stopPropagation();
+    srPose = (srPose + 1) % SR_POSES.length;
+    srPlay(SR_POSES[srPose]);
+  });
+  for (const t of document.querySelectorAll('#srTabs button'))
+    t.addEventListener('click', e => { e.stopPropagation(); srTab = t.dataset.tab; srRenderInv(); });
+  document.getElementById('startShowroom').addEventListener('click', e => { e.stopPropagation(); openShowroom(); });
+})();
 
 // ---------- boot ----------
 (async function boot() {
@@ -3572,6 +3744,7 @@ window.__game = {
   doors() { return doors.map(d => ({ x: +d.x.toFixed(1), z: +d.z.toFixed(1), open: d.open, sw: [+d.sw.x.toFixed(1), +d.sw.z.toFixed(1)] })); },
   spawnDoors() { return spawnDoors(); },
   reach(x, z) { return reachable(playerStart.x, playerStart.z, x, z); },
+  showroom() { return { on: srOn, sel: srSel, target: srTarget, view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
   openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },
   markerInfo() {

@@ -142,6 +142,44 @@
   .menuBtn.primary span{font-size:1.5rem; color:#ffffff}
   @keyframes menuPulse{0%,100%{box-shadow:0 0 22px rgba(80,225,255,.55), inset 0 0 16px rgba(80,225,255,.2)}
     50%{box-shadow:0 0 38px rgba(80,225,255,.95), inset 0 0 24px rgba(80,225,255,.35)}}
+  /* 쇼룸 (디버그 전용) */
+  #showroom{position:fixed; inset:0; display:none; z-index:22; color:#eaf9ff;
+    background:radial-gradient(circle at 50% 40%, rgba(12,26,36,.55), rgba(3,8,12,.94) 70%)}
+  #showroom.on{display:block}
+  body.showroom #start, body.showroom #hud, body.showroom #optBtn{display:none !important}
+  #srTop{position:absolute; left:0; right:0; top:0; display:flex; align-items:center; justify-content:center; gap:16px; padding:16px}
+  #srTop h3{font-size:1.05rem; letter-spacing:.34em; color:#7df3ff; margin:0; text-shadow:0 0 12px rgba(64,214,255,.8)}
+  #srClose{position:absolute; right:18px; top:14px; width:150px; text-align:center}
+  .srPanel{position:absolute; top:84px; bottom:92px; width:min(280px,26vw); overflow:auto;
+    background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.3); border-radius:10px; padding:14px}
+  #srLeft{left:24px}
+  #srRight{right:24px}
+  .srHead{font-size:.72rem; letter-spacing:.24em; color:#7aa8bd; margin:4px 0 8px}
+  .srSlot{display:flex; align-items:center; gap:10px; padding:9px 10px; margin-bottom:7px; cursor:pointer;
+    background:rgba(8,20,28,.8); border:1.5px solid rgba(64,214,255,.28); border-radius:8px}
+  .srSlot:hover{border-color:#7df3ff; background:rgba(64,214,255,.14)}
+  .srSlot.sel{border-color:#7df3ff; background:rgba(64,214,255,.2); box-shadow:0 0 14px rgba(64,214,255,.4)}
+  .srSlot .ic{width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:1.15rem;
+    background:rgba(4,12,18,.9); border:1px solid rgba(120,200,230,.25); border-radius:6px}
+  .srSlot .nm{font-size:.9rem; font-weight:700}
+  .srSlot .eq{margin-left:auto; font-size:.75rem; color:#9fb0c4}
+  #srTabs{display:flex; gap:8px; margin-bottom:10px}
+  #srTabs button{flex:1; padding:7px 0; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
+  #srTabs button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
+  #srInv{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+  .srItem{aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer;
+    background:rgba(8,20,28,.8); border:1.5px solid rgba(64,214,255,.22); border-radius:8px; font-size:1.3rem}
+  .srItem span{font-size:.6rem; color:#9fb0c4; letter-spacing:.04em}
+  .srItem:hover{border-color:#7df3ff; background:rgba(64,214,255,.14)}
+  .srItem.on{border-color:#ffd76b; box-shadow:0 0 14px rgba(255,215,107,.4)}
+  #srBottom{position:absolute; left:50%; bottom:26px; transform:translateX(-50%); display:flex; gap:10px; align-items:center}
+  #srBottom .srBtn{padding:9px 16px; cursor:pointer; font-size:.85rem; color:#bfe9f7; border-radius:8px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
+  #srBottom .srBtn:hover{border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  #srHint{position:absolute; left:50%; bottom:6px; transform:translateX(-50%); font-size:.72rem; color:#7aa8bd}
+  #srName{position:absolute; left:50%; top:56px; transform:translateX(-50%); font-size:.78rem; letter-spacing:.2em; color:#9fb0c4}
+  @media (max-width:900px){ .srPanel{width:40vw; padding:10px} .srSlot .nm{font-size:.78rem} }
   /* 시작 전 맵 선택 */
   #mapPick{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:22px;
     background:rgba(3,8,12,.72); backdrop-filter:blur(3px); z-index:20; overflow:auto; padding:24px 12px; box-sizing:border-box}
@@ -346,6 +384,30 @@
   <button id="optClose">닫기</button>
   </div>
 </div>
+<div id="showroom">
+  <div id="srTop"><h3>쇼 룸</h3></div>
+  <div id="srName">ARENA OPERATOR</div>
+  <div class="menuBtn" id="srClose"><span>◂&nbsp; 닫기</span></div>
+  <div class="srPanel" id="srLeft">
+    <div class="srHead">장비</div>
+    <div id="srGear"></div>
+    <div class="srHead">의상</div>
+    <div id="srWear"></div>
+  </div>
+  <div class="srPanel" id="srRight">
+    <div id="srTabs">
+      <button data-tab="gear" class="on">장비</button>
+      <button data-tab="wear">의상</button>
+    </div>
+    <div id="srInv"></div>
+  </div>
+  <div id="srBottom">
+    <div class="srBtn" id="srSpin">회전 ⟳</div>
+    <div class="srBtn" id="srPose">포즈 바꾸기</div>
+    <div class="srBtn" id="srReset">전신 보기</div>
+  </div>
+  <div id="srHint">드래그로 회전 · 휠로 확대 · 좌측 슬롯을 누르면 해당 부위를 비춥니다</div>
+</div>
 <div id="shopMenu">
   <h3>업그레이드 상점</h3>
   <div id="shopCoins">보유 코인: <b id="shopCoinN">0</b> 🪙</div>
@@ -369,6 +431,7 @@
     <div class="menuBtn primary" id="btnStart"><span>▶&nbsp; 게임 시작</span></div>
     <div class="menuBtn" id="startShop"><span>🛒&nbsp; 상점</span></div>
     <div class="menuBtn" id="startRank"><span>🏆&nbsp; 랭킹</span></div>
+    <div class="menuBtn" id="startShowroom"><span>🧍&nbsp; 쇼룸</span></div>
     <div class="menuBtn" id="btnOptions"><span>⚙&nbsp; 옵션</span></div>
   </div>
   <div id="startKeys">
