@@ -3512,6 +3512,7 @@ const FURN = {
   rug: { name: '러그', icon: '🟥', w: 1.6, d: 1.1, h: 0.02, color: 0x7a2f3a },
   locker: { name: '락커', icon: '🚪', w: 0.8, d: 0.5, h: 2.0, color: 0x39505f },
   banner: { name: '배너', icon: '🎌', w: 0.9, d: 0.08, h: 1.8, color: 0x2b6f8f, glow: true },
+  door: { name: '문', icon: '🚪', w: 1.1, d: 0.16, h: 2.1, color: 0x6b5a44, wall: true },
 };
 // 창밖 풍경 — 캔버스로 그린 원경 + 실내 조명 색
 const BG_LIST = [
@@ -3608,61 +3609,6 @@ function bgTexture(key) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-function buildBackdrop() {
-  const bg = BG_LIST.find(b => b.key === curRoom().bg) ?? BG_LIST[0];
-  if (srBackdrop) { srScene.remove(srBackdrop); srBackdrop.material.map?.dispose(); srBackdrop.geometry.dispose(); }
-  const geo = new THREE.CylinderGeometry(26, 26, 15, 40, 1, true, Math.PI * 0.55, Math.PI * 0.9);
-  srBackdrop = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-    map: bgTexture(bg.key), side: THREE.BackSide, fog: false, toneMapped: false, depthWrite: false,
-  }));
-  srBackdrop.position.set(0, 4, 0);
-  srScene.add(srBackdrop);
-  if (!srBgLight) { srBgLight = new THREE.DirectionalLight(0xffffff, 0.9); srBgLight.position.set(0, 3, -6); srScene.add(srBgLight); }
-  srBgLight.color.setHex(bg.tint);       // 창으로 들어오는 빛 색
-}
-function buildRoom() {                   // 바닥 · 벽(뒤는 창) · 격자
-  if (!srScene) return;
-  if (srRoomGrp) srScene.remove(srRoomGrp);
-  srRoomGrp = new THREE.Group();
-  const S = curRoom().size, h = ROOM_H;
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(S, 0.12, S),
-    new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.85, metalness: 0.1 }));
-  floor.position.y = -0.06;
-  srRoomGrp.add(floor);
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x39434f, roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
-  const panel = (w, hh, x, y, z, ry) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallMat);
-    m.position.set(x, y, z); m.rotation.y = ry;
-    srRoomGrp.add(m);
-  };
-  panel(S, h, -S / 2, h / 2, 0, Math.PI / 2);     // 좌
-  panel(S, h, S / 2, h / 2, 0, -Math.PI / 2);     // 우
-  // 뒷벽: 가운데를 뚫어 창을 낸다
-  const winW = Math.min(S * 0.62, 4), winB = 0.9, winT = 2.5, side = (S - winW) / 2;
-  panel(side, h, -(S - side) / 2, h / 2, -S / 2, 0);
-  panel(side, h, (S - side) / 2, h / 2, -S / 2, 0);
-  panel(winW, winB, 0, winB / 2, -S / 2, 0);
-  panel(winW, h - winT, 0, (h + winT) / 2, -S / 2, 0);
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c242e, roughness: 0.6, metalness: 0.4 });
-  srRoomGrp.add(new THREE.Mesh(new THREE.BoxGeometry(winW + 0.12, 0.08, 0.14), frameMat).translateY(winB).translateZ(-S / 2));
-  srRoomGrp.add(new THREE.Mesh(new THREE.BoxGeometry(winW + 0.12, 0.08, 0.14), frameMat).translateY(winT).translateZ(-S / 2));
-  const trimMat = new THREE.MeshBasicMaterial({ color: 0x39f6ff, fog: false, toneMapped: false });
-  for (const [w, d, x, z] of [[S, 0.04, 0, -S / 2], [0.04, S, -S / 2, 0], [0.04, S, S / 2, 0], [S, 0.04, 0, S / 2]]) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, d), trimMat);
-    t.position.set(x, 0.015, z);
-    srRoomGrp.add(t);
-  }
-  srGridHelp = new THREE.GridHelper(S, Math.round(S / GRID), 0x39f6ff, 0x2a4450);
-  srGridHelp.material.opacity = 0.18; srGridHelp.material.transparent = true;
-  srGridHelp.position.y = 0.012; srGridHelp.visible = false;
-  srRoomGrp.add(srGridHelp);
-  srScene.add(srRoomGrp);
-  SR_FULL.dist = Math.max(4.2, S * 0.85 + 1.8);
-  SR_FULL.y = 1.0;
-  srReset();
-  buildBackdrop();
-  rebuildFurniture();
-}
 function furnMesh(type) {
   const f = FURN[type];
   const grp = new THREE.Group();
@@ -3689,19 +3635,6 @@ function furnMesh(type) {
   grp.userData.type = type;
   return grp;
 }
-function rebuildFurniture() {
-  if (srFurnGrp) srScene.remove(srFurnGrp);
-  srFurnGrp = new THREE.Group();
-  for (const it of curRoom().items) {
-    const m = furnMesh(it.type);
-    m.position.set(it.x, 0, it.z);
-    m.rotation.y = it.rot * Math.PI / 2;
-    m.userData.item = it;
-    srFurnGrp.add(m);
-  }
-  srScene.add(srFurnGrp);
-  syncOutline();
-}
 function syncOutline() {                 // 선택한 가구에 외곽선
   if (srOutline) { srScene.remove(srOutline); srOutline = null; }
   if (!srPickSel || !srFurnGrp) return;
@@ -3718,6 +3651,12 @@ function footprint(type, rot) {
 }
 function snapPos(type, rot, x, z) {       // 10cm 격자 + 벽·가구 마그넷
   const S = curRoom().size, fp = footprint(type, rot);
+  if (FURN[type].wall) {                 // 문은 좌·우 벽에 붙는다
+    const sx = x >= 0 ? 1 : -1;
+    const lim = S / 2 - DOOR_W / 2 - 0.2;
+    const pz = Math.max(-lim, Math.min(lim, Math.round(z / GRID) * GRID));
+    return { x: +(sx * S / 2).toFixed(2), z: +pz.toFixed(2) };
+  }
   let px = Math.round(x / GRID) * GRID, pz = Math.round(z / GRID) * GRID;
   const lim = { x: S / 2 - fp.w / 2, z: S / 2 - fp.d / 2 };
   px = Math.max(-lim.x, Math.min(lim.x, px));
@@ -3773,7 +3712,7 @@ function cancelPlace() {
 function commitPlace() {
   if (!placeType || !placeGhost) return;
   curRoom().items.push({ type: placeType, x: +placeGhost.position.x.toFixed(2), z: +placeGhost.position.z.toFixed(2), rot: placeRot });
-  roomSave(); rebuildFurniture();
+  roomSave(); buildFurnitureAll();
   sfxTone(700, 0.07, 'sine', 0.1);
   toast(FURN[placeType].name + ' 배치');
 }
@@ -3796,7 +3735,7 @@ function removeSelected() {
   const arr = curRoom().items, i = arr.indexOf(srPickSel);
   if (i >= 0) arr.splice(i, 1);
   setSel(null);
-  roomSave(); rebuildFurniture(); hideCtx();
+  roomSave(); buildFurnitureAll(); hideCtx();
   toast('가구 제거');
 }
 function rotateCurrent() {
@@ -3805,7 +3744,7 @@ function rotateCurrent() {
     srPickSel.rot = (srPickSel.rot + 1) % 4;
     const p = snapPos(srPickSel.type, srPickSel.rot, srPickSel.x, srPickSel.z);
     srPickSel.x = p.x; srPickSel.z = p.z;
-    roomSave(); rebuildFurniture();
+    roomSave(); buildFurnitureAll();
     return;
   }
   toast('회전할 가구를 고르세요');
@@ -3813,7 +3752,7 @@ function rotateCurrent() {
 function clearRoom() {
   if (!curRoom().items.length) { toast('이미 비어 있습니다'); return; }
   curRoom().items.length = 0;
-  setSel(null); roomSave(); rebuildFurniture();
+  setSel(null); roomSave(); buildFurnitureAll();
   toast('🧹 방을 비웠습니다');
 }
 function buyRoom(size) {
@@ -3835,7 +3774,7 @@ function buyRoom(size) {
     it.z = Math.max(-(size / 2 - fp.d / 2), Math.min(size / 2 - fp.d / 2, it.z));
     return fp.w <= size && fp.d <= size;
   });
-  roomSave(); buildRoom(); roomRenderUI();
+  roomSave(); buildWorld(); roomRenderUI();
 }
 function addRoomSlot() {
   if (coins < SLOT_COST) { toast('코인이 부족합니다 (' + SLOT_COST + '🪙)'); return; }
@@ -3844,24 +3783,46 @@ function addRoomSlot() {
   persistProgress();
   roomStore.slots.push({ name: 'ROOM ' + (roomStore.slots.length + 1), size: 3, bg: 'forest', items: [] });
   roomStore.cur = roomStore.slots.length - 1;
-  roomSave(); buildRoom(); roomRenderUI();
+  roomSave(); buildWorld(); roomRenderUI();
   toast('🏠 새 방을 구매했습니다');
 }
 function loadRoomSlot(i) {
   if (!roomStore.slots[i] || i === roomStore.cur) { roomStore.cur = i; }
   roomStore.cur = i;
   setSel(null); cancelPlace();
-  roomSave(); buildRoom(); roomRenderUI();
+  roomSave(); buildWorld(); roomRenderUI();
   toast('📂 ' + curRoom().name + ' 불러옴');
 }
 function setBg(key) {
   curRoom().bg = key;
-  roomSave(); buildBackdrop(); roomRenderUI();
+  roomSave(); buildWorld(); roomRenderUI();
 }
 // ---- 커서 컨텍스트 메뉴 ----
+function ctxLinkHtml() {                 // 문: 어떤 방과 이을지
+  if (!srPickSel || srPickSel.type !== 'door') return '';
+  return '<div class="ctxHead">연결할 방</div>' + roomStore.slots.map((sl, i) =>
+    i === roomStore.cur ? '' : `<button data-link="${i}"${srPickSel.link === i ? ' class="on"' : ''}>🚪 ${sl.name}</button>`).join('')
+    + (roomStore.slots.length < 2 ? '<div class="ctxHead">방이 하나뿐입니다</div>' : '');
+}
 function showCtx(x, y) {
   const el = document.getElementById('srCtx');
   if (!el || !srPickSel) return;
+  const extra = el.querySelector('.ctxLinks');
+  if (extra) extra.remove();
+  if (srPickSel.type === 'door') {
+    const wrap = document.createElement('div');
+    wrap.className = 'ctxLinks';
+    wrap.innerHTML = ctxLinkHtml();
+    el.appendChild(wrap);
+    for (const b of wrap.querySelectorAll('[data-link]')) {
+      b.addEventListener('click', ev => {
+        ev.stopPropagation();
+        srPickSel.link = +b.dataset.link;
+        roomSave(); buildWorld(); hideCtx(); srRenderModeUI();
+        toast('🚪 ' + roomStore.slots[srPickSel.link].name + ' 와 연결');
+      });
+    }
+  }
   el.style.left = Math.min(x, innerWidth - 130) + 'px';
   el.style.top = Math.min(y, innerHeight - 100) + 'px';
   el.classList.add('on');
@@ -3913,6 +3874,286 @@ function roomUpdate() {
   if (srFurnGrp) {
     for (const m of srFurnGrp.children) m.position.y = m.userData.item === srPickSel ? 0.02 : 0;
   }
+}
+
+// ---------- 생활 모드: 문으로 이어진 두 방을 걸어서 오간다 ----------
+let srMode = 'pose';                     // 'pose' 포즈모드 | 'live' 생활모드
+const live = { x: 0, z: 0, yaw: 0, camYaw: 0, camDist: 4.2, active: 0, moving: false };
+let worldRooms = [];                     // [{slot, cx, cz, size, bg, grp, backdrop, doorAt}]
+let liveDoors = [];                      // [{item, room, other, x, z, side, panel, open, t, cooldown}]
+const DOOR_W = 1.1, RM_DOOR_H = 2.1, ROOM_GAP = 0.24;   // 방 문 (스테이지 문과 별개)
+function roomRect(r) { return { x0: r.cx - r.size / 2, x1: r.cx + r.size / 2, z0: r.cz - r.size / 2, z1: r.cz + r.size / 2 }; }
+function linkedDoor(slotIdx) {           // 그 방에서 다른 방으로 이어지는 첫 문
+  const sl = roomStore.slots[slotIdx];
+  if (!sl) return null;
+  return sl.items.find(it => it.type === 'door' && Number.isInteger(it.link)
+    && it.link >= 0 && it.link < roomStore.slots.length && it.link !== slotIdx) ?? null;
+}
+function buildWorld() {                  // 활성 방 + (문으로 이어진) 옆방을 한 번에 세운다
+  if (!srScene) return;
+  for (const r of worldRooms) { srScene.remove(r.grp); if (r.backdrop) srScene.remove(r.backdrop); }
+  worldRooms = []; liveDoors = [];
+  const aIdx = roomStore.cur, a = roomStore.slots[aIdx];
+  const door = linkedDoor(aIdx);
+  const b = door ? roomStore.slots[door.link] : null;
+  const side = door ? (door.x >= 0 ? 1 : -1) : 1;          // 문이 붙은 벽 (+x / -x)
+  const rooms = [{ slot: aIdx, cx: 0, cz: 0, size: a.size, bg: a.bg, doorAt: door ? door.z : null }];
+  if (b) {
+    rooms.push({
+      slot: door.link, cx: side * (a.size / 2 + b.size / 2 + ROOM_GAP), cz: door.z,
+      size: b.size, bg: b.bg, doorAt: 0,
+    });
+  }
+  for (const r of rooms) {
+    r.grp = buildRoomMesh(r, side);
+    srScene.add(r.grp);
+    r.backdrop = makeBackdrop(r);
+    srScene.add(r.backdrop);
+    worldRooms.push(r);
+  }
+  if (b) {
+    const panel = makeDoorPanel();
+    panel.position.set(side * (a.size / 2 + ROOM_GAP / 2), 0, door.z);
+    panel.rotation.y = Math.PI / 2;
+    srScene.add(panel);
+    liveDoors.push({
+      item: door, x: side * (a.size / 2 + ROOM_GAP / 2), z: door.z, side,
+      panel, open: 0, from: aIdx, to: door.link,
+    });
+  }
+  buildFurnitureAll();
+  SR_FULL.dist = Math.max(4.2, a.size * 0.85 + 1.8);
+  SR_FULL.y = 1.0;
+  if (srMode === 'pose') srReset();
+}
+function makeDoorPanel() {
+  const grp = new THREE.Group();
+  const frame = new THREE.MeshStandardMaterial({ color: 0x2a3340, roughness: 0.7, metalness: 0.3 });
+  const side1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, RM_DOOR_H + 0.1, 0.3), frame);
+  side1.position.set(-DOOR_W / 2, (RM_DOOR_H + 0.1) / 2, 0);
+  const side2 = side1.clone(); side2.position.x = DOOR_W / 2;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W + 0.16, 0.09, 0.3), frame);
+  top.position.y = RM_DOOR_H + 0.1;
+  grp.add(side1, side2, top);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W - 0.04, RM_DOOR_H, 0.07),
+    new THREE.MeshStandardMaterial({ color: 0x6b5a44, roughness: 0.75, metalness: 0.1 }));
+  leaf.position.set(0, RM_DOOR_H / 2, 0);
+  const pivot = new THREE.Group();       // 경첩
+  pivot.position.set(-DOOR_W / 2 + 0.02, 0, 0);
+  leaf.position.x = (DOOR_W - 0.04) / 2;
+  pivot.add(leaf);
+  grp.add(pivot);
+  grp.userData.pivot = pivot;
+  return grp;
+}
+function makeBackdrop(r) {
+  const bg = BG_LIST.find(b => b.key === r.bg) ?? BG_LIST[0];
+  const geo = new THREE.CylinderGeometry(26, 26, 15, 40, 1, true, Math.PI * 0.55, Math.PI * 0.9);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    map: bgTexture(bg.key), side: THREE.BackSide, fog: false, toneMapped: false, depthWrite: false,
+  }));
+  m.position.set(r.cx, 4, r.cz);
+  return m;
+}
+function buildRoomMesh(r, doorSide) {    // 바닥 · 벽(뒤=창, 옆=문 구멍) · 격자
+  const grp = new THREE.Group();
+  const S = r.size, h = ROOM_H;
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(S, 0.12, S),
+    new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.85, metalness: 0.1 }));
+  floor.position.y = -0.06;
+  grp.add(floor);
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x39434f, roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
+  const panel = (w, hh, x, y, z, ry) => {
+    if (w <= 0.001 || hh <= 0.001) return;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallMat);
+    m.position.set(x, y, z); m.rotation.y = ry;
+    grp.add(m);
+  };
+  // 옆벽: 문이 있으면 그 자리를 비운다
+  for (const sgn of [-1, 1]) {
+    const hasDoor = r.doorAt !== null && (r.slot === roomStore.cur ? sgn === doorSide : sgn === -doorSide);
+    const x = sgn * S / 2;
+    if (!hasDoor) { panel(S, h, x, h / 2, 0, sgn * Math.PI / 2); continue; }
+    const dz = r.doorAt ?? 0, half = DOOR_W / 2;
+    const backLen = (dz - half) - (-S / 2), frontLen = (S / 2) - (dz + half);
+    panel(Math.max(0, backLen), h, x, h / 2, (-S / 2 + (dz - half)) / 2, sgn * Math.PI / 2);
+    panel(Math.max(0, frontLen), h, x, h / 2, ((dz + half) + S / 2) / 2, sgn * Math.PI / 2);
+    panel(DOOR_W, h - RM_DOOR_H, x, (h + RM_DOOR_H) / 2, dz, sgn * Math.PI / 2);   // 문 위 상인방
+  }
+  // 뒷벽: 창
+  const winW = Math.min(S * 0.62, 4), winB = 0.9, winT = 2.5, sideW = (S - winW) / 2;
+  panel(sideW, h, -(S - sideW) / 2, h / 2, -S / 2, 0);
+  panel(sideW, h, (S - sideW) / 2, h / 2, -S / 2, 0);
+  panel(winW, winB, 0, winB / 2, -S / 2, 0);
+  panel(winW, h - winT, 0, (h + winT) / 2, -S / 2, 0);
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c242e, roughness: 0.6, metalness: 0.4 });
+  for (const y of [winB, winT]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.12, 0.08, 0.14), frameMat);
+    bar.position.set(0, y, -S / 2);
+    grp.add(bar);
+  }
+  const trimMat = new THREE.MeshBasicMaterial({ color: 0x39f6ff, fog: false, toneMapped: false });
+  for (const [w, d, x, z] of [[S, 0.04, 0, -S / 2], [0.04, S, -S / 2, 0], [0.04, S, S / 2, 0], [S, 0.04, 0, S / 2]]) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, d), trimMat);
+    t.position.set(x, 0.015, z);
+    grp.add(t);
+  }
+  if (r.slot === roomStore.cur) {
+    srGridHelp = new THREE.GridHelper(S, Math.round(S / GRID), 0x39f6ff, 0x2a4450);
+    srGridHelp.material.opacity = 0.18; srGridHelp.material.transparent = true;
+    srGridHelp.position.y = 0.012; srGridHelp.visible = false;
+    grp.add(srGridHelp);
+  }
+  grp.position.set(r.cx, 0, r.cz);
+  return grp;
+}
+function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
+  if (srFurnGrp) srScene.remove(srFurnGrp);
+  srFurnGrp = new THREE.Group();
+  for (const r of worldRooms) {
+    for (const it of roomStore.slots[r.slot].items) {
+      if (it.type === 'door') continue;  // 문은 별도 연출
+      const m = furnMesh(it.type);
+      m.position.set(r.cx + it.x, 0, r.cz + it.z);
+      m.rotation.y = it.rot * Math.PI / 2;
+      m.userData.item = it;
+      m.userData.room = r.slot;
+      srFurnGrp.add(m);
+    }
+  }
+  srScene.add(srFurnGrp);
+  syncOutline();
+}
+// ---- 생활 모드 이동 ----
+function liveEnter() {
+  srMode = 'live';
+  const r = worldRooms.find(w => w.slot === roomStore.cur) ?? worldRooms[0];
+  live.x = r.cx; live.z = r.cz + r.size / 2 - 1.0;
+  live.yaw = Math.PI; live.camYaw = Math.PI; live.active = r.slot;
+  setSel(null); cancelPlace(); hideCtx();
+  srSpin = false;
+  toast('🚶 생활 모드 — WASD 이동, 문으로 옆방 이동');
+  srRenderModeUI();
+}
+function liveExit() {
+  srMode = 'pose';
+  if (srRoot) { srRoot.position.set(0, 0, 0); srRoot.rotation.y = srYaw; }
+  srReset();
+  toast('🧍 포즈 모드');
+  srRenderModeUI();
+}
+function insideRooms(x, z, pad = 0.28) {
+  for (const r of worldRooms) {
+    const q = roomRect(r);
+    if (x > q.x0 + pad && x < q.x1 - pad && z > q.z0 + pad && z < q.z1 - pad) return r.slot;
+  }
+  for (const d of liveDoors) {           // 문틀 통로
+    if (Math.abs(x - d.x) < ROOM_GAP / 2 + 0.45 && Math.abs(z - d.z) < DOOR_W / 2 - 0.1) return live.active;
+  }
+  return -1;
+}
+function blockedByFurniture(x, z) {
+  for (const r of worldRooms) {
+    for (const it of roomStore.slots[r.slot].items) {
+      if (it.type === 'door' || it.type === 'rug') continue;
+      const fp = footprint(it.type, it.rot);
+      const ix = r.cx + it.x, iz = r.cz + it.z;
+      if (Math.abs(x - ix) < fp.w / 2 + 0.26 && Math.abs(z - iz) < fp.d / 2 + 0.26) return true;
+    }
+  }
+  return false;
+}
+function liveStep(dt) {
+  const sp = 2.2;
+  let mx = 0, mz = 0;
+  if (keys['KeyW']) mz -= 1; if (keys['KeyS']) mz += 1;
+  if (keys['KeyA']) mx -= 1; if (keys['KeyD']) mx += 1;
+  const len = Math.hypot(mx, mz) || 1;
+  const cy = Math.cos(live.camYaw), sy = Math.sin(live.camYaw);
+  const dx = (-sy * -mz + cy * mx) / len, dz = (-cy * -mz - sy * mx) / len;
+  live.moving = Math.abs(mx) + Math.abs(mz) > 0;
+  if (live.moving) {
+    const nx = live.x + dx * sp * dt, nz = live.z + dz * sp * dt;
+    if (insideRooms(nx, live.z) >= 0 && !blockedByFurniture(nx, live.z)) live.x = nx;
+    if (insideRooms(live.x, nz) >= 0 && !blockedByFurniture(live.x, nz)) live.z = nz;
+    live.yaw = Math.atan2(dx, dz) + Math.PI;
+  }
+  // 문: 가까우면 열리고, 지나가면 닫힌다
+  for (const d of liveDoors) {
+    const near = Math.hypot(live.x - d.x, live.z - d.z) < 1.6;
+    const crossed = (live.x - d.x) * d.side > 0.15;
+    const room = crossed ? d.to : d.from;
+    if (room !== live.active) {
+      live.active = room;
+      roomStore.cur = room;               // 활성 방(= 창밖 풍경 기준)
+      srBgLight?.color.setHex((BG_LIST.find(b => b.key === roomStore.slots[room].bg) ?? BG_LIST[0]).tint);
+      roomSave(); roomRenderUI();
+      toast('🚪 ' + roomStore.slots[room].name);
+    }
+    const want = near && Math.abs(live.x - d.x) < 1.2 ? 1 : 0;
+    d.open += (want - d.open) * Math.min(1, dt * 6);
+    d.panel.userData.pivot.rotation.y = -d.open * Math.PI * 0.55;
+  }
+  if (srRoot) {
+    srRoot.position.set(live.x, 0, live.z);
+    srRoot.rotation.y = live.yaw;
+  }
+  srPlay(live.moving ? 'walking' : 'rifle aiming idle');
+  const camX = live.x + Math.sin(live.camYaw) * live.camDist;
+  const camZ = live.z + Math.cos(live.camYaw) * live.camDist;
+  srCam.aspect = innerHeight ? innerWidth / innerHeight : 16 / 9;
+  srCam.updateProjectionMatrix();
+  srCam.position.set(camX, 1.75, camZ);
+  srCam.lookAt(live.x, 1.15, live.z);
+  srCam.updateMatrixWorld(true);
+  drawRoomMap();
+}
+// ---- 연결 미니맵 ----
+function drawRoomMap() {
+  const cv = document.getElementById('srMap');
+  if (!cv) return;
+  const show = roomStore.slots.length > 1 && liveDoors.length > 0;
+  cv.style.display = show ? 'block' : 'none';
+  if (!show) return;
+  const c = cv.getContext('2d');
+  c.clearRect(0, 0, cv.width, cv.height);
+  let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const r of worldRooms) {
+    const q = roomRect(r);
+    minX = Math.min(minX, q.x0); maxX = Math.max(maxX, q.x1);
+    minZ = Math.min(minZ, q.z0); maxZ = Math.max(maxZ, q.z1);
+  }
+  const pad = 8, k = Math.min((cv.width - pad * 2) / (maxX - minX), (cv.height - pad * 2) / (maxZ - minZ));
+  const px = x => pad + (x - minX) * k, pz = z => pad + (z - minZ) * k;
+  for (const r of worldRooms) {
+    const q = roomRect(r);
+    c.fillStyle = r.slot === live.active ? 'rgba(64,214,255,.22)' : 'rgba(120,160,180,.12)';
+    c.fillRect(px(q.x0), pz(q.z0), (q.x1 - q.x0) * k, (q.z1 - q.z0) * k);
+    c.strokeStyle = r.slot === live.active ? '#7df3ff' : '#4a6b7a';
+    c.lineWidth = 1.5;
+    c.strokeRect(px(q.x0), pz(q.z0), (q.x1 - q.x0) * k, (q.z1 - q.z0) * k);
+    c.fillStyle = '#9fd8ea'; c.font = '9px system-ui'; c.textAlign = 'center';
+    c.fillText(roomStore.slots[r.slot].name.slice(0, 8), px(r.cx), pz(r.cz - r.size / 2) + 11);
+  }
+  for (const d of liveDoors) {           // 문
+    c.strokeStyle = '#ffd76b'; c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(px(d.x), pz(d.z - DOOR_W / 2)); c.lineTo(px(d.x), pz(d.z + DOOR_W / 2));
+    c.stroke();
+  }
+  if (srMode === 'live') {               // 플레이어
+    c.fillStyle = '#7ee0a3';
+    c.beginPath(); c.arc(px(live.x), pz(live.z), 3.4, 0, Math.PI * 2); c.fill();
+  }
+}
+function srRenderModeUI() {
+  for (const b of document.querySelectorAll('#srModes button'))
+    b.classList.toggle('on', b.dataset.mode === srMode);
+  document.getElementById('srLeft').style.opacity = srMode === 'live' ? '0.35' : '1';
+  document.getElementById('srHint').textContent = srMode === 'live'
+    ? 'WASD 이동 · 좌드래그 카메라 회전 · 휠 거리 · 문 앞에서 자동으로 열립니다'
+    : '좌드래그 회전 · 우드래그 카메라 이동 · 휠 확대(쇄골 기준) · 좌측 슬롯을 누르면 해당 부위를 비춥니다';
+  drawRoomMap();
 }
 
 // ---------- 쇼룸 (디버그 전용): 캐릭터를 세워두고 파츠 슬롯을 살펴본다 ----------
@@ -3990,7 +4231,7 @@ function srBuild() {
   }
   srPlay('rifle aiming idle');
   roomLoad();
-  buildRoom();
+  buildWorld();
 }
 let srRays = null, srDust = null;
 function srRayTexture() {                // 위는 밝고 아래로 사라지는 그라데이션
@@ -4125,6 +4366,7 @@ function openShowroom() {
   shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; optMenu.style.display = 'none';
   srReset(); srRenderInv(); srRenderPoses(); roomRenderUI();
   srSpin = false; srYaw = 0;             // 정면으로 세워두고 회전은 사용자가 켤 때만
+  srMode = 'pose'; srRenderModeUI();
   document.getElementById('srName').textContent = curRoom().name;
 }
 function closeShowroom() {
@@ -4143,6 +4385,13 @@ function srApplyCam() {                   // 카메라 위치·행렬 최신화 
 }
 function srUpdate(dt) {
   if (!srOn || !srScene) return;
+  if (srMode === 'live') {               // 생활 모드: 걷기 + 따라오는 카메라
+    srMixer.update(dt);
+    roomUpdate();
+    liveStep(dt);
+    renderer.render(srScene, srCam);
+    return;
+  }
   if (srSpin && !srDrag) srYaw += dt * 0.5;
   srRoot.rotation.y = srYaw;
   srMixer.update(dt);
@@ -4191,12 +4440,15 @@ function srUpdate(dt) {
       return;
     }
     if (srDrag === null) return;
-    srYaw += (e.clientX - srDrag) * 0.01; srDrag = e.clientX;
+    if (srMode === 'live') live.camYaw += (e.clientX - srDrag) * 0.008;
+    else srYaw += (e.clientX - srDrag) * 0.01;
+    srDrag = e.clientX;
   });
   addEventListener('pointerup', e => { srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null; });
   sr.addEventListener('wheel', e => {
     if (!srOn) return;
     e.preventDefault();
+    if (srMode === 'live') { live.camDist = Math.max(1.6, Math.min(7, live.camDist + Math.sign(e.deltaY) * 0.3)); return; }
     srTarget.dist = Math.max(0.7, Math.min(6, srTarget.dist + Math.sign(e.deltaY) * 0.25));
     if (!srSel && !srPanned) {           // 부위를 고르지 않았으면 쇄골을 중심으로 당긴다
       const k = Math.min(1, Math.max(0, (SR_FULL.dist - srTarget.dist) / (SR_FULL.dist - 0.7)));
@@ -4242,6 +4494,12 @@ function srUpdate(dt) {
     document.getElementById('srName').textContent = curRoom().name;
     roomSave();
   });
+  for (const b of document.querySelectorAll('#srModes button')) {
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (b.dataset.mode === 'live') liveEnter(); else liveExit();
+    });
+  }
   document.getElementById('srClose').addEventListener('click', e => { e.stopPropagation(); closeShowroom(); });
   document.getElementById('srSpin').addEventListener('click', e => { e.stopPropagation(); srSpin = !srSpin; });
   document.getElementById('srReset').addEventListener('click', e => { e.stopPropagation(); srReset(); });
@@ -4389,6 +4647,10 @@ window.__game = {
   roomAdd() { addRoomSlot(); return roomStore.slots.length; },
   roomLoadSlot(i) { loadRoomSlot(i); return roomStore.cur; },
   roomBg(k) { setBg(k); return curRoom().bg; },
+  liveMode(on) { on ? liveEnter() : liveExit(); return srMode; },
+  livePos() { return { mode: srMode, x: +live.x.toFixed(2), z: +live.z.toFixed(2), active: live.active, doors: liveDoors.length, rooms: worldRooms.map(r => ({ slot: r.slot, cx: +r.cx.toFixed(2), cz: +r.cz.toFixed(2), size: r.size })) }; },
+  liveStep(n = 1, k = {}) { for (let i = 0; i < n; i++) { Object.assign(keys, k); liveStep(1 / 60); } for (const kk of Object.keys(k)) keys[kk] = false; return { x: +live.x.toFixed(2), z: +live.z.toFixed(2), active: live.active }; },
+  linkDoor(i, to) { const it = curRoom().items[i]; if (!it || it.type !== 'door') return null; it.link = to; roomSave(); buildWorld(); return it.link; },
   showroom() { return { on: srOn, sel: srSel, yaw: +srYaw.toFixed(3), spin: srSpin, target: { y: +srTarget.y.toFixed(2), dist: +srTarget.dist.toFixed(2) }, pan: +srPan.x.toFixed(2), view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
   openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },

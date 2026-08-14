@@ -189,12 +189,20 @@
   #srSlots button.buy{border-color:rgba(255,215,107,.45)}
   #srSlots button.buy i{color:#ffd76b}
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  #srMap{position:absolute; left:24px; bottom:18px; display:none; z-index:23; border-radius:10px;
+    background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
+  #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:8px; z-index:23}
+  #srModes button{padding:8px 16px; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:8px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
+  #srModes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srCtx{position:fixed; z-index:24; display:none; min-width:118px; padding:5px; border-radius:8px;
     background:rgba(5,14,20,.96); border:1.5px solid rgba(64,214,255,.45); box-shadow:0 6px 20px rgba(0,0,0,.5)}
   #srCtx.on{display:block}
   #srCtx button{display:block; width:100%; text-align:left; padding:7px 10px; cursor:pointer; font-size:.82rem;
     color:#dff3ff; background:transparent; border:0; border-radius:6px}
   #srCtx button:hover{background:rgba(64,214,255,.18)}
+  #srCtx button.on{color:#04161c; background:#7df3ff; font-weight:800}
+  #srCtx .ctxHead{font-size:.62rem; letter-spacing:.16em; color:#7aa8bd; padding:6px 10px 2px}
   #srRoomBtns2{display:flex; gap:6px; margin-top:6px}
   #srRoomBtns2 button{flex:1; padding:8px 0; cursor:pointer; font-size:.78rem; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
@@ -466,6 +474,11 @@
       </div>
       <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 놓인 가구를 클릭하면 회전·제거 메뉴가 뜹니다.</p>
     </div>
+  </div>
+  <canvas id="srMap" width="176" height="176"></canvas>
+  <div id="srModes">
+    <button data-mode="pose" class="on">🧍 포즈모드</button>
+    <button data-mode="live">🚶 생활모드</button>
   </div>
   <div id="srBottom">
     <div class="srBtn" id="srSpin">회전 ⟳</div>
