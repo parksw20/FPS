@@ -3756,7 +3756,7 @@ const SR_INV = {                          // 지금은 기본 파츠만 (교체 
 };
 const srEquip = { gun: '기본 소총', grenade: '기본 수류탄', mine: '기본 지뢰', head: '기본 머리', top: '기본 상의', bottom: '기본 하의', glove: '기본 장갑', boots: '기본 부츠' };
 let srOn = false, srScene = null, srCam = null, srRoot = null, srMixer = null, srActions = {}, srCurrent = null;
-let srYaw = 0, srSpin = true, srDrag = null, srSel = null, srTab = 'gear';
+let srYaw = 0, srSpin = false, srDrag = null, srSel = null, srTab = 'gear';   // 대기 중엔 회전하지 않는다
 const SR_FULL = { y: 0.95, dist: 4.2 }, SR_FOV = 38;
 const srHalfH = d => d * Math.tan(SR_FOV * Math.PI / 360);   // 화면 절반 높이(m)
 function srClampView() {                 // 확대한 만큼만 상하·좌우로 움직일 수 있다
@@ -3937,7 +3937,8 @@ function openShowroom() {
   document.getElementById('showroom').classList.add('on');
   document.body.classList.add('showroom');   // 뒤의 타이틀·HUD를 가려 캔버스를 보이게
   shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; optMenu.style.display = 'none';
-  srReset(); srRenderInv(); srRenderPoses(); roomRenderUI(); srSpin = true;
+  srReset(); srRenderInv(); srRenderPoses(); roomRenderUI();
+  srSpin = false; srYaw = 0;             // 정면으로 세워두고 회전은 사용자가 켤 때만
   document.getElementById('srName').textContent = roomState.name;
 }
 function closeShowroom() {
@@ -4171,7 +4172,7 @@ window.__game = {
   },
   roomPick(x, y) { srPickSel = pickFurniture({ clientX: x, clientY: y }); roomRenderUI(); return roomState.items.indexOf(srPickSel); },
   roomSelect(i) { srPickSel = roomState.items[i] ?? null; roomRenderUI(); return !!srPickSel; },
-  showroom() { return { on: srOn, sel: srSel, target: { y: +srTarget.y.toFixed(2), dist: +srTarget.dist.toFixed(2) }, pan: +srPan.x.toFixed(2), view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
+  showroom() { return { on: srOn, sel: srSel, yaw: +srYaw.toFixed(3), spin: srSpin, target: { y: +srTarget.y.toFixed(2), dist: +srTarget.dist.toFixed(2) }, pan: +srPan.x.toFixed(2), view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
   openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },
   markerInfo() {
