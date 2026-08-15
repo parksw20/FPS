@@ -3679,6 +3679,7 @@ const roomW = r => r.w ?? r.size ?? ROOM_MIN, roomD = r => r.d ?? r.size ?? ROOM
 const curRoom = () => roomStore.slots[roomStore.cur] ?? roomStore.slots[0];
 let srRoomGrp = null, srFurnGrp = null, srBackdrop = null, srBgLight = null;
 let placeType = null, placeRot = 0, placeGhost = null, srPickSel = null, srOutline = null, lastCursor = [0, 0];
+let moveItem = null, moveOrig = null;   // 가구 이동 중
 function roomLoad() {
   try {
     const j = JSON.parse(localStorage.getItem('fps.rooms') || 'null');
@@ -3976,6 +3977,7 @@ function pickFurnCatalog(k) {             // 잠긴 가구는 사거나(코인) 
 }
 function startPlace(type) {
   placeType = type; placeRot = 0; setSel(null);
+  syncGuides();
   if (placeGhost) srScene.remove(placeGhost);
   placeGhost = furnMesh(type);
   placeGhost.traverse(o => {
@@ -3988,6 +3990,7 @@ function startPlace(type) {
 }
 function cancelPlace() {
   placeType = null;
+  setTimeout(syncGuides, 0);
   if (placeGhost) { srScene.remove(placeGhost); placeGhost = null; }
   syncGuides();
   roomRenderUI();
@@ -4029,7 +4032,40 @@ function pickFurniture(ev) {
   }
   return null;
 }
-function setSel(it) { srPickSel = it; syncOutline(); roomRenderUI(); }
+function setSel(it) { srPickSel = it; syncOutline(); roomRenderUI(); syncGuides(); }
+function startMove() {                    // 고른 가구를 커서로 옮긴다
+  if (!srPickSel) { toast('옮길 가구를 먼저 고르세요'); return; }
+  moveItem = srPickSel;
+  moveOrig = { x: moveItem.x, z: moveItem.z, y: moveItem.y || 0, rot: moveItem.rot || 0 };
+  hideCtx();
+  syncGuides();
+  toast('🖐 옮길 자리를 클릭 · R 회전 · ESC 취소');
+}
+function moveTo(wx, wz, host) {
+  if (!moveItem) return;
+  const q = snapPos(moveItem.type, moveItem.rot || 0, wx, wz, host);
+  if (q.slot !== roomStore.cur) return;   // 이 방 안에서만
+  moveItem.x = q.x; moveItem.z = q.z; moveItem.y = q.y || 0;
+  if (q.wall) moveItem.rot = q.rot;
+  const m = srFurnGrp?.children.find(o => o.userData.item === moveItem);
+  const rm = worldRooms.find(r => r.slot === roomStore.cur);
+  if (m && rm) {
+    m.position.set(rm.cx + moveItem.x, (rm.cy || 0) + moveItem.y, rm.cz + moveItem.z);
+    m.rotation.y = (moveItem.rot || 0) * ROT_STEP;
+  }
+  return q;
+}
+function endMove(ok) {
+  if (!moveItem) return;
+  if (!ok && moveOrig) Object.assign(moveItem, moveOrig);
+  else if (ok && overlaps(moveItem.type, moveItem.rot || 0, moveItem.x, moveItem.z, moveItem.y || 0, moveItem, curRoom().items)) {
+    toast('다른 가구와 겹칩니다');
+    return;                              // 겹치면 계속 이동 상태
+  }
+  moveItem = null; moveOrig = null;
+  roomSave(); buildFurnitureAll(); syncOutline(); syncGuides();
+  toast(ok ? '🖐 이동 완료' : '이동 취소');
+}
 function removeSelected() {
   if (!srPickSel) { toast('제거할 가구를 먼저 고르세요'); return; }
   const arr = curRoom().items, i = arr.indexOf(srPickSel);
@@ -4083,6 +4119,7 @@ function addRoomSlot(link) {              // 문·계단에서만 새 방을 만
       return null;
     }
   }
+  if (link && link.type === 'door') ensureReturnDoor(roomStore.cur, link);
   coins -= cost;
   document.getElementById('coinN').textContent = coins;
   persistProgress();
@@ -4153,7 +4190,8 @@ function showCtx(x, y) {
           toast('🚫 그 방향엔 이미 다른 방이 있어 연결할 수 없습니다');
           return;
         }
-        roomSave(); hideCtx(); srRenderModeUI();
+        if (srPickSel.type === 'door') ensureReturnDoor(roomStore.cur, srPickSel);
+        roomSave(); buildWorld(); hideCtx(); srRenderModeUI();
         toast('🚪 ' + roomStore.slots[srPickSel.link].name + ' 와 연결');
       });
     }
@@ -4226,14 +4264,32 @@ function linkedStairs(slotIdx) {
   return sl.items.filter(it => it.type === 'stairs' && Number.isInteger(it.link)
     && it.link >= 0 && it.link < roomStore.slots.length && it.link !== slotIdx);
 }
+function ensureReturnDoor(fromSlot, door) {      // 상대 방에도 짝이 되는 문을 둔다
+  const to = roomStore.slots[door.link];
+  if (!to) return;
+  const side = door.x >= 0 ? 1 : -1;
+  const bx = +(-side * roomW(to) / 2).toFixed(2);
+  const has = to.items.some(it => it.type === 'door' && it.link === fromSlot && Math.abs(it.x - bx) < 0.01);
+  if (has) return;
+  to.items.push({ type: 'door', x: bx, z: 0, y: 0, rot: -side > 0 ? 9 : 3, link: fromSlot });
+}
+function repairLinks() {                 // 저장본에 빠진 짝 문을 채운다
+  roomStore.slots.forEach((sl, i) => {
+    for (const it of sl.items) {
+      if (it.type === 'door' && Number.isInteger(it.link) && it.link >= 0 && it.link < roomStore.slots.length && it.link !== i) ensureReturnDoor(i, it);
+    }
+  });
+}
 function linkedDoors(slotIdx) {          // 그 방의 연결된 문 전부
   const sl = roomStore.slots[slotIdx];
   if (!sl) return [];
   return sl.items.filter(it => it.type === 'door' && Number.isInteger(it.link)
     && it.link >= 0 && it.link < roomStore.slots.length && it.link !== slotIdx);
 }
-function buildWorld() {                  // 현재 방에서 문으로 이어진 방을 모두 세운다 (개수 제한 없음)
+function buildWorld() {                  // 현재 방에서 문·계단으로 이어진 방을 모두 세운다
   if (!srScene) return;
+  const prevRoom = worldRooms.find(r => r.slot === roomStore.cur);   // 좌표계 기준이 바뀌면 캐릭터도 따라 옮긴다
+  const prevAt = prevRoom ? { x: prevRoom.cx, z: prevRoom.cz, y: prevRoom.cy || 0 } : null;
   for (const r of worldRooms) { srScene.remove(r.grp); if (r.backdrop) srScene.remove(r.backdrop); }
   for (const d of liveDoors) if (d.panel) srScene.remove(d.panel);
   worldRooms = []; liveDoors = []; liveStairs.length = 0;
@@ -4314,6 +4370,15 @@ function buildWorld() {                  // 현재 방에서 문으로 이어진
     d.panel = panel;
   }
   buildFurnitureAll();
+  const nowRoom = worldRooms.find(r => r.slot === roomStore.cur);
+  if (prevAt && nowRoom) {               // 방 중심이 옮겨진 만큼 캐릭터 위치도 보정
+    const dx = nowRoom.cx - prevAt.x, dz = nowRoom.cz - prevAt.z, dy = (nowRoom.cy || 0) - prevAt.y;
+    if (dx || dz || dy) { live.x += dx; live.z += dz; live.y += dy; }
+    const q = roomRect(nowRoom);         // 방 밖이면 안쪽으로 당긴다
+    live.x = Math.max(q.x0 + 0.4, Math.min(q.x1 - 0.4, live.x));
+    live.z = Math.max(q.z0 + 0.4, Math.min(q.z1 - 0.4, live.z));
+    live.y = nowRoom.cy || 0;
+  }
   syncGuides();
   SR_FULL.dist = Math.max(4.2, Math.max(roomW(first), roomD(first)) * 0.85 + 1.8);
   SR_FULL.y = 1.0;
@@ -4395,6 +4460,8 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   }
   r.guide = makeFloorGuide(W, D);        // 설치 가이드 격자 (활성 방만 표시)
   grp.add(r.guide);
+  r.wallGuide = makeWallGuides(W, D, h);
+  grp.add(r.wallGuide);
   grp.position.set(r.cx, r.cy || 0, r.cz);
   return grp;
 }
@@ -4420,6 +4487,31 @@ function activeLevel() {
   const a = worldRooms.find(r => r.slot === roomStore.cur);
   return a ? (a.cy || 0) : 0;
 }
+function makeWallGuides(W, D, h) {        // 벽걸이·문 배치용 벽면 격자
+  const grp = new THREE.Group();
+  const mk = (w, x, z, ry) => {
+    const thin = [], bold = [];
+    const push = (arr, a, b, c, d2) => arr.push(a, b, 0, c, d2, 0);
+    for (let u = -w / 2; u <= w / 2 + 1e-6; u += GRID)
+      push(Math.abs(u % 1) < 1e-6 ? bold : thin, u, 0, u, h);
+    for (let v = 0; v <= h + 1e-6; v += GRID)
+      push(Math.abs(v % 1) < 1e-6 ? bold : thin, -w / 2, v, w / 2, v);
+    for (const [pts, op] of [[thin, 0.07], [bold, 0.2]]) {
+      const g2 = new THREE.BufferGeometry();
+      g2.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      const seg = new THREE.LineSegments(g2, new THREE.LineBasicMaterial({
+        color: 0x39f6ff, transparent: true, opacity: op, depthWrite: false, fog: false, toneMapped: false,
+      }));
+      seg.position.set(x, 0, z); seg.rotation.y = ry;
+      grp.add(seg);
+    }
+  };
+  mk(D, -W / 2 + 0.02, 0, Math.PI / 2);    // 좌
+  mk(D, W / 2 - 0.02, 0, -Math.PI / 2);    // 우
+  mk(W, 0, -D / 2 + 0.02, 0);              // 뒤
+  grp.visible = false;
+  return grp;
+}
 function syncGuides() {                   // 활성 방에만 가이드라인 · 현재 층·시야 앞은 감춘다
   const lvl = activeLevel();
   const act = worldRooms.find(r => r.slot === roomStore.cur);
@@ -4429,7 +4521,12 @@ function syncGuides() {                   // 활성 방에만 가이드라인 ·
     const inFront = act && r !== act && r.cz - r.d / 2 > frontZ - 0.2;   // 카메라(+z)와 활성 방 사이
     r.grp.visible = onLvl && !inFront;    // 다른 층·앞을 가리는 방은 숨긴다
     if (r.backdrop) r.backdrop.visible = onLvl && !inFront;
-    if (r.guide) r.guide.visible = onLvl && r.slot === roomStore.cur && srMode !== 'live';
+    const editing = !!(placeType || moveItem || srPickSel) || srMode !== 'live';
+    const active = onLvl && !inFront && r.slot === roomStore.cur;
+    const kind = placeType ? FURN[placeType].mount : moveItem ? FURN[moveItem.type].mount : srPickSel ? FURN[srPickSel.type].mount : null;
+    const onWall = kind === 'wall' || kind === 'opening';
+    if (r.guide) r.guide.visible = active && editing && !onWall;
+    if (r.wallGuide) r.wallGuide.visible = active && editing && onWall;
   }
   for (const d of liveDoors) if (d.panel) d.panel.visible = Math.abs((worldRooms.find(r => r.slot === d.from)?.cy || 0) - lvl) < 0.01;
   if (srFurnGrp) for (const m of srFurnGrp.children) {
@@ -4737,6 +4834,7 @@ function srBuild() {
   }
   srPlay('rifle aiming idle');
   roomLoad();
+  repairLinks();
   buildWorld();
 }
 function srPlay(name) {
@@ -4915,11 +5013,13 @@ function srUpdate(dt) {
     }
     srClampView();                       // 축소하면 다시 가운데로 모인다
   }, { passive: false });
-  sr.addEventListener('pointermove', e => {                 // 배치 중이면 고스트가 따라다닌다
-    if (!srOn || !placeType || !placeGhost) return;
+  sr.addEventListener('pointermove', e => {                 // 배치·이동 중이면 커서를 따라다닌다
+    if (!srOn || (!placeType && !moveItem)) return;
     lastCursor = [e.clientX, e.clientY];
     const hit = placePoint(e);
     if (!hit) return;
+    if (moveItem) { moveTo(hit.p.x, hit.p.z, hit.host); return; }
+    if (!placeGhost) return;
     const q = snapPos(placeType, placeRot, hit.p.x, hit.p.z, hit.host);
     placeGhost.userData.snap = q;
     const rm = worldRooms.find(r => r.slot === q.slot);
@@ -4931,16 +5031,18 @@ function srUpdate(dt) {
   sr.addEventListener('click', e => {
     if (!srOn || e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srCtx, #srModes')) return;
     lastCursor = [e.clientX, e.clientY];
+    if (moveItem) { endMove(true); return; }
     if (placeType) { commitPlace(); return; }
     if (srTab !== 'room') return;
+    if (moveItem) return;
     const picked = pickFurniture(e);      // 놓인 가구 고르기
     if (picked) { setSel(picked); showCtx(e.clientX, e.clientY); }   // 빈 곳을 눌러도 메뉴는 닫기 전까지 유지
   });
   addEventListener('keydown', e => {
     if (!srOn) return;
-    if (e.code === 'KeyR') rotateCurrent();
+    if (e.code === 'KeyR') { if (moveItem) { moveItem.rot = ((moveItem.rot || 0) + 1) % ROT_N; moveTo(moveItem.x + (worldRooms.find(r => r.slot === roomStore.cur)?.cx || 0), moveItem.z + (worldRooms.find(r => r.slot === roomStore.cur)?.cz || 0)); } else rotateCurrent(); }
     if (e.code === 'Delete' || e.code === 'Backspace') removeSelected();
-    if (e.code === 'Escape') { hideCtx(); if (placeType) cancelPlace(); else if (srPickSel) setSel(null); }
+    if (e.code === 'Escape') { hideCtx(); if (moveItem) endMove(false); else if (placeType) cancelPlace(); else if (srPickSel) setSel(null); }
   });
   document.getElementById('srRot').addEventListener('click', e => { e.stopPropagation(); rotateCurrent(); });
   document.getElementById('srClear').addEventListener('click', e => { e.stopPropagation(); clearRoom(); });
@@ -4950,6 +5052,7 @@ function srUpdate(dt) {
     b.addEventListener('click', e => {
       e.stopPropagation();
       const a2 = b.dataset.ctx;
+      if (a2 === 'move') { startMove(); return; }
       if (a2 === 'rot') { rotateCurrent(); return; }        // 회전은 메뉴를 유지
       if (a2 === 'del') removeSelected();
       hideCtx();
@@ -5111,7 +5214,7 @@ window.__game = {
     return { n: (roomStore.slots[q.slot ?? roomStore.cur]).items.length, snap: { slot: q.slot, x: q.x, z: q.z, y: q.y || 0, on: !!q.on, under: !!q.under, wall: !!q.wall } };
   },
   roomGrow(axis) { expandRoom(axis); return { w: roomW(curRoom()), d: roomD(curRoom()) }; },
-  guides() { return worldRooms.map(r => ({ slot: r.slot, on: !!r.guide?.visible })); },
+  guides() { return worldRooms.map(r => ({ slot: r.slot, floor: !!r.guide?.visible, wall: !!r.wallGuide?.visible })); },
   roomProject(i) {
     const it = curRoom().items[i];
     if (!it || !srCam) return null;
@@ -5138,7 +5241,7 @@ window.__game = {
   liveDrag(dx, dy) { live.camYaw -= dx * 0.008; live.camPitch += dy * 0.004; liveStep(1 / 60); return { yaw: +live.camYaw.toFixed(3), pitch: +live.camPitch.toFixed(3) }; },
   livePos() { return { mode: srMode, x: +live.x.toFixed(2), z: +live.z.toFixed(2), y: +live.y.toFixed(2), rooms3: worldRooms.map(r => ({ s: r.slot, cy: +(r.cy || 0).toFixed(2) })), yaw: +live.yaw.toFixed(3), camYaw: +live.camYaw.toFixed(3), camDist: +live.camDist.toFixed(2), srYaw: +srYaw.toFixed(3), rootRot: +(srRoot?.rotation.y ?? 0).toFixed(3), active: live.active, doors: liveDoors.length, rooms: worldRooms.map(r => ({ slot: r.slot, cx: +r.cx.toFixed(2), cz: +r.cz.toFixed(2), w: r.w, d: r.d })) }; },
   liveStep(n = 1, k = {}) { for (let i = 0; i < n; i++) { Object.assign(keys, k); liveStep(1 / 60); } for (const kk of Object.keys(k)) keys[kk] = false; return { x: +live.x.toFixed(2), z: +live.z.toFixed(2), y: +live.y.toFixed(2), active: live.active }; },
-  linkDoor(i, to) { const it = curRoom().items[i]; if (!it || it.type !== 'door') return null; it.link = to; roomSave(); buildWorld(); return it.link; },
+  linkDoor(i, to) { const it = curRoom().items[i]; if (!it || it.type !== 'door') return null; it.link = to; ensureReturnDoor(roomStore.cur, it); roomSave(); buildWorld(); return it.link; },
   showroom() { return { on: srOn, sel: srSel, yaw: +srYaw.toFixed(3), spin: srSpin, target: { y: +srTarget.y.toFixed(2), dist: +srTarget.dist.toFixed(2) }, pan: +srPan.x.toFixed(2), view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
   openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },
