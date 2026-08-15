@@ -191,6 +191,11 @@
   #srSlots button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srSlots button.on i{color:#0a3540}
   #srSlots button.buy{border-color:rgba(255,215,107,.45)}
+  #srSlots .slotHint{grid-column:1/-1; font-size:.66rem; color:#7aa8bd; line-height:1.5; padding:4px 2px 0}
+  #srSlots .slotHint b{color:#cfe8f5}
+  #srSlots .slotHint span{display:block; color:#ffd76b}
+  #srCtx button.new{color:#ffd76b; border-top:1px dashed rgba(120,200,230,.2); margin-top:3px}
+  #srCtx button.new i{font-style:normal; font-size:.66rem; color:#9fb0c4; margin-left:6px}
   #srSlots button.buy i{color:#ffd76b}
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
   #srMap{position:absolute; left:24px; bottom:18px; display:none; z-index:23; border-radius:10px;
@@ -303,7 +308,7 @@
   #optClose{display:block; width:100%; margin-top:18px; text-align:center}
   #optMenu h3{font-size:.8rem; letter-spacing:.15em; color:#7df3ff; margin:10px 0 6px; text-transform:uppercase; text-shadow:0 0 8px rgba(64,214,255,.6)}
   #optMenu h3:first-child{margin-top:0}
-  #optMenu .optRow{display:flex; gap:8px; flex-wrap:wrap}
+  #optMenu .optRow{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px}
   #optMenu button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.45); border-radius:8px;
     padding:7px 12px; color:#bfe9f7; font-size:.85rem; cursor:pointer; box-shadow:0 0 8px rgba(64,214,255,.2)}
   #optMenu button:hover{border-color:#7df3ff; background:rgba(64,214,255,.15)}
@@ -434,9 +439,14 @@
     <div class="optRow">
       <button id="dbgCoins">코인 +1,000,000</button>
       <button id="dbgWave">웨이브 스킵</button>
+    </div>
+    <div class="optRow">
       <button id="dbgPortal" class="tog">포탈 표시</button>
       <button id="dbgGod" class="tog">무적</button>
+    </div>
+    <div class="optRow">
       <button id="dbgFast" class="tog">이동 3배속</button>
+      <button id="dbgAmmo" class="tog">무한 탄창</button>
     </div>
   </div>
   <button id="optClose">닫기</button>
@@ -479,6 +489,7 @@
       <div id="srRoomBtns2">
         <button id="srSave">💾 방 저장</button>
         <button id="srClear">🧹 방 비우기</button>
+        <button id="srReset2">🧨 전체 초기화</button>
       </div>
       <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 놓인 가구를 클릭하면 회전·제거 메뉴가 뜹니다.</p>
     </div>
