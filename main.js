@@ -3937,7 +3937,9 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
       while (o && !o.userData.item) o = o.parent;
       if (!o) continue;
       const it = o.userData.item, top = itemTop(it);
-      const onTop = top !== null && Math.abs(h.point.y - top) < 0.16;
+      const mine = o.userData.room === roomStore.cur;
+      const rr = worldRooms.find(r => r.slot === o.userData.room);
+      const onTop = mine && top !== null && Math.abs(h.point.y - (top + (rr?.cy || 0))) < 0.16;
       return { p: h.point, host: onTop ? it : null };
     }
   }
@@ -3945,11 +3947,7 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
   if (!(t > 0)) return null;
   return { p: raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, t), host: null };
 }
-function roomAtPoint(wx, wz) {           // 그 지점이 속한 방 (없으면 활성 방)
-  for (const r of worldRooms) {
-    const q = roomRect(r);
-    if (wx >= q.x0 - 0.3 && wx <= q.x1 + 0.3 && wz >= q.z0 - 0.3 && wz <= q.z1 + 0.3) return r;
-  }
+function roomAtPoint() {                 // 편집은 언제나 활성 방에서만
   return worldRooms.find(r => r.slot === roomStore.cur) ?? worldRooms[0] ?? null;
 }
 function floorPoint(ev) {
@@ -4022,11 +4020,14 @@ function pickFurniture(ev) {
   if (!r.width || !r.height) return null;
   const nd = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(nd, srCam);
-  const hit = raycaster.intersectObjects(srFurnGrp.children, true)[0];
-  if (!hit) return null;
-  let o = hit.object;
-  while (o && !o.userData.item) o = o.parent;
-  return o ? o.userData.item : null;
+  for (const h of raycaster.intersectObjects(srFurnGrp.children, true)) {
+    let o = h.object;
+    while (o && !o.userData.item) o = o.parent;
+    if (!o) continue;
+    if (o.userData.room !== roomStore.cur) return null;   // 다른 방 가구는 건드리지 않는다
+    return o.userData.item;
+  }
+  return null;
 }
 function setSel(it) { srPickSel = it; syncOutline(); roomRenderUI(); }
 function removeSelected() {
