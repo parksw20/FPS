@@ -4925,7 +4925,7 @@ function liveStep(dt) {
 function drawRoomMap() {
   const cv = document.getElementById('srMap');
   if (!cv) return;
-  const show = roomStore.slots.length > 1 && (liveDoors.length > 0 || liveStairs.length > 0);
+  const show = srMode === 'live' && roomStore.slots.length > 1 && (liveDoors.length > 0 || liveStairs.length > 0);   // 생활모드에서만
   cv.style.display = show ? 'block' : 'none';
   if (!show) return;
   const c = cv.getContext('2d');
