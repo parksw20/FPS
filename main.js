@@ -3665,8 +3665,8 @@ const BG_LIST = [
 const roomStore = { cur: 0, slots: [{ name: 'MY ROOM', w: ROOM_MIN, d: ROOM_MIN, bg: 'forest', items: [] }] };
 const roomW = r => r.w ?? r.size ?? ROOM_MIN, roomD = r => r.d ?? r.size ?? ROOM_MIN;
 const curRoom = () => roomStore.slots[roomStore.cur] ?? roomStore.slots[0];
-let srRoomGrp = null, srFurnGrp = null, srGridHelp = null, srBackdrop = null, srBgLight = null;
-let placeType = null, placeRot = 0, placeGhost = null, srPickSel = null, srOutline = null;
+let srRoomGrp = null, srFurnGrp = null, srBackdrop = null, srBgLight = null;
+let placeType = null, placeRot = 0, placeGhost = null, srPickSel = null, srOutline = null, lastCursor = [0, 0];
 function roomLoad() {
   try {
     const j = JSON.parse(localStorage.getItem('fps.rooms') || 'null');
@@ -3956,14 +3956,14 @@ function startPlace(type) {
     if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.55; }
   });
   srScene.add(placeGhost);
-  if (srGridHelp) srGridHelp.visible = true;
+  syncGuides();
   toast('배치: 클릭 · 회전: R · 취소: ESC');
   roomRenderUI();
 }
 function cancelPlace() {
   placeType = null;
   if (placeGhost) { srScene.remove(placeGhost); placeGhost = null; }
-  if (srGridHelp) srGridHelp.visible = false;
+  syncGuides();
   roomRenderUI();
 }
 function commitPlace() {
@@ -3972,10 +3972,20 @@ function commitPlace() {
   const rot = q.wall ? q.rot : placeRot;
   const target = roomStore.slots[q.slot ?? roomStore.cur] ?? curRoom();
   if (overlaps(placeType, rot, q.x, q.z, q.y || 0, q.under ?? q.on ?? null, target.items)) { toast('다른 가구와 겹칩니다'); return; }
-  target.items.push({ type: placeType, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: +(q.y || 0).toFixed(2), rot });
+  const added = { type: placeType, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: +(q.y || 0).toFixed(2), rot };
+  if (placeType === 'door') added.link = -1;
+  target.items.push(added);
   roomSave(); buildFurnitureAll();
   sfxTone(700, 0.07, 'sine', 0.1);
-  toast(FURN[placeType].name + (q.on ? ' — 위에 올림' : q.under ? ' — 아래에 넣음' : '') + ' 배치');
+  const placedType = placeType;
+  if (placedType === 'door') {            // 문은 놓자마자 연결할 방을 고른다
+    cancelPlace();
+    setSel(added);
+    showCtx(lastCursor[0], lastCursor[1]);
+    toast('🚪 연결할 방을 고르세요');
+    return;
+  }
+  toast(FURN[placedType].name + (q.on ? ' — 위에 올림' : q.under ? ' — 아래에 넣음' : '') + ' 배치');
 }
 function pickFurniture(ev) {
   if (!srFurnGrp || !srCam) return null;
@@ -4070,8 +4080,16 @@ function showCtx(x, y) {
     for (const b of wrap.querySelectorAll('[data-link]')) {
       b.addEventListener('click', ev => {
         ev.stopPropagation();
+        const prev = srPickSel.link ?? -1;
         srPickSel.link = +b.dataset.link;
-        roomSave(); buildWorld(); hideCtx(); srRenderModeUI();
+        buildWorld();
+        if (srPickSel.blocked) {          // 그 자리에 이미 다른 방이 있다
+          srPickSel.link = prev;
+          buildWorld();
+          toast('🚫 그 방향엔 이미 다른 방이 있어 연결할 수 없습니다');
+          return;
+        }
+        roomSave(); hideCtx(); srRenderModeUI();
         toast('🚪 ' + roomStore.slots[srPickSel.link].name + ' 와 연결');
       });
     }
@@ -4161,14 +4179,22 @@ function buildWorld() {                  // 현재 방에서 문으로 이어진
       const nb = roomStore.slots[door.link];
       const nw = roomW(nb), nd = roomD(nb);
       const gapZ = rm.cz + door.z;
+      const cx = rm.cx + side * (rm.w / 2 + nw / 2 + ROOM_GAP);
       if (!placed.has(door.link)) {
-        placed.set(door.link, {
-          slot: door.link, cx: rm.cx + side * (rm.w / 2 + nw / 2 + ROOM_GAP), cz: gapZ,
-          w: nw, d: nd, bg: nb.bg, gaps: [],
-        });
+        const rect = { x0: cx - nw / 2, x1: cx + nw / 2, z0: gapZ - nd / 2, z1: gapZ + nd / 2 };
+        const clash = [...placed.values()].some(o =>          // 그 자리에 이미 다른 방이 있으면 연결 불가
+          rect.x0 < o.cx + o.w / 2 - 0.05 && o.cx - o.w / 2 + 0.05 < rect.x1 &&
+          rect.z0 < o.cz + o.d / 2 - 0.05 && o.cz - o.d / 2 + 0.05 < rect.z1);
+        if (clash) { door.blocked = true; continue; }
+        placed.set(door.link, { slot: door.link, cx, cz: gapZ, w: nw, d: nd, bg: nb.bg, gaps: [] });
         q.push({ slot: door.link });
       }
       const nbRoom = placed.get(door.link);
+      if (Math.abs(nbRoom.cx - cx) > 0.01 || Math.abs(nbRoom.cz - gapZ) > 0.01) {
+        door.blocked = true;             // 이미 다른 자리에 놓인 방 — 연결 불가
+        continue;
+      }
+      door.blocked = false;
       rm.gaps.push({ side, z: door.z });                        // 이 방 벽의 구멍
       nbRoom.gaps.push({ side: -side, z: gapZ - nbRoom.cz });   // 옆방 벽의 구멍
       liveDoors.push({
@@ -4192,6 +4218,7 @@ function buildWorld() {                  // 현재 방에서 문으로 이어진
     d.panel = panel;
   }
   buildFurnitureAll();
+  syncGuides();
   SR_FULL.dist = Math.max(4.2, Math.max(roomW(first), roomD(first)) * 0.85 + 1.8);
   SR_FULL.y = 1.0;
   if (srMode === 'pose') srReset();
@@ -4268,14 +4295,31 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     t.position.set(x, 0.015, z);
     grp.add(t);
   }
-  if (r.slot === roomStore.cur) {
-    srGridHelp = new THREE.GridHelper(Math.max(W, D), Math.round(Math.max(W, D) / GRID), 0x39f6ff, 0x2a4450);
-    srGridHelp.material.opacity = 0.18; srGridHelp.material.transparent = true;
-    srGridHelp.position.y = 0.012; srGridHelp.visible = false;
-    grp.add(srGridHelp);
-  }
+  r.guide = makeFloorGuide(W, D);        // 설치 가이드 격자 (활성 방만 표시)
+  grp.add(r.guide);
   grp.position.set(r.cx, 0, r.cz);
   return grp;
+}
+function makeFloorGuide(W, D) {           // 10cm 격자 + 1m 굵은 선
+  const grp = new THREE.Group();
+  const thin = [], bold = [];
+  const push = (arr, x1, z1, x2, z2) => arr.push(x1, 0, z1, x2, 0, z2);
+  for (let x = -W / 2; x <= W / 2 + 1e-6; x += GRID)
+    push(Math.abs(x % 1) < 1e-6 || Math.abs(Math.abs(x % 1) - 1) < 1e-6 ? bold : thin, x, -D / 2, x, D / 2);
+  for (let z = -D / 2; z <= D / 2 + 1e-6; z += GRID)
+    push(Math.abs(z % 1) < 1e-6 || Math.abs(Math.abs(z % 1) - 1) < 1e-6 ? bold : thin, -W / 2, z, W / 2, z);
+  for (const [pts, col, op] of [[thin, 0x39f6ff, 0.09], [bold, 0x39f6ff, 0.26]]) {
+    const g2 = new THREE.BufferGeometry();
+    g2.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    grp.add(new THREE.LineSegments(g2, new THREE.LineBasicMaterial({
+      color: col, transparent: true, opacity: op, depthWrite: false, fog: false, toneMapped: false,
+    })));
+  }
+  grp.position.y = 0.014;
+  return grp;
+}
+function syncGuides() {                   // 활성 방에만 가이드라인
+  for (const r of worldRooms) if (r.guide) r.guide.visible = r.slot === roomStore.cur && srMode !== 'live';
 }
 function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
   if (srFurnGrp) srScene.remove(srFurnGrp);
@@ -4298,6 +4342,7 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
 // ---- 생활 모드 이동 ----
 function liveEnter() {                     // 현 위치·현 시선 그대로 이어받는다
   srMode = 'live';
+  syncGuides();
   const r = worldRooms.find(w => w.slot === roomStore.cur) ?? worldRooms[0];
   live.active = r ? r.slot : roomStore.cur;
   live.yaw = srYaw;                       // 캐릭터가 보던 방향 유지
@@ -4309,6 +4354,7 @@ function liveEnter() {                     // 현 위치·현 시선 그대로 �
 }
 function liveExit() {                      // 서 있던 자리·바라보던 각도 그대로
   srMode = 'pose';
+  syncGuides();
   srYaw = live.yaw;
   srTarget.dist = live.camDist; srView.dist = live.camDist;
   srPan.x = 0; srPanned = false; srSel = null;
@@ -4363,7 +4409,8 @@ function liveStep(dt) {
     const room = crossed ? d.to : d.from;
     if (room !== live.active) {
       live.active = room;
-      roomStore.cur = room;               // 활성 방(= 창밖 풍경 기준)
+      roomStore.cur = room;               // 활성 방(= 창밖 풍경·편집 기준)
+      syncGuides();
       srBgLight?.color.setHex((BG_LIST.find(b => b.key === roomStore.slots[room].bg) ?? BG_LIST[0]).tint);
       roomSave(); roomRenderUI();
       toast('🚪 ' + roomStore.slots[room].name);
@@ -4504,7 +4551,6 @@ function srBuild() {
   const rim = new THREE.SpotLight(0xdff2ff, 40, 16, 0.6, 0.5, 1.2);     // 뒤 림라이트
   rim.position.set(-1.6, 3.6, -3.2); rim.target.position.set(0, 1.35, 0);
   srScene.add(rim, rim.target);
-  srGodRays();
   srRoot = skClone(playerGltf.scene);
   srRoot.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; } });
   srScene.add(srRoot);
@@ -4516,46 +4562,6 @@ function srBuild() {
   srPlay('rifle aiming idle');
   roomLoad();
   buildWorld();
-}
-let srRays = null, srDust = null;
-function srRayTexture() {                // 위는 밝고 아래로 사라지는 그라데이션
-  const cv = document.createElement('canvas'); cv.width = 8; cv.height = 128;
-  const c = cv.getContext('2d');
-  const g2 = c.createLinearGradient(0, 0, 0, 128);
-  g2.addColorStop(0, 'rgba(190,235,255,.55)');
-  g2.addColorStop(0.45, 'rgba(150,215,255,.22)');
-  g2.addColorStop(1, 'rgba(120,200,255,0)');
-  c.fillStyle = g2; c.fillRect(0, 0, 8, 128);
-  return new THREE.CanvasTexture(cv);
-}
-function srGodRays() {                   // 스포트라이트를 따라 내려오는 빛기둥
-  srRays = new THREE.Group();
-  const tex = srRayTexture();
-  const mk = (rTop, rBot, h, x, z, tilt) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 28, 1, true),
-      new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, opacity: 0.38, depthWrite: false,
-        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false,
-      }));
-    m.position.set(x, h / 2, z);
-    m.rotation.z = tilt;
-    srRays.add(m);
-    return m;
-  };
-  mk(0.25, 1.4, ROOM_H, 0, -0.5, 0);    // 캐릭터 뒤에서 내려오는 빛기둥 하나 (방 높이)
-  srScene.add(srRays);
-  const n = 90, pos = new Float32Array(n * 3);   // 빛 속 먼지
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, r = Math.random() * 1.8;
-    pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = 0.2 + Math.random() * 3.4; pos[i * 3 + 2] = Math.sin(a) * r;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  srDust = new THREE.Points(geo, new THREE.PointsMaterial({
-    color: 0xbfe9ff, size: 0.022, transparent: true, opacity: 0.75, depthWrite: false,
-    blending: THREE.AdditiveBlending, toneMapped: false,
-  }));
-  srScene.add(srDust);
 }
 function srPlay(name) {
   const next = srActions[name];
@@ -4684,21 +4690,6 @@ function srUpdate(dt) {
   srRoot.position.set(live.x, 0, live.z);
   srRoot.rotation.y = srYaw;
   srMixer.update(dt);
-  if (srRays) {
-    srRays.rotation.y += dt * 0.04;
-    for (let i = 0; i < srRays.children.length; i++)
-      srRays.children[i].material.opacity = 0.32 + Math.sin(gameTime * 0.7) * 0.07;
-  }
-  if (srDust) {
-    const p = srDust.geometry.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      let y = p.getY(i) - dt * 0.12;
-      if (y < 0.1) y = 3.6;
-      p.setY(i, y);
-      p.setX(i, p.getX(i) + Math.sin(gameTime * 0.5 + i) * dt * 0.02);
-    }
-    p.needsUpdate = true;
-  }
   roomUpdate();
   srView.y += (srTarget.y - srView.y) * Math.min(1, dt * 6);       // 부드럽게 줌인
   srView.dist += (srTarget.dist - srView.dist) * Math.min(1, dt * 6);
@@ -4749,6 +4740,7 @@ function srUpdate(dt) {
   }, { passive: false });
   sr.addEventListener('pointermove', e => {                 // 배치 중이면 고스트가 따라다닌다
     if (!srOn || !placeType || !placeGhost) return;
+    lastCursor = [e.clientX, e.clientY];
     const hit = placePoint(e);
     if (!hit) return;
     const q = snapPos(placeType, placeRot, hit.p.x, hit.p.z, hit.host);
@@ -4760,7 +4752,8 @@ function srUpdate(dt) {
     placeGhost.traverse(o => { if (o.isMesh) o.material.color.setHex(bad ? 0xff5a4a : FURN[placeType].color); });
   });
   sr.addEventListener('click', e => {
-    if (!srOn || e.target.closest('.srPanel, #srBottom, #srClose, #srTop')) return;
+    if (!srOn || e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srCtx, #srModes')) return;
+    lastCursor = [e.clientX, e.clientY];
     if (placeType) { commitPlace(); return; }
     if (srTab !== 'room') return;
     const picked = pickFurniture(e);      // 놓인 가구 고르기
@@ -4940,6 +4933,7 @@ window.__game = {
     return { n: (roomStore.slots[q.slot ?? roomStore.cur]).items.length, snap: { slot: q.slot, x: q.x, z: q.z, y: q.y || 0, on: !!q.on, under: !!q.under, wall: !!q.wall } };
   },
   roomGrow(axis) { expandRoom(axis); return { w: roomW(curRoom()), d: roomD(curRoom()) }; },
+  guides() { return worldRooms.map(r => ({ slot: r.slot, on: !!r.guide?.visible })); },
   roomProject(i) {
     const it = curRoom().items[i];
     if (!it || !srCam) return null;
