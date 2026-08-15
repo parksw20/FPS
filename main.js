@@ -2668,6 +2668,7 @@ const optMenu = document.getElementById('optMenu');
 document.getElementById('optBtn').addEventListener('click', e => {
   e.stopPropagation();
   optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
+  if (optMenu.style.display === 'block') syncOptUI();
   if (optMenu.style.display === 'block') shopMenu.style.display = 'none';
   if (document.pointerLockElement) document.exitPointerLock();
 });
@@ -2696,6 +2697,7 @@ document.getElementById('dbgWave').addEventListener('click', e => {
   else skipWave();
 });
 let dbgPortal = false, dbgGod = false, dbgFast = false, dbgAmmo = false;
+let outlineOn = localStorage.getItem('fps.outline') === '1';   // 오브젝트 검은 외곽선
 const dbgTog = (id, get, set) => document.getElementById(id).addEventListener('click', e => {
   e.stopPropagation();
   set(!get());
@@ -2704,6 +2706,12 @@ const dbgTog = (id, get, set) => document.getElementById(id).addEventListener('c
 dbgTog('dbgPortal', () => dbgPortal, v => { dbgPortal = v; toast(v ? '포탈 표시 ON' : '포탈 표시 OFF'); });
 dbgTog('dbgGod', () => dbgGod, v => { dbgGod = v; toast(v ? '무적 ON' : '무적 OFF'); });
 dbgTog('dbgFast', () => dbgFast, v => { dbgFast = v; toast(v ? '이동 3배속 ON' : '이동 3배속 OFF'); });
+dbgTog('optOutline', () => outlineOn, v => {
+  outlineOn = v;
+  localStorage.setItem('fps.outline', v ? '1' : '0');
+  if (typeof buildFurnitureAll === 'function' && srOn) buildFurnitureAll();
+  toast(v ? '검은 외곽선 ON' : '검은 외곽선 OFF');
+});
 dbgTog('dbgAmmo', () => dbgAmmo, v => {
   dbgAmmo = v;
   document.getElementById('ammo').classList.toggle('inf', v || buffT > 0);
@@ -2777,6 +2785,8 @@ function applyMap() {
   syncOptUI();
 }
 function syncOptUI() {
+  const ob = document.getElementById('optOutline');
+  if (ob) ob.classList.toggle('on', outlineOn);
   const dw = document.getElementById('dbgWave');
   if (dw) dw.textContent = mapMode === 'random' ? '층 넘기기' : '웨이브 스킵';
   optMenu.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === camMode));
@@ -2904,6 +2914,7 @@ optMenu.addEventListener('click', e => { if (e.target === optMenu) optMenu.style
 document.getElementById('btnOptions').addEventListener('click', e => {
   e.stopPropagation();
   optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
+  if (optMenu.style.display === 'block') syncOptUI();
   if (optMenu.style.display === 'block') { shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; }
 });
 canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) canvas.requestPointerLock(); }); // 사망 화면에선 커서 유지
@@ -4673,12 +4684,6 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     panel(Math.max(0, D / 2 - from), h, x, h / 2, (from + D / 2) / 2, sgn * Math.PI / 2);
   }
   panel(W, h, 0, h / 2, -D / 2, 0);      // 뒷벽 (창 없음)
-  const trimMat = new THREE.MeshBasicMaterial({ color: 0x39f6ff, fog: false, toneMapped: false });
-  for (const [w, d, x, z] of [[W, 0.04, 0, -D / 2], [0.04, D, -W / 2, 0], [0.04, D, W / 2, 0], [W, 0.04, 0, D / 2]]) {
-    const t = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, d), trimMat);
-    t.position.set(x, 0.015, z);
-    grp.add(t);
-  }
   r.guide = makeFloorGuide(W, D);        // 설치 가이드 격자 (활성 방만 표시)
   grp.add(r.guide);
   r.wallGuide = makeWallGuides(W, D, h);
@@ -4759,6 +4764,17 @@ function syncGuides() {                   // 활성 방에만 가이드라인 ·
     m.visible = !rr || ((rr.grp?.visible ?? true) || m.userData.item?.type === 'stairs');
   }
 }
+function addOutline(grp) {                // 메쉬 모서리에 검은 선
+  const edges = [];
+  grp.traverse(o => { if (o.isMesh && o.geometry) edges.push(o); });
+  for (const o of edges) {
+    const eg = new THREE.EdgesGeometry(o.geometry, 35);
+    const ln = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x0b0e12, transparent: true, opacity: 0.85 }));
+    ln.position.copy(o.position); ln.rotation.copy(o.rotation); ln.scale.copy(o.scale);
+    ln.userData.outline = true;
+    o.parent.add(ln);
+  }
+}
 function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
   if (srFurnGrp) srScene.remove(srFurnGrp);
   srFurnGrp = new THREE.Group();
@@ -4768,6 +4784,7 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
       const m = furnMesh(it.type, it);
       m.position.set(r.cx + it.x, (r.cy || 0) + (it.y || 0), r.cz + it.z);
       m.rotation.y = (it.rot || 0) * ROT_STEP;
+      if (outlineOn) addOutline(m);
       m.userData.item = it;
       m.userData.room = r.slot;
       m.userData.roomY = r.cy || 0;
@@ -5491,6 +5508,8 @@ window.__game = {
   },
   roomGrow(axis) { expandRoom(axis); return { w: roomW(curRoom()), d: roomD(curRoom()) }; },
   guides() { return worldRooms.map(r => ({ slot: r.slot, floor: !!r.guide?.visible, wall: !!r.wallGuide?.visible })); },
+  outlineCount() { let n = 0; srFurnGrp?.traverse(o => { if (o.userData.outline) n++; }); return n; },
+  outline(v) { outlineOn = v ?? !outlineOn; localStorage.setItem('fps.outline', outlineOn ? '1' : '0'); if (srOn) buildFurnitureAll(); return outlineOn; },
   roomProject(i) {
     const it = curRoom().items[i];
     if (!it || !srCam) return null;
