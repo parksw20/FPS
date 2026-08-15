@@ -4181,20 +4181,19 @@ function closeRoom() {                    // 이 방을 폐쇄 — 연결된 문
     return;
   }
   let cut = 0;
-  me.items = me.items.filter(it => {      // 내 쪽 연결 제거
-    if ((it.type === 'door' || it.type === 'stairs') && Number.isInteger(it.link) && it.link >= 0) { cut++; return false; }
-    return true;
-  });
-  roomStore.slots.forEach((sl, i) => {    // 상대 쪽 연결 제거
+  for (const it of me.items) {            // 이 방의 연결만 끊는다 (문·계단은 남긴다)
+    if ((it.type === 'door' || it.type === 'stairs') && Number.isInteger(it.link) && it.link >= 0) { it.link = -1; cut++; }
+  }
+  roomStore.slots.forEach((sl, i) => {    // 이 방을 향한 연결만 끊는다 (다른 방끼리는 그대로)
     if (i === idx) return;
-    const before = sl.items.length;
-    sl.items = sl.items.filter(it => !((it.type === 'door' || it.type === 'stairs') && it.link === idx));
-    cut += before - sl.items.length;
+    for (const it of sl.items) {
+      if ((it.type === 'door' || it.type === 'stairs') && it.link === idx) { it.link = -1; cut++; }
+    }
   });
   me.closed = true;
   setSel(null); cancelPlace(); hideCtx();
   roomSave(); buildWorld(); roomRenderUI();
-  toast('🚫 ' + me.name + ' 폐쇄 — 연결 ' + cut + '개 해제');
+  toast('🚫 ' + me.name + ' 폐쇄 — 연결 ' + cut + '개 해제 (문·계단은 남음)');
 }
 function clearRoom() {                    // 다른 방과 이어진 문·계단은 남긴다
   const me = curRoom();
