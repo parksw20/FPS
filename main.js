@@ -4088,7 +4088,7 @@ function loadRoomSlot(i) {
   if (!roomStore.slots[i] || i === roomStore.cur) { roomStore.cur = i; }
   roomStore.cur = i;
   setSel(null); cancelPlace();
-  roomSave(); buildWorld(); roomRenderUI();
+  roomSave(); buildWorld(); roomRenderUI(); syncGuides();
   toast('📂 ' + curRoom().name + ' 불러옴');
 }
 function setBg(key) {
@@ -4399,8 +4399,23 @@ function makeFloorGuide(W, D) {           // 10cm 격자 + 1m 굵은 선
   grp.position.y = 0.014;
   return grp;
 }
-function syncGuides() {                   // 활성 방에만 가이드라인
-  for (const r of worldRooms) if (r.guide) r.guide.visible = r.slot === roomStore.cur && srMode !== 'live';
+function activeLevel() {
+  const a = worldRooms.find(r => r.slot === roomStore.cur);
+  return a ? (a.cy || 0) : 0;
+}
+function syncGuides() {                   // 활성 방에만 가이드라인 · 현재 층만 표시
+  const lvl = activeLevel();
+  for (const r of worldRooms) {
+    const onLvl = Math.abs((r.cy || 0) - lvl) < 0.01;
+    r.grp.visible = onLvl;                // 다른 층은 감춰 시야를 가리지 않게
+    if (r.backdrop) r.backdrop.visible = onLvl;
+    if (r.guide) r.guide.visible = onLvl && r.slot === roomStore.cur && srMode !== 'live';
+  }
+  for (const d of liveDoors) if (d.panel) d.panel.visible = Math.abs((worldRooms.find(r => r.slot === d.from)?.cy || 0) - lvl) < 0.01;
+  if (srFurnGrp) for (const m of srFurnGrp.children) {
+    const rr = worldRooms.find(r => r.slot === m.userData.room);
+    m.visible = !rr || Math.abs((rr.cy || 0) - lvl) < 0.01 || m.userData.item?.type === 'stairs';
+  }
 }
 function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
   if (srFurnGrp) srScene.remove(srFurnGrp);
@@ -4552,21 +4567,25 @@ function liveStep(dt) {
 function drawRoomMap() {
   const cv = document.getElementById('srMap');
   if (!cv) return;
-  const show = roomStore.slots.length > 1 && liveDoors.length > 0;
+  const show = roomStore.slots.length > 1 && (liveDoors.length > 0 || liveStairs.length > 0);
   cv.style.display = show ? 'block' : 'none';
   if (!show) return;
   const c = cv.getContext('2d');
   c.clearRect(0, 0, cv.width, cv.height);
+  const lv0 = srMode === 'live' ? live.y : activeLevel();
   let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
   for (const r of worldRooms) {
+    if (Math.abs((r.cy || 0) - lv0) > 1.4) continue;
     const q = roomRect(r);
     minX = Math.min(minX, q.x0); maxX = Math.max(maxX, q.x1);
     minZ = Math.min(minZ, q.z0); maxZ = Math.max(maxZ, q.z1);
   }
+  if (minX > maxX) return;
   const pad = 8, k = Math.min((cv.width - pad * 2) / (maxX - minX), (cv.height - pad * 2) / (maxZ - minZ));
   const px = x => pad + (x - minX) * k, pz = z => pad + (z - minZ) * k;
   for (const r of worldRooms) {
-    if (srMode === 'live' && Math.abs((r.cy || 0) - live.y) > 1.4) continue;   // 현재 층만
+    const lv = srMode === 'live' ? live.y : activeLevel();
+    if (Math.abs((r.cy || 0) - lv) > 1.4) continue;   // 현재 층만
     const q = roomRect(r);
     c.fillStyle = r.slot === live.active ? 'rgba(64,214,255,.22)' : 'rgba(120,160,180,.12)';
     c.fillRect(px(q.x0), pz(q.z0), (q.x1 - q.x0) * k, (q.z1 - q.z0) * k);
@@ -4582,6 +4601,17 @@ function drawRoomMap() {
     c.moveTo(px(d.x), pz(d.z - DOOR_W / 2)); c.lineTo(px(d.x), pz(d.z + DOOR_W / 2));
     c.stroke();
   }
+  for (const st of liveStairs) {         // 계단 (위층으로)
+    c.fillStyle = '#9be7a0';
+    c.beginPath(); c.arc(px(st.x), pz(st.z), 4, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#0a1a12'; c.font = 'bold 7px system-ui'; c.textAlign = 'center';
+    c.fillText('▲', px(st.x), pz(st.z) + 2.5);
+  }
+  const lvl = srMode === 'live' ? live.y : activeLevel();
+  if (Math.abs(lvl) > 0.01) {            // 층 표시
+    c.fillStyle = '#9fd8ea'; c.font = '9px system-ui'; c.textAlign = 'left';
+    c.fillText((Math.round(lvl / (ROOM_H + ROOM_VGAP)) + 1) + 'F', 6, cv.height - 6);
+  }
   if (srMode === 'live') {               // 플레이어
     c.fillStyle = '#7ee0a3';
     c.beginPath(); c.arc(px(live.x), pz(live.z), 3.4, 0, Math.PI * 2); c.fill();
@@ -4590,7 +4620,14 @@ function drawRoomMap() {
 function srRenderModeUI() {
   for (const b of document.querySelectorAll('#srModes button'))
     b.classList.toggle('on', b.dataset.mode === srMode);
-  document.getElementById('srLeft').style.opacity = srMode === 'live' ? '0.35' : '1';
+  const liveNow = srMode === 'live';
+  for (const t of document.querySelectorAll('#srTabs button')) {   // 포즈=장비·의상 · 생활=공간
+    const roomTab = t.dataset.tab === 'room';
+    t.style.display = (liveNow ? roomTab : !roomTab) ? '' : 'none';
+  }
+  if (liveNow && srTab !== 'room') { srTab = 'room'; srRenderInv(); }
+  if (!liveNow && srTab === 'room') { srTab = 'gear'; srRenderInv(); }
+  document.getElementById('srLeft').style.display = liveNow ? 'none' : '';
   document.getElementById('srHint').textContent = srMode === 'live'
     ? 'WASD 이동 · 좌드래그 카메라 회전 · 휠 거리 · 문 앞에서 자동으로 열립니다'
     : '좌드래그 회전 · 우드래그 카메라 이동 · 휠 확대(쇄골 기준) · 좌측 슬롯을 누르면 해당 부위를 비춥니다';
