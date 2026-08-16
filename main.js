@@ -3985,9 +3985,32 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
       return { p: h.point, host: onTop ? it : null };
     }
   }
-  const t = raycaster.ray.origin.y / -raycaster.ray.direction.y;
-  if (!(t > 0)) return null;
-  return { p: raycaster.ray.origin.clone().addScaledVector(raycaster.ray.direction, t), host: null };
+  // 방 안에서 처음 닿는 면(바닥 또는 벽)을 쓴다 — 벽 너머로 커서를 밀어도 그 자리에 머문다
+  const rm = worldRooms.find(r => r.slot === roomStore.cur);
+  const o = raycaster.ray.origin, d = raycaster.ray.direction;
+  let best = null;
+  const tf = (o.y - (rm ? rm.cy || 0 : 0)) / -d.y;
+  if (tf > 0) {
+    const p = o.clone().addScaledVector(d, tf);
+    const inside = !rm || (Math.abs(p.x - rm.cx) <= rm.w / 2 + 0.01 && Math.abs(p.z - rm.cz) <= rm.d / 2 + 0.01);
+    if (inside) best = { t: tf, p };
+  }
+  if (rm) {
+    const planes = [
+      { t: (rm.cx + rm.w / 2 - o.x) / d.x }, { t: (rm.cx - rm.w / 2 - o.x) / d.x },
+      { t: (rm.cz + rm.d / 2 - o.z) / d.z }, { t: (rm.cz - rm.d / 2 - o.z) / d.z },
+    ];
+    for (const pl of planes) {
+      if (!(pl.t > 0) || !isFinite(pl.t)) continue;
+      const p = o.clone().addScaledVector(d, pl.t);
+      const y = p.y - (rm.cy || 0);
+      if (y < -0.02 || y > ROOM_H) continue;
+      if (Math.abs(p.x - rm.cx) > rm.w / 2 + 0.02 || Math.abs(p.z - rm.cz) > rm.d / 2 + 0.02) continue;
+      if (!best || pl.t < best.t) best = { t: pl.t, p };
+    }
+  }
+  if (!best) return null;
+  return { p: best.p, host: null };
 }
 function roomAtPoint() {                 // 편집은 언제나 활성 방에서만
   return worldRooms.find(r => r.slot === roomStore.cur) ?? worldRooms[0] ?? null;
