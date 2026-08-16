@@ -4456,7 +4456,7 @@ function roomUpdate() {
 
 // ---------- 생활 모드: 문으로 이어진 두 방을 걸어서 오간다 ----------
 let srMode = 'pose';                     // 'pose' 포즈모드 | 'live' 생활모드
-const live = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, camYaw: 0, camPitch: 0.25, camDist: 4.2, active: 0, moving: false };
+const live = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, camYaw: 0, camPitch: 0.25, camDist: 4.2, active: 0, moving: false, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0 };
 const CAM_YAW_LIM = 0, CAM_PITCH_MIN = 0, CAM_PITCH_MAX = Math.PI / 2;   // 좌우 고정 · 위 90° · 아래 0°
 let worldRooms = [];                     // [{slot, cx, cz, size, bg, grp, backdrop, doorAt}]
 let liveDoors = [];                      // [{item, room, other, x, z, side, panel, open, t, cooldown}]
@@ -4808,6 +4808,10 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
   for (const r of worldRooms) {
     for (const it of roomStore.slots[r.slot].items) {
       if (it.type === 'door' && liveDoors.some(d => d.item === it)) continue;   // 이어진 문은 별도 연출
+      const fdef = FURN[it.type];        // 설치면에 맞는 높이로 항상 보정 (예전 저장본 포함)
+      if (fdef.mount === 'ceiling') it.y = +(ROOM_H - fdef.h).toFixed(2);
+      else if (fdef.mount === 'wall' && !(it.y > 0.2)) it.y = fdef.wallY ?? 1.3;
+      else if (fdef.mount === 'floor' && !(it.y >= 0)) it.y = 0;
       const m = furnMesh(it.type, it);
       m.position.set(r.cx + it.x, (r.cy || 0) + (it.y || 0), r.cz + it.z);
       m.rotation.y = (it.rot || 0) * ROT_STEP;
@@ -4894,6 +4898,20 @@ function liveStep(dt) {
   const cy = Math.cos(live.camYaw), sy = Math.sin(live.camYaw);
   const dx = (-sy * -mz + cy * mx) / len, dz = (-cy * -mz - sy * mx) / len;
   live.moving = Math.abs(mx) + Math.abs(mz) > 0;
+  live.dashCd = Math.max(0, live.dashCd - dt);
+  if ((keys['ShiftLeft'] || keys['ShiftRight']) && live.dashCd <= 0) {   // 대쉬
+    live.dashX = live.moving ? dx : Math.sin(live.yaw);
+    live.dashZ = live.moving ? dz : Math.cos(live.yaw);
+    live.dashT = 0.18; live.dashCd = 1.0;
+    sfxDash();
+  }
+  if (live.dashT > 0) {                  // 대쉬 이동 (벽·가구엔 막힌다)
+    live.dashT -= dt;
+    const nx = live.x + live.dashX * 12 * dt, nz = live.z + live.dashZ * 12 * dt;
+    if (insideRooms(nx, live.z) >= 0 && !blockedByFurniture(nx, live.z)) live.x = nx;
+    if (insideRooms(live.x, nz) >= 0 && !blockedByFurniture(live.x, nz)) live.z = nz;
+    live.yaw = Math.atan2(live.dashX, live.dashZ);
+  }
   if (live.moving) {
     const nx = live.x + dx * sp * dt, nz = live.z + dz * sp * dt;
     if (insideRooms(nx, live.z) >= 0 && !blockedByFurniture(nx, live.z)) live.x = nx;
@@ -4943,7 +4961,7 @@ function liveStep(dt) {
     srRoot.position.set(live.x, live.y, live.z);
     srRoot.rotation.y = live.yaw;
   }
-  srPlay(live.y > ground + 0.06 ? 'rifle jump' : live.moving ? 'walking' : 'rifle aiming idle');
+  srPlay(live.y > ground + 0.06 ? 'rifle jump' : live.dashT > 0 ? 'rifle run' : live.moving ? 'walking' : 'rifle aiming idle');
   if (innerWidth > 0 && renderer.domElement.width !== Math.floor(innerWidth * (renderer.getPixelRatio() || 1))) renderer.setSize(innerWidth, innerHeight);   // 창 크기와 어긋나면 맞춘다
   liveApplyCam();
   drawRoomMap();
@@ -5014,7 +5032,7 @@ function srRenderModeUI() {
   if (!liveNow && srTab === 'room') { srTab = 'gear'; srRenderInv(); }
   document.getElementById('srLeft').style.display = liveNow ? 'none' : '';
   document.getElementById('srHint').textContent = srMode === 'live'
-    ? 'WASD 이동 · Space 점프 · 좌드래그 카메라 · 휠 거리 · 문 앞에서 자동으로 열립니다'
+    ? 'WASD 이동 · Shift 대쉬 · Space 점프 · 좌드래그 카메라 · 휠 거리 · 문 앞에서 자동으로 열립니다'
     : '좌드래그 회전 · 우드래그 카메라 이동 · 휠 확대(쇄골 기준) · 좌측 슬롯을 누르면 해당 부위를 비춥니다';
   drawRoomMap();
 }
@@ -5576,6 +5594,7 @@ window.__game = {
     const r = renderer.domElement.getBoundingClientRect();
     return { x: Math.round(r.left + (v.x * 0.5 + 0.5) * r.width), y: Math.round(r.top + (-v.y * 0.5 + 0.5) * r.height), world: placeGhost.position.toArray().map(n => +n.toFixed(2)) };
   },
+  liveDash() { return { t: +live.dashT.toFixed(2), cd: +live.dashCd.toFixed(2) }; },
   liveCam() { return { yaw: +live.camYaw.toFixed(3), pitch: +live.camPitch.toFixed(3), dist: +live.camDist.toFixed(2) }; },
   liveDrag(dx, dy) { live.camYaw -= dx * 0.008; live.camPitch += dy * 0.004; liveStep(1 / 60); return { yaw: +live.camYaw.toFixed(3), pitch: +live.camPitch.toFixed(3) }; },
   livePos() { return { mode: srMode, x: +live.x.toFixed(2), z: +live.z.toFixed(2), y: +live.y.toFixed(2), rooms3: worldRooms.map(r => ({ s: r.slot, cy: +(r.cy || 0).toFixed(2) })), yaw: +live.yaw.toFixed(3), camYaw: +live.camYaw.toFixed(3), camDist: +live.camDist.toFixed(2), srYaw: +srYaw.toFixed(3), rootRot: +(srRoot?.rotation.y ?? 0).toFixed(3), active: live.active, doors: liveDoors.length, rooms: worldRooms.map(r => ({ slot: r.slot, cx: +r.cx.toFixed(2), cz: +r.cz.toFixed(2), w: r.w, d: r.d })) }; },
