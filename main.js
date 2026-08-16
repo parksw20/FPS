@@ -4234,11 +4234,20 @@ function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m �
   const cur = axis === 'w' ? roomW(room) : roomD(room);
   if (cur >= ROOM_MAX) { toast('이미 최대 ' + ROOM_MAX + 'm 입니다'); return; }
   if (coins < EXPAND_COST) { toast('코인이 부족합니다 (' + EXPAND_COST.toLocaleString() + '🪙)'); return; }
+  const before = new Set(worldRooms.map(r => r.slot));      // 확장 전 이어져 있던 방
+  room[axis] = cur + ROOM_STEP;
+  buildWorld();
+  const lost = [...before].filter(sl => !worldRooms.some(r => r.slot === sl));
+  if (lost.length) {                                        // 넓히면 이웃 방이 밀려난다 — 확장 취소
+    room[axis] = cur;
+    buildWorld(); roomRenderUI();
+    toast('🚫 ' + lost.map(i => roomStore.slots[i].name).join(', ') + ' 자리가 없어 확장할 수 없습니다');
+    return;
+  }
   coins -= EXPAND_COST;
   document.getElementById('coinN').textContent = coins;
   persistProgress();
-  room[axis] = cur + ROOM_STEP;
-  roomSave(); buildWorld(); roomRenderUI();
+  roomSave(); roomRenderUI();
   toast('🏠 ' + roomW(room) + 'm × ' + roomD(room) + 'm 로 확장!');
 }
 function addRoomSlot(link) {              // 문·계단에서만 새 방을 만든다 (그 자리에 바로 연결)
