@@ -3724,7 +3724,17 @@ function roomLoad() {
     }
   } catch { }
 }
-function roomSave() { localStorage.setItem('fps.rooms', JSON.stringify(roomStore)); }
+function roomSave() {                     // 저장 전에 설치면 높이를 한 번 더 맞춘다
+  for (const sl of roomStore.slots) {
+    for (const it of sl.items) {
+      const f = FURN[it.type];
+      if (!f) continue;
+      if (f.mount === 'ceiling') it.y = +(ROOM_H - f.h).toFixed(2);
+      else if (f.mount === 'wall' && !(it.y > 0.2)) it.y = f.wallY ?? 1.3;
+    }
+  }
+  localStorage.setItem('fps.rooms', JSON.stringify(roomStore));
+}
 // ---- 창밖 풍경 ----
 function bgTexture(key) {
   const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 512;
