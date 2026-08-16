@@ -3977,6 +3977,7 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
       let o = h.object;
       while (o && !o.userData.item) o = o.parent;
       if (!o) continue;
+      if (moveItem && o.userData.item === moveItem) continue;   // 옮기는 중인 자기 자신은 무시 (떨림 방지)
       const it = o.userData.item, top = itemTop(it);
       const mine = o.userData.room === roomStore.cur;
       const rr = worldRooms.find(r => r.slot === o.userData.room);
@@ -5249,6 +5250,7 @@ function srUpdate(dt) {
   addEventListener('pointerup', e => { srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null; });
   sr.addEventListener('wheel', e => {
     if (!srOn) return;
+    if (e.target.closest('.srPanel, #srCtx, #srBottom, #srModes')) return;   // 패널 위에서는 패널이 스크롤
     e.preventDefault();
     if (srMode === 'live') { live.camDist = Math.max(1.6, Math.min(7, live.camDist + Math.sign(e.deltaY) * 0.3)); return; }
     srTarget.dist = Math.max(0.7, Math.min(6, srTarget.dist + Math.sign(e.deltaY) * 0.25));
