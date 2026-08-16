@@ -4468,8 +4468,11 @@ function roomRenderUI() {
 function roomUpdate() {
   if (placeGhost && placeType) placeGhost.visible = true;
   if (srOutline) srOutline.update();
-  if (srFurnGrp) {
-    for (const m of srFurnGrp.children) m.position.y = m.userData.item === srPickSel ? 0.02 : 0;
+  if (srFurnGrp) {                        // 선택 표시(살짝 띄우기) — 설치 높이는 유지한다
+    for (const m of srFurnGrp.children) {
+      const base = (m.userData.roomY || 0) + (m.userData.item?.y || 0);
+      m.position.y = base + (m.userData.item === srPickSel ? 0.02 : 0);
+    }
   }
 }
 
@@ -5573,6 +5576,15 @@ window.__game = {
   },
   roomGrow(axis) { expandRoom(axis); return { w: roomW(curRoom()), d: roomD(curRoom()) }; },
   guides() { return worldRooms.map(r => ({ slot: r.slot, floor: !!r.guide?.visible, wall: !!r.wallGuide?.visible })); },
+  furnDump() {
+    const out = [];
+    srFurnGrp?.children.forEach(m => out.push({
+      t: m.userData.item?.type, itemY: m.userData.item?.y, meshY: +m.position.y.toFixed(2),
+      worldY: +m.getWorldPosition(new THREE.Vector3()).y.toFixed(2), room: m.userData.room, vis: m.visible,
+    }));
+    if (placeGhost) out.push({ t: 'GHOST:' + placeType, meshY: +placeGhost.position.y.toFixed(2) });
+    return out;
+  },
   outlineCount() { let n = 0; srFurnGrp?.traverse(o => { if (o.userData.outline) n++; }); return n; },
   outline(v) { outlineOn = v ?? !outlineOn; localStorage.setItem('fps.outline', outlineOn ? '1' : '0'); if (srOn) buildFurnitureAll(); return outlineOn; },
   roomProject(i) {
