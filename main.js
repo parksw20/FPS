@@ -4334,7 +4334,7 @@ function ctxLinkHtml() {                 // 문·계단: 어디로 이을지
   const icon = srPickSel.type === 'stairs' ? '🪜' : '🚪';
   return `<div class="ctxHead">${srPickSel.type === 'stairs' ? '위층으로 연결' : '연결할 방'}</div>`
     + roomStore.slots.map((sl, i) =>
-      i === roomStore.cur || sl.closed ? '' : `<button data-link="${i}"${srPickSel.link === i ? ' class="on"' : ''}>${icon} ${sl.name}</button>`).join('')
+      i === roomStore.cur ? '' : `<button data-link="${i}"${srPickSel.link === i ? ' class="on"' : ''}>${icon} ${sl.name}${sl.closed ? '<i>폐쇄중 · 연결하면 열림</i>' : ''}</button>`).join('')
     + `<button data-newroom="1" class="new">＋ 새 방<i>${slotCost().toLocaleString()}🪙</i></button>`;
 }
 function showCtx(x, y) {
@@ -4358,17 +4358,21 @@ function showCtx(x, y) {
       b.addEventListener('click', ev => {
         ev.stopPropagation();
         const prev = srPickSel.link ?? -1;
-        srPickSel.link = +b.dataset.link;
+        const target = +b.dataset.link;
+        const wasClosed = !!roomStore.slots[target].closed;
+        if (wasClosed) roomStore.slots[target].closed = false;   // 연결하면 폐쇄 해제
+        srPickSel.link = target;
         buildWorld();
         if (srPickSel.blocked) {          // 그 자리에 이미 다른 방이 있다
           srPickSel.link = prev;
+          if (wasClosed) roomStore.slots[target].closed = true;
           buildWorld();
           toast('🚫 그 방향엔 이미 다른 방이 있어 연결할 수 없습니다');
           return;
         }
         if (srPickSel.type === 'door') ensureReturnDoor(roomStore.cur, srPickSel);
-        roomSave(); buildWorld(); hideCtx(); srRenderModeUI();
-        toast('🚪 ' + roomStore.slots[srPickSel.link].name + ' 와 연결');
+        roomSave(); buildWorld(); hideCtx(); srRenderModeUI(); roomRenderUI();
+        toast('🚪 ' + roomStore.slots[srPickSel.link].name + ' 와 연결' + (wasClosed ? ' (폐쇄 해제)' : ''));
       });
     }
   }
