@@ -4389,54 +4389,69 @@ function clearRoom() {                    // 다른 방과 이어진 문·계단
   setSel(null); roomSave(); buildWorld();
   toast('🧹 가구 ' + removed + '개 정리 — 연결된 문·계단은 남겨둠');
 }
-function canExpand(axis) {               // +x·+z 쪽으로 2m 늘릴 자리가 있는가
-  const room = curRoom(), i = roomStore.cur;
-  const cur = axis === 'w' ? roomW(room) : roomD(room);
-  if (cur >= ROOM_MAX) return false;
-  const ov = { slot: i, w: roomW(room) + (axis === 'w' ? ROOM_STEP : 0), d: roomD(room) + (axis === 'd' ? ROOM_STEP : 0) };
-  const rect = slotRect(room, ov);
-  if (!rectFree(rect, i)) return false;
-  for (const it of room.items) {         // 넓혀도 지금 연결이 유지되어야 한다
-    if (it.type !== 'door' || !Number.isInteger(it.link) || it.link < 0) continue;
-    const nb = roomStore.slots[it.link];
-    if (!nb) continue;
-    const w = wallBetween(rect, slotRect(nb));
-    if (!w || w.len < MIN_LINK - 0.01) return false;
-  }
-  return true;
-}
-function resizeRoomItems(sl, newW, newD) {   // 방 크기가 바뀌면 가구를 제자리·제벽에 맞춘다
+function resizeRoomItems(sl, newW, newD, newGx, newGz) {   // 방 크기·위치가 바뀌면 가구를 제자리·제벽에 맞춘다
   const w0 = roomW(sl), d0 = roomD(sl);
-  const dw = newW - w0, dd = newD - d0;
-  if (!dw && !dd) return;
+  const gx0 = sl.gx || 0, gz0 = sl.gz || 0;
+  const gx1 = newGx ?? gx0, gz1 = newGz ?? gz0;
+  const shiftX = (gx1 + newW / 2) - (gx0 + w0 / 2);        // 방 중심이 움직인 만큼
+  const shiftZ = (gz1 + newD / 2) - (gz0 + d0 / 2);
+  if (!shiftX && !shiftZ && newW === w0 && newD === d0) return;
   for (const it of sl.items) {
     const f = FURN[it.type];
     if (!f) continue;
     const onWall = f.mount === 'wall' || f.mount === 'opening';
     const pinX = onWall && Math.abs(Math.abs(it.x) - w0 / 2) < 0.06 ? Math.sign(it.x) : 0;
     const pinZ = onWall && Math.abs(Math.abs(it.z) - d0 / 2) < 0.06 ? Math.sign(it.z) : 0;
-    if (pinX) it.x = +(pinX * newW / 2).toFixed(2);        // 좌·우 벽에 붙은 것은 벽을 따라간다
-    else if (dw) it.x = +(it.x - dw / 2).toFixed(2);       // 나머지는 월드 위치 유지
-    if (pinZ) it.z = +(pinZ * newD / 2).toFixed(2);        // 앞·뒷벽에 붙은 것
-    else if (dd) it.z = +(it.z - dd / 2).toFixed(2);
+    if (pinX) it.x = +(pinX * newW / 2).toFixed(2);        // 좌·우 벽에 붙은 것은 그 벽을 따라간다
+    else it.x = +(it.x - shiftX).toFixed(2);               // 나머지는 월드 위치 유지
+    if (pinZ) it.z = +(pinZ * newD / 2).toFixed(2);        // 뒷벽에 붙은 것
+    else it.z = +(it.z - shiftZ).toFixed(2);
     const lim = { x: newW / 2 - 0.1, z: newD / 2 - 0.1 };  // 방 밖으로 나가지 않게
     if (!pinX) it.x = +Math.max(-lim.x, Math.min(lim.x, it.x)).toFixed(2);
     if (!pinZ) it.z = +Math.max(-lim.z, Math.min(lim.z, it.z)).toFixed(2);
   }
 }
+function growDir(sl, axis) {              // 어느 쪽으로 늘릴 수 있나 (+1: 오른쪽/아래, -1: 왼쪽/위, 0: 불가)
+  const i = roomStore.slots.indexOf(sl);
+  const w = roomW(sl), d = roomD(sl);
+  if ((axis === 'w' ? w : d) >= ROOM_MAX) return 0;
+  for (const dir of [1, -1]) {
+    const ov = axis === 'w'
+      ? { slot: i, gx: (sl.gx || 0) - (dir < 0 ? ROOM_STEP : 0), w: w + ROOM_STEP, d }
+      : { slot: i, gz: (sl.gz || 0) - (dir < 0 ? ROOM_STEP : 0), d: d + ROOM_STEP, w };
+    const rect = slotRect(sl, ov);
+    if (!rectFree(rect, i)) continue;
+    let keep = true;                      // 넓혀도 지금 연결이 남아야 한다
+    for (const it of sl.items) {
+      if (it.type !== 'door' || !(it.link >= 0)) continue;
+      const nb = roomStore.slots[it.link];
+      if (!nb) continue;
+      const wl = wallBetween(rect, slotRect(nb));
+      if (!wl || wl.len < MIN_LINK - 0.01) { keep = false; break; }
+    }
+    if (keep) return dir;
+  }
+  return 0;
+}
+function canExpand(axis) { return growDir(curRoom(), axis) !== 0; }
 function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m 늘린다 — 줄이기는 없음
   const room = curRoom();
   const cur = axis === 'w' ? roomW(room) : roomD(room);
   if (cur >= ROOM_MAX) { toast('이미 최대 ' + ROOM_MAX + 'm 입니다'); return; }
-  if (!canExpand(axis)) { toast('🚫 그 방향에는 다른 방이 있어 넓힐 수 없습니다'); return; }
+  const dir = growDir(room, axis);
+  if (!dir) { toast('🚫 양쪽 모두 다른 방이 있어 넓힐 수 없습니다'); return; }
   if (coins < EXPAND_COST) { toast('코인이 부족합니다 (' + EXPAND_COST.toLocaleString() + '🪙)'); return; }
-  resizeRoomItems(room, axis === 'w' ? cur + ROOM_STEP : roomW(room), axis === 'd' ? cur + ROOM_STEP : roomD(room));
+  const newW = axis === 'w' ? cur + ROOM_STEP : roomW(room), newD = axis === 'd' ? cur + ROOM_STEP : roomD(room);
+  const newGx = (room.gx || 0) - (axis === 'w' && dir < 0 ? ROOM_STEP : 0);
+  const newGz = (room.gz || 0) - (axis === 'd' && dir < 0 ? ROOM_STEP : 0);
+  resizeRoomItems(room, newW, newD, newGx, newGz);
+  room.gx = newGx; room.gz = newGz;
   room[axis] = cur + ROOM_STEP;
   coins -= EXPAND_COST;
   document.getElementById('coinN').textContent = coins;
   persistProgress();
   roomSave(); buildWorld(); roomRenderUI();
-  toast('🏠 ' + roomW(room) + 'm × ' + roomD(room) + 'm 로 확장!');
+  toast('🏠 ' + roomW(room) + 'm × ' + roomD(room) + 'm 로 확장 (' + (axis === 'w' ? (dir > 0 ? '오른쪽' : '왼쪽') : (dir > 0 ? '아래쪽' : '위쪽')) + ')');
 }
 let addState = null;                     // 새 방 배치 중 {w,d,gx,gz,gy,stair}
 function addRoomSlot(link) {             // 새 방 — 미니맵에서 자리를 잡아 배치한다
@@ -4551,7 +4566,7 @@ function applyLayoutEdit() {
   if (coins < cost) { toast('🪙 코인이 부족합니다 — ' + cost.toLocaleString() + ' 필요 (보유 ' + coins.toLocaleString() + ')'); return; }
   const grew = st.w !== roomW(sl) || st.d !== roomD(sl);
   const moved = st.gx !== (sl.gx || 0) || st.gz !== (sl.gz || 0);
-  resizeRoomItems(sl, st.w, st.d);
+  resizeRoomItems(sl, st.w, st.d, st.gx, st.gz);
   sl.gx = st.gx; sl.gz = st.gz; sl.w = st.w; sl.d = st.d;
   if (cost) { coins -= cost; document.getElementById('coinN').textContent = coins; persistProgress(); }
   closeAddMap();
@@ -4747,9 +4762,13 @@ function addRoomSize(axis, delta) {
     ? (key === 'w' ? roomW(roomStore.slots[addState.edit]) : roomD(roomStore.slots[addState.edit])) : ROOM_MIN;
   if (next < floorSize) { toast('방은 줄일 수 없습니다'); return; }
   if (next < ROOM_MIN || next > ROOM_MAX) { toast('방 크기는 ' + ROOM_MIN + '~' + ROOM_MAX + 'm 입니다'); return; }
-  const t = { ...addState, [key]: next };
-  if (!rectFree(slotRect(t), addState.edit ?? -1)) { toast('🚫 그 방향엔 다른 방이 있어 늘릴 수 없습니다'); return; }
-  addState[key] = next;
+  const gk = key === 'w' ? 'gx' : 'gz';
+  const cands = delta > 0
+    ? [{ ...addState, [key]: next }, { ...addState, [key]: next, [gk]: addState[gk] - ROOM_STEP }]   // 오른쪽/아래 → 막히면 왼쪽/위
+    : [{ ...addState, [key]: next }];
+  const fit = cands.find(t => rectFree(slotRect(t), addState.edit ?? -1));
+  if (!fit) { toast('🚫 양쪽 모두 다른 방이 있어 늘릴 수 없습니다'); return; }
+  addState[key] = next; addState[gk] = fit[gk];
   drawAddMap();
 }
 function loadRoomSlot(i) {
