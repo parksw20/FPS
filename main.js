@@ -4231,8 +4231,11 @@ function pickFurniture(ev) {
   }
   return null;
 }
-function setSel(it) { srPickSel = it; syncOutline(); roomRenderUI(); syncGuides(); }
-function startMove() {                    // 고른 가구를 커서로 옮긴다
+function setSel(it) {
+  if (pending && it !== pending.item) cancelPending();     // 다른 걸 고르면 대기 중 편집은 취소
+  srPickSel = it; syncOutline(); roomRenderUI(); syncGuides();
+}
+function startMove() {                    // 고른 가구를 커서로 옮긴다 (승인해야 저장)
   if (!srPickSel) { toast('옮길 가구를 먼저 고르세요'); return; }
   moveItem = srPickSel;
   moveOrig = { x: moveItem.x, z: moveItem.z, y: moveItem.y || 0, rot: moveItem.rot || 0 };
@@ -4267,21 +4270,56 @@ function endMove(ok) {
     toast('🚫 벽에 이미 다른 것이 걸려 있습니다');
     return;
   }
-  const mt = moveItem.type;
+  const mt = moveItem.type, it = moveItem, was = moveOrig;
   moveItem = null; moveOrig = null;
-  roomSave(); refreshRoom(mt); syncOutline(); syncGuides();
-  toast(ok ? '🖐 이동 완료' : '이동 취소');
+  if (ok) beginPending('move', it, was);  // 승인해야 저장된다 (되돌릴 값은 이동 전)
+  refreshRoom(mt); syncOutline(); syncGuides();
+  toast(ok ? '🖐 위치 확인 — 승인하면 저장됩니다' : '이동 취소');
 }
 function cutsWall(type) { return type === 'window' || type === 'door' || type === 'stairs'; }
 function refreshRoom(type) { if (cutsWall(type)) buildWorld(); else buildFurnitureAll(); }
+let pending = null;                       // {kind:'move'|'rot'|'del', item, orig}
+function pendingLabel(kind) { return kind === 'move' ? '🖐 이동' : kind === 'rot' ? '⟳ 회전' : '🗑 제거'; }
+function beginPending(kind, it, orig) {   // orig: 동작 전 상태 (없으면 현재 상태)
+  if (pending && pending.item !== it) cancelPending();
+  if (!pending) pending = { kind, item: it, orig: orig ? { ...orig } : { x: it.x, z: it.z, y: it.y, rot: it.rot || 0 } };
+  else pending.kind = kind;              // 같은 가구를 계속 편집하면 마지막 동작 이름으로
+  showConfirmBar();
+}
+function showConfirmBar() {
+  const el = document.getElementById('srConfirm');
+  if (!el) return;
+  el.classList.toggle('on', !!pending);
+  const msg = document.getElementById('srConfirmMsg');
+  if (msg && pending) msg.textContent = pendingLabel(pending.kind) + ' — 승인하면 저장됩니다';
+}
+function confirmPending() {
+  if (!pending) return;
+  const { kind, item } = pending;
+  pending = null;
+  if (kind === 'del') {
+    const arr = curRoom().items, i = arr.indexOf(item);
+    if (i >= 0) arr.splice(i, 1);
+    setSel(null);
+  }
+  showConfirmBar();
+  roomSave(); refreshRoom(item.type); hideCtx();
+  toast('✔ ' + pendingLabel(kind) + ' 저장');
+}
+function cancelPending() {
+  if (!pending) return;
+  const { kind, item, orig } = pending;
+  pending = null;
+  if (kind !== 'del') Object.assign(item, orig);
+  showConfirmBar();
+  refreshRoom(item.type); hideCtx();
+  toast('↩ ' + pendingLabel(kind) + ' 취소');
+}
 function removeSelected() {
   if (!srPickSel) { toast('제거할 가구를 먼저 고르세요'); return; }
-  const arr = curRoom().items, i = arr.indexOf(srPickSel);
-  const t = srPickSel.type;
-  if (i >= 0) arr.splice(i, 1);
-  setSel(null);
-  roomSave(); refreshRoom(t); hideCtx();
-  toast('가구 제거');
+  beginPending('del', srPickSel);         // 승인해야 실제로 지운다
+  refreshRoom(srPickSel.type); hideCtx();
+  toast('🗑 제거 — 승인하면 지워집니다');
 }
 function rotateCurrent() {
   if (placeType) { placeRot = (placeRot + 1) % ROT_N; return; }   // 30°씩
@@ -4297,7 +4335,8 @@ function rotateCurrent() {
       toast('🚫 그 방향으로는 자리가 좁습니다');
       return;
     }
-    roomSave(); refreshRoom(it.type);
+    beginPending('rot', it, keep);        // 승인해야 저장된다 (되돌릴 값은 회전 전)
+    refreshRoom(it.type);
     return;
   }
   toast('회전할 가구를 고르세요');
@@ -4366,12 +4405,32 @@ function canExpand(axis) {               // +x·+z 쪽으로 2m 늘릴 자리가
   }
   return true;
 }
+function resizeRoomItems(sl, newW, newD) {   // 방 크기가 바뀌면 가구를 제자리·제벽에 맞춘다
+  const w0 = roomW(sl), d0 = roomD(sl);
+  const dw = newW - w0, dd = newD - d0;
+  if (!dw && !dd) return;
+  for (const it of sl.items) {
+    const f = FURN[it.type];
+    if (!f) continue;
+    const onWall = f.mount === 'wall' || f.mount === 'opening';
+    const pinX = onWall && Math.abs(Math.abs(it.x) - w0 / 2) < 0.06 ? Math.sign(it.x) : 0;
+    const pinZ = onWall && Math.abs(Math.abs(it.z) - d0 / 2) < 0.06 ? Math.sign(it.z) : 0;
+    if (pinX) it.x = +(pinX * newW / 2).toFixed(2);        // 좌·우 벽에 붙은 것은 벽을 따라간다
+    else if (dw) it.x = +(it.x - dw / 2).toFixed(2);       // 나머지는 월드 위치 유지
+    if (pinZ) it.z = +(pinZ * newD / 2).toFixed(2);        // 앞·뒷벽에 붙은 것
+    else if (dd) it.z = +(it.z - dd / 2).toFixed(2);
+    const lim = { x: newW / 2 - 0.1, z: newD / 2 - 0.1 };  // 방 밖으로 나가지 않게
+    if (!pinX) it.x = +Math.max(-lim.x, Math.min(lim.x, it.x)).toFixed(2);
+    if (!pinZ) it.z = +Math.max(-lim.z, Math.min(lim.z, it.z)).toFixed(2);
+  }
+}
 function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m 늘린다 — 줄이기는 없음
   const room = curRoom();
   const cur = axis === 'w' ? roomW(room) : roomD(room);
   if (cur >= ROOM_MAX) { toast('이미 최대 ' + ROOM_MAX + 'm 입니다'); return; }
   if (!canExpand(axis)) { toast('🚫 그 방향에는 다른 방이 있어 넓힐 수 없습니다'); return; }
   if (coins < EXPAND_COST) { toast('코인이 부족합니다 (' + EXPAND_COST.toLocaleString() + '🪙)'); return; }
+  resizeRoomItems(room, axis === 'w' ? cur + ROOM_STEP : roomW(room), axis === 'd' ? cur + ROOM_STEP : roomD(room));
   room[axis] = cur + ROOM_STEP;
   coins -= EXPAND_COST;
   document.getElementById('coinN').textContent = coins;
@@ -4478,14 +4537,50 @@ function openLayoutEdit(slot) {           // 이미 있는 방을 옮긴다
   addState = { edit: i, w: roomW(sl), d: roomD(sl), gx: sl.gx || 0, gz: sl.gz || 0, gy: sl.gy || 0, from: i, cost: 0 };
   openAddMap();
 }
+function editCost() {                     // 편집 창에서 늘린 만큼의 비용
+  const st = addState;
+  if (!st || st.edit === undefined) return 0;
+  const sl = roomStore.slots[st.edit];
+  const steps = Math.max(0, (st.w - roomW(sl)) / ROOM_STEP) + Math.max(0, (st.d - roomD(sl)) / ROOM_STEP);
+  return Math.round(steps) * EXPAND_COST;
+}
 function applyLayoutEdit() {
   const st = addState, chk = addRoomCheck();
   if (!st || !chk.ok) { toast(chk.note || '자리를 정해주세요'); return; }
-  const sl = roomStore.slots[st.edit];
-  sl.gx = st.gx; sl.gz = st.gz;
+  const sl = roomStore.slots[st.edit], cost = editCost();
+  if (coins < cost) { toast('🪙 코인이 부족합니다 — ' + cost.toLocaleString() + ' 필요 (보유 ' + coins.toLocaleString() + ')'); return; }
+  const grew = st.w !== roomW(sl) || st.d !== roomD(sl);
+  const moved = st.gx !== (sl.gx || 0) || st.gz !== (sl.gz || 0);
+  resizeRoomItems(sl, st.w, st.d);
+  sl.gx = st.gx; sl.gz = st.gz; sl.w = st.w; sl.d = st.d;
+  if (cost) { coins -= cost; document.getElementById('coinN').textContent = coins; persistProgress(); }
   closeAddMap();
   roomSave(); buildWorld(); roomRenderUI(); srRenderModeUI();
-  toast('🏠 ' + sl.name + ' 위치를 옮겼습니다');
+  toast('🏠 ' + sl.name + (moved ? ' 이동' : '') + (grew ? ' · ' + st.w + '×' + st.d + 'm' : '') + (cost ? ' (' + cost.toLocaleString() + '🪙)' : ''));
+}
+function editRoomClose() {                // 편집 창에서 폐쇄/해제
+  const st = addState;
+  if (!st || st.edit === undefined) return;
+  const i = st.edit;
+  if (i === 0) { toast('🏠 기본 방은 폐쇄할 수 없습니다'); return; }
+  const keepFrame = st.frame;
+  roomStore.cur = i;                      // 폐쇄는 그 방 기준으로 동작한다
+  closeRoom();
+  openLayoutEdit(i);
+  addState.frame = keepFrame;
+  drawAddMap();
+}
+function editNewRoom() {                  // 편집 창에서 바로 새 방 만들기
+  const gy = addState ? addState.gy : 0;
+  const keepFrame = addState ? addState.frame : null;
+  const cost = slotCost();
+  if (coins < cost) { toast('🪙 코인이 부족합니다 — ' + cost.toLocaleString() + ' 필요 (보유 ' + coins.toLocaleString() + ')'); return; }
+  addState = { w: ROOM_MIN, d: ROOM_MIN, gy, from: roomStore.cur, cost, gx: 0, gz: 0, frame: keepFrame };
+  const me = roomStore.slots.find(sl => (sl.gy || 0) === gy) ?? curRoom();
+  addState.gx = (me.gx || 0) + roomW(me); addState.gz = (me.gz || 0);
+  fitAddRoom();
+  drawAddMap();
+  toast('＋ 새 방 자리를 정하세요');
 }
 function addRoomCheck() {                // 지금 자리를 쓸 수 있는가
   const st = addState;
@@ -4600,10 +4695,22 @@ function drawAddMap() {
   c.fillText(addState.w + '×' + addState.d + 'm', v.px(g.x0) + g.w * v.k / 2, v.pz(g.z0) + g.d * v.k / 2 + 4);
   const note = document.getElementById('addNote');
   if (note) { note.textContent = chk.note; note.className = chk.ok ? 'ok' : 'bad'; }
+  const edit = addState.edit !== undefined;
   const ok = document.getElementById('addOk');
   if (ok) {
     ok.disabled = !chk.ok;
-    ok.textContent = addState.edit !== undefined ? '이 자리로 옮기기' : '이 자리에 배치 (' + (addState.cost || 0).toLocaleString() + '🪙)';
+    const c = edit ? editCost() : (addState.cost || 0);
+    ok.textContent = (edit ? '이 자리로 적용' : '이 자리에 배치') + (c ? ' (' + c.toLocaleString() + '🪙)' : '');
+  }
+  const cb = document.getElementById('addClose');
+  if (cb) {
+    cb.style.display = edit && addState.edit !== 0 ? '' : 'none';
+    cb.textContent = roomStore.slots[addState.edit]?.closed ? '🔓 폐쇄 해제' : '🚫 방 폐쇄';
+  }
+  const nb2 = document.getElementById('addNew');
+  if (nb2) {
+    nb2.style.display = edit ? '' : 'none';
+    nb2.textContent = '＋ 새 방 (' + slotCost().toLocaleString() + '🪙)';
   }
   const ttl = document.querySelector('#addPanel .optTitle');
   if (ttl) ttl.textContent = addState.edit !== undefined ? (roomStore.slots[addState.edit]?.name ?? '방') + ' 옮기기' : '새 방 배치';
@@ -4636,9 +4743,12 @@ function addRoomSize(axis, delta) {
   if (!addState) return;
   const key = axis === 'w' ? 'w' : 'd';
   const next = addState[key] + delta;
+  const floorSize = addState.edit !== undefined
+    ? (key === 'w' ? roomW(roomStore.slots[addState.edit]) : roomD(roomStore.slots[addState.edit])) : ROOM_MIN;
+  if (next < floorSize) { toast('방은 줄일 수 없습니다'); return; }
   if (next < ROOM_MIN || next > ROOM_MAX) { toast('방 크기는 ' + ROOM_MIN + '~' + ROOM_MAX + 'm 입니다'); return; }
   const t = { ...addState, [key]: next };
-  if (!rectFree(slotRect(t), -1)) { toast('🚫 그 방향엔 다른 방이 있어 늘릴 수 없습니다'); return; }
+  if (!rectFree(slotRect(t), addState.edit ?? -1)) { toast('🚫 그 방향엔 다른 방이 있어 늘릴 수 없습니다'); return; }
   addState[key] = next;
   drawAddMap();
 }
@@ -4778,6 +4888,7 @@ function showCtx(x, y) {
   el.classList.add('on');
 }
 function hideCtx() { document.getElementById('srCtx')?.classList.remove('on'); }
+function closeCtx() { if (pending) cancelPending(); else hideCtx(); }   // 닫기 = 대기 중 편집 취소
 function roomRenderUI() {
   const slots = document.getElementById('srSlots');
   if (!slots) return;
@@ -5312,6 +5423,7 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
   srFurnGrp = new THREE.Group();
   for (const r of worldRooms) {
     for (const it of roomStore.slots[r.slot].items) {
+      if (pending && pending.kind === 'del' && it === pending.item) continue;   // 제거 승인 대기 중
       if (it.type === 'door' && liveDoors.some(d => d.item === it)) continue;   // 이어진 문은 별도 연출
       const fdef = FURN[it.type];        // 설치면에 맞는 높이로 항상 보정 (예전 저장본 포함)
       if (fdef.mount === 'ceiling') it.y = +(ROOM_H - fdef.h).toFixed(2);
@@ -5929,13 +6041,16 @@ function srUpdate(dt) {
     if (!srOn) return;
     if (e.code === 'KeyR') { if (moveItem) { moveItem.rot = ((moveItem.rot || 0) + 1) % ROT_N; moveTo(moveItem.x + (worldRooms.find(r => r.slot === roomStore.cur)?.cx || 0), moveItem.z + (worldRooms.find(r => r.slot === roomStore.cur)?.cz || 0)); } else rotateCurrent(); }
     if (e.code === 'Delete' || e.code === 'Backspace') removeSelected();
-    if (e.code === 'Escape') { hideCtx(); if (moveItem) endMove(false); else if (placeType) cancelPlace(); else if (srPickSel) setSel(null); }
+    if (e.code === 'Escape') { hideCtx(); if (pending) cancelPending(); else if (moveItem) endMove(false); else if (placeType) cancelPlace(); else if (srPickSel) setSel(null); }
+    if (e.code === 'Enter' && pending) confirmPending();
   });
   document.getElementById('srRot').addEventListener('click', e => { e.stopPropagation(); rotateCurrent(); });
   document.getElementById('srClear').addEventListener('click', e => { e.stopPropagation(); clearRoom(); });
   document.getElementById('srReset2').addEventListener('click', e => { e.stopPropagation(); resetRooms(); });
   document.getElementById('srCloseRoom').addEventListener('click', e => { e.stopPropagation(); closeRoom(); });
   document.getElementById('srMapEdit')?.addEventListener('click', e => { e.stopPropagation(); openLayoutEdit(standingSlot()); });
+  document.getElementById('srOkBtn')?.addEventListener('click', e => { e.stopPropagation(); confirmPending(); });
+  document.getElementById('srNoBtn')?.addEventListener('click', e => { e.stopPropagation(); cancelPending(); });
   const addMap = document.getElementById('addMap');
   if (addMap) {
     let drag = false;
@@ -5968,6 +6083,8 @@ function srUpdate(dt) {
     for (const b of document.querySelectorAll('#addRoom [data-size]'))
       b.addEventListener('click', () => addRoomSize(b.dataset.size[0], b.dataset.size[1] === '+' ? ROOM_STEP : -ROOM_STEP));
     document.getElementById('addOk').addEventListener('click', () => (addState && addState.edit !== undefined ? applyLayoutEdit() : confirmAddRoom()));
+    document.getElementById('addClose').addEventListener('click', () => editRoomClose());
+    document.getElementById('addNew').addEventListener('click', () => editNewRoom());
     document.getElementById('addCancel').addEventListener('click', () => { closeAddMap(); toast('새 방 배치 취소'); });
     window.addEventListener('keydown', e => {
       if (!addState) return;
@@ -5985,7 +6102,8 @@ function srUpdate(dt) {
       if (a2 === 'img') { pickBannerImage(); return; }
       if (a2 === 'move') { startMove(); return; }
       if (a2 === 'rot') { rotateCurrent(); return; }        // 회전은 메뉴를 유지
-      if (a2 === 'del') removeSelected();
+      if (a2 === 'del') { removeSelected(); return; }
+      if (a2 === 'close') { closeCtx(); return; }           // 닫기로는 저장되지 않는다
       hideCtx();
     });
   }
