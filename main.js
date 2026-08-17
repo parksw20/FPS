@@ -2685,7 +2685,7 @@ if (!IS_LOCAL) {
 }
 document.getElementById('dbgCoins').addEventListener('click', e => {
   e.stopPropagation();
-  coins += 1000000;
+  coins += 100000000;
   document.getElementById('coinN').textContent = coins;
   flashChip('coinN');
   renderUpg();
