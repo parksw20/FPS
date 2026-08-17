@@ -4129,8 +4129,29 @@ function wallItemPos(side, u, rm) {        // 벽 좌표 → 방 로컬 x/z/rot
   if (side === 'x-') return { x: +(-rm.w / 2).toFixed(2), z: +u.toFixed(2), rot: 3 };
   return { x: +u.toFixed(2), z: +(-rm.d / 2).toFixed(2), rot: 0 };
 }
+let placeMark = null;                     // 천장 가구: 바닥에 찍히는 중심 표시
+function makePlaceMark(f) {
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x7df3ff, transparent: true, opacity: 0.75, fog: false, toneMapped: false, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(Math.max(0.12, f.w / 2 - 0.04), Math.max(0.16, f.w / 2), 28), mat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.02;
+  grp.add(ring);
+  for (const r of [0, Math.PI / 2]) {     // 십자
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(f.w + 0.2, 0.03), mat);
+    bar.rotation.set(-Math.PI / 2, 0, r);
+    bar.position.y = 0.021;
+    grp.add(bar);
+  }
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, ROOM_H, 6), mat);   // 바닥↔천장 안내선
+  pole.position.y = ROOM_H / 2;
+  grp.add(pole);
+  return grp;
+}
 function startPlace(type) {
   placeType = type; placeRot = 0; setSel(null);
+  if (placeMark) { srScene.remove(placeMark); placeMark = null; }
+  if (FURN[type].mount === 'ceiling') { placeMark = makePlaceMark(FURN[type]); srScene.add(placeMark); }
   syncGuides();
   if (placeGhost) srScene.remove(placeGhost);
   placeGhost = furnMesh(type);
@@ -4145,6 +4166,7 @@ function startPlace(type) {
 function cancelPlace() {
   placeType = null; sizeAnchor = null;
   setTimeout(syncGuides, 0);
+  if (placeMark) { srScene.remove(placeMark); placeMark = null; }
   if (placeGhost) { srScene.remove(placeGhost); placeGhost = null; }
   syncGuides();
   roomRenderUI();
@@ -4265,10 +4287,17 @@ function rotateCurrent() {
   if (placeType) { placeRot = (placeRot + 1) % ROT_N; return; }   // 30°씩
   if (srPickSel) {
     if (FURN[srPickSel.type].rotate !== 'free') { toast('이 가구는 설치면에 고정됩니다'); return; }
-    srPickSel.rot = (srPickSel.rot + 1) % ROT_N;
-    const p = snapPos(srPickSel.type, srPickSel.rot, srPickSel.x, srPickSel.z);
-    srPickSel.x = p.x; srPickSel.z = p.z;
-    roomSave(); buildFurnitureAll();
+    const it = srPickSel, rm = worldRooms.find(r => r.slot === roomStore.cur);
+    const keep = { rot: it.rot || 0, x: it.x, z: it.z };
+    it.rot = (keep.rot + 1) % ROT_N;
+    const p = snapPos(it.type, it.rot, (rm ? rm.cx : 0) + it.x, (rm ? rm.cz : 0) + it.z);   // 제자리에서 돌린다
+    it.x = p.x; it.z = p.z;
+    if (overlaps(it.type, it.rot, it.x, it.z, it.y || 0, it, curRoom().items) || doorStairClash(curRoom(), it.type, it)) {
+      Object.assign(it, keep);           // 돌리면 겹친다 — 원래대로
+      toast('🚫 그 방향으로는 자리가 좁습니다');
+      return;
+    }
+    roomSave(); refreshRoom(it.type);
     return;
   }
   toast('회전할 가구를 고르세요');
@@ -5873,6 +5902,7 @@ function srUpdate(dt) {
     placeGhost.userData.snap = q;
     const rm = worldRooms.find(r => r.slot === q.slot);
     placeGhost.position.set((rm ? rm.cx : 0) + q.x, (rm ? rm.cy || 0 : 0) + (q.y || 0), (rm ? rm.cz : 0) + q.z);
+    if (placeMark) placeMark.position.set((rm ? rm.cx : 0) + q.x, (rm ? rm.cy || 0 : 0), (rm ? rm.cz : 0) + q.z);   // 바닥 중심 표시
     placeGhost.rotation.y = (q.wall ? q.rot : placeRot) * ROT_STEP;
     const bad = overlaps(placeType, q.wall ? q.rot : placeRot, q.x, q.z, q.y || 0, q.under ?? q.on ?? null, roomStore.slots[q.slot]?.items);
     placeGhost.traverse(o => { if (o.isMesh) o.material.color.setHex(bad ? 0xff5a4a : FURN[placeType].color); });
