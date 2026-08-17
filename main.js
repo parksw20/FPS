@@ -4920,6 +4920,13 @@ function loadRoomSlot(i) {
   }
   toast('📂 ' + curRoom().name + ' 불러옴');
 }
+const DARK = 0.5;                         // 불이 없는 방의 밝기
+function roomLit(sl) {                    // 방에 빛나는 가구(램프·천장등·모니터)가 있나
+  return !!sl && sl.items.some(it => FURN[it.type]?.glow);
+}
+function dim(hex, k) {                    // 색을 k배로
+  return new THREE.Color(hex).multiplyScalar(k);
+}
 function pickSurface(ev) {                // 3D에서 벽·바닥·천장을 집는다
   const rm = worldRooms.find(r => r.slot === roomStore.cur);
   if (!rm || !srCam) return null;
@@ -5461,7 +5468,8 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   const grp = new THREE.Group();
   const W = r.w, D = r.d, h = ROOM_H;
   const sl0 = roomStore.slots[r.slot];
-  const floorMat = new THREE.MeshStandardMaterial({ color: surfColor(sl0, 'floor'), roughness: 0.85, metalness: 0.1 });
+  const lit = roomLit(sl0) ? 1 : DARK;   // 불이 없으면 절반 밝기
+  const floorMat = new THREE.MeshStandardMaterial({ color: dim(surfColor(sl0, 'floor'), lit), roughness: 0.85, metalness: 0.1 });
   const hole = (r.holes || [])[0];       // 계단 자리는 뚫는다
   const slab = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.01 || z1 - z0 < 0.01) return;
@@ -5479,8 +5487,8 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   }
   const ceilHex = surfColor(sl0, 'ceil');   // 천장은 빛이 거의 닿지 않아 고른 색이 그대로 보이도록 자체발광을 섞는다
   const ceilMat = new THREE.MeshStandardMaterial({
-    color: ceilHex, roughness: 0.95, metalness: 0.05,
-    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55), emissiveIntensity: 1,
+    color: dim(ceilHex, lit), roughness: 0.95, metalness: 0.05,
+    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55 * lit), emissiveIntensity: 1,
   });
   const ceilGrp = new THREE.Group();     // 천장 (위에서 볼 때는 감춘다)
   const ch = (r.ceilHoles || [])[0];
@@ -5502,7 +5510,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   grp.add(ceilGrp);
   const wallMats = {};                   // 벽마다 색을 따로 (좌·우·뒤)
   for (const k of ['x-', 'x+', 'z-'])
-    wallMats[k] = new THREE.MeshStandardMaterial({ color: surfColor(sl0, k), roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
+    wallMats[k] = new THREE.MeshStandardMaterial({ color: dim(surfColor(sl0, k), lit), roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
   const panel = (w, hh, x, y, z, ry, wall) => {
     if (w <= 0.001 || hh <= 0.001) return;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallMats[wall] ?? wallMats['z-']);
@@ -5522,8 +5530,9 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     }
     place(Math.max(0, len / 2 - from), h, (from + len / 2) / 2, h / 2);
   };
+  const INSET = 0.01;                    // 이웃 방 벽면과 같은 평면에 놓이지 않게 살짝 안쪽으로
   for (const sgn of [-1, 1]) {           // 좌·우 벽
-    const x = sgn * W / 2;
+    const x = sgn * (W / 2 - INSET);
     const holes = (r.gaps || []).filter(g => g.side === sgn)
       .map(g => ({ u: g.z, w: g.w ?? DOOR_W, y0: g.y0 ?? 0, y1: g.y1 ?? RM_DOOR_H }));
     wallRun(D, holes, (w, hh, u, cy) => panel(w, hh, x, cy, u, sgn * Math.PI / 2, sgn > 0 ? 'x+' : 'x-'));
@@ -5543,7 +5552,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     }
   }
   const backHoles = (r.backGaps || []).map(g => ({ u: g.x, w: g.w, y0: g.y0, y1: g.y1 }));
-  wallRun(W, backHoles, (w, hh, u, cy) => panel(w, hh, u, cy, -D / 2, 0, 'z-'));   // 뒷벽 (창문 구멍)
+  wallRun(W, backHoles, (w, hh, u, cy) => panel(w, hh, u, cy, -D / 2 + INSET, 0, 'z-'));   // 뒷벽 (창문 구멍)
   r.guide = makeFloorGuide(W, D);        // 설치 가이드 격자 (활성 방만 표시)
   grp.add(r.guide);
   r.wallGuide = makeWallGuides(W, D, h);
@@ -5651,6 +5660,8 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
       else if (fdef.mount === 'wall' && !(it.y > 0.05)) it.y = fdef.wallY ?? 1.3;
       else if (fdef.mount === 'floor' && !(it.y >= 0)) it.y = 0;
       const m = furnMesh(it.type, it);
+      if (!roomLit(roomStore.slots[r.slot]) && !FURN[it.type].glow)      // 불이 없는 방의 가구도 어둡게
+        m.traverse(o => { if (o.isMesh && o.material?.color && !o.userData.outline) { o.material = o.material.clone(); o.material.color.multiplyScalar(DARK); } });
       const down = it.type === 'stairs' && it.dir === 'down' && it.link >= 0 && !it.blocked;
       const baseY = (r.cy || 0) - (down ? LEVEL_H : 0);   // 이어진 내려가는 계단만 아래층에 놓인다
       m.position.set(r.cx + it.x, baseY + (it.y || 0), r.cz + it.z);
@@ -5809,6 +5820,7 @@ function liveStep(dt) {
   drawRoomMap();
 }
 // ---- 연결 미니맵 ----
+let mapZoom = 1;                          // 미니맵 배율 (휠)
 function drawRoomMap() {
   const cv = document.getElementById('srMap');
   if (!cv) return;
@@ -5816,6 +5828,8 @@ function drawRoomMap() {
   cv.style.display = show ? 'block' : 'none';
   const eb = document.getElementById('srMapEdit');
   if (eb) eb.style.display = show ? 'block' : 'none';
+  const zb = document.getElementById('srMapZoom');
+  if (zb) { zb.style.display = show ? 'block' : 'none'; zb.textContent = '🔍 ' + mapZoom.toFixed(1) + '×'; }
   const lb = document.getElementById('srMapLv');
   if (lb) {
     lb.style.display = show ? 'block' : 'none';
@@ -5829,7 +5843,7 @@ function drawRoomMap() {
   const here = worldRooms.find(r => r.slot === live.active) ?? worldRooms.find(r => r.slot === roomStore.cur);
   if (!here) return;
   // 내가 있는 방을 가운데에 두고 그 주변만 보여준다 (방이 많아도 미니맵이 커지지 않게)
-  const view = Math.max(16, Math.min(34, Math.max(here.w, here.d) * 2.2));
+  const view = Math.max(16, Math.min(34, Math.max(here.w, here.d) * 2.2)) / mapZoom;
   const cxm = srMode === 'live' ? live.x : here.cx, czm = srMode === 'live' ? live.z : here.cz;
   const pad = 10, span = cv.width - pad * 2;
   const k = span / view;
@@ -6162,6 +6176,12 @@ function srUpdate(dt) {
   addEventListener('pointerup', e => { srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null; });
   sr.addEventListener('wheel', e => {
     if (!srOn) return;
+    if (e.target.closest('#srMap, #srMapEdit, #srMapZoom, #srMapLv')) {      // 미니맵 위에서는 미니맵 배율
+      e.preventDefault();
+      mapZoom = Math.max(0.5, Math.min(4, +(mapZoom * (e.deltaY > 0 ? 0.85 : 1.18)).toFixed(2)));
+      drawRoomMap();
+      return;
+    }
     if (e.target.closest('.srPanel, #srCtx, #srBottom, #srModes')) return;   // 패널 위에서는 패널이 스크롤
     e.preventDefault();
     if (placeType && FURN[placeType].rotate === 'free') {   // 배치 미리보기: 휠로 30°씩 회전

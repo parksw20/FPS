@@ -247,6 +247,9 @@
   #srOkBtn:hover{background:#a6f0c4}
   #srNoBtn{color:#ffd9d4; background:rgba(255,90,74,.18); border:1px solid rgba(255,120,100,.7)}
   #srNoBtn:hover{background:rgba(255,90,74,.32)}
+  #srMapZoom{position:absolute; left:34px; bottom:62px; display:none; z-index:24; pointer-events:none;
+    padding:4px 10px; font-size:.78rem; font-weight:700; color:#bfe9f7; border-radius:8px;
+    background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.4)}
   #srMapLv{position:absolute; left:34px; bottom:26px; display:none; z-index:24; pointer-events:none;
     padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
@@ -567,6 +570,7 @@
   </div>
   <canvas id="srMap" width="352" height="352"></canvas>
   <div id="srMapLv">1F</div>
+  <div id="srMapZoom">🔍 1.0×</div>
   <div id="srMapEdit" title="방 배치 편집">✏ 배치 편집</div>
   <div id="srConfirm"><span id="srConfirmMsg"></span><button id="srOkBtn">✔ 승인</button><button id="srNoBtn">✕ 취소</button></div>
   <div id="srModes">
