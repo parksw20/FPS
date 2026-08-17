@@ -4434,12 +4434,30 @@ function growDir(sl, axis) {              // 어느 쪽으로 늘릴 수 있나 
   return 0;
 }
 function canExpand(axis) { return growDir(curRoom(), axis) !== 0; }
+function growBlockers(sl, axis) {         // 어느 방이 막고 있나 [{side, names[]}]
+  const i = roomStore.slots.indexOf(sl);
+  const w = roomW(sl), d = roomD(sl), out = [];
+  for (const dir of [1, -1]) {
+    const ov = axis === 'w'
+      ? { slot: i, gx: (sl.gx || 0) - (dir < 0 ? ROOM_STEP : 0), w: w + ROOM_STEP, d }
+      : { slot: i, gz: (sl.gz || 0) - (dir < 0 ? ROOM_STEP : 0), d: d + ROOM_STEP, w };
+    const rect = slotRect(sl, ov);
+    const names = roomStore.slots.filter((o, j) => j !== i && rectsHit(rect, slotRect(o))).map(o => o.name);
+    if (names.length) out.push({ side: axis === 'w' ? (dir > 0 ? '오른쪽' : '왼쪽') : (dir > 0 ? '아래쪽' : '위쪽'), names });
+  }
+  return out;
+}
+function growBlockMsg(sl, axis) {
+  const b = growBlockers(sl, axis);
+  if (!b.length) return '🚫 연결이 끊겨 넓힐 수 없습니다';
+  return '🚫 ' + b.map(x => x.side + ' ' + x.names.join('·')).join(', ') + ' 때문에 넓힐 수 없습니다 — 그 방을 먼저 옮겨 주세요';
+}
 function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m 늘린다 — 줄이기는 없음
   const room = curRoom();
   const cur = axis === 'w' ? roomW(room) : roomD(room);
   if (cur >= ROOM_MAX) { toast('이미 최대 ' + ROOM_MAX + 'm 입니다'); return; }
   const dir = growDir(room, axis);
-  if (!dir) { toast('🚫 양쪽 모두 다른 방이 있어 넓힐 수 없습니다'); return; }
+  if (!dir) { toast(growBlockMsg(room, axis)); return; }
   if (coins < EXPAND_COST) { toast('코인이 부족합니다 (' + EXPAND_COST.toLocaleString() + '🪙)'); return; }
   const newW = axis === 'w' ? cur + ROOM_STEP : roomW(room), newD = axis === 'd' ? cur + ROOM_STEP : roomD(room);
   const newGx = (room.gx || 0) - (axis === 'w' && dir < 0 ? ROOM_STEP : 0);
@@ -4693,6 +4711,7 @@ function drawAddMap() {
   c.font = '11px sans-serif'; c.textAlign = 'center';
   roomStore.slots.forEach((sl, i) => {
     if ((sl.gy || 0) !== addState.gy) return;
+    if (i === addState.edit) return;      // 옮기는 방은 점선(원래 자리) + 초록(새 자리)으로만
     const r = slotRect(sl);
     c.fillStyle = i === roomStore.cur ? 'rgba(64,214,255,.22)' : 'rgba(120,150,170,.16)';
     c.strokeStyle = i === roomStore.cur ? '#7df3ff' : '#8fa6b6'; c.lineWidth = 2;
@@ -4701,6 +4720,18 @@ function drawAddMap() {
     c.fillStyle = '#cfe9f5';
     c.fillText(sl.name, v.px(r.x0) + r.w * v.k / 2, v.pz(r.z0) + 14);
   });
+  if (addState.edit !== undefined) {     // 옮기기 전 자리 — 점선
+    const o = slotRect(roomStore.slots[addState.edit]);
+    if (o.gy === addState.gy && (o.x0 !== addState.gx || o.z0 !== addState.gz || o.w !== addState.w || o.d !== addState.d)) {
+      c.save();
+      c.setLineDash([6, 5]);
+      c.strokeStyle = 'rgba(160,200,220,.75)'; c.lineWidth = 2;
+      c.strokeRect(v.px(o.x0), v.pz(o.z0), o.w * v.k, o.d * v.k);
+      c.fillStyle = 'rgba(160,200,220,.75)'; c.font = '11px system-ui'; c.textAlign = 'center';
+      c.fillText('원래 자리', v.px(o.x0) + o.w * v.k / 2, v.pz(o.z0) + o.d * v.k / 2 + 4);
+      c.restore();
+    }
+  }
   const g = slotRect(addState), chk = addRoomCheck();
   c.fillStyle = chk.ok ? 'rgba(126,224,163,.28)' : 'rgba(255,90,74,.25)';
   c.strokeStyle = chk.ok ? '#7ee0a3' : '#ff5a4a'; c.lineWidth = 2.5;
@@ -4767,7 +4798,11 @@ function addRoomSize(axis, delta) {
     ? [{ ...addState, [key]: next }, { ...addState, [key]: next, [gk]: addState[gk] - ROOM_STEP }]   // 오른쪽/아래 → 막히면 왼쪽/위
     : [{ ...addState, [key]: next }];
   const fit = cands.find(t => rectFree(slotRect(t), addState.edit ?? -1));
-  if (!fit) { toast('🚫 양쪽 모두 다른 방이 있어 늘릴 수 없습니다'); return; }
+  if (!fit) {
+    const nm = roomStore.slots.filter((o, j) => j !== (addState.edit ?? -1) && rectsHit(slotRect(cands[0]), slotRect(o))).map(o => o.name);
+    toast(nm.length ? '🚫 ' + nm.join('·') + ' 때문에 늘릴 수 없습니다 — 그 방을 먼저 옮겨 주세요' : '🚫 늘릴 자리가 없습니다');
+    return;
+  }
   addState[key] = next; addState[gk] = fit[gk];
   drawAddMap();
 }
