@@ -3922,7 +3922,7 @@ function snapPos(type, rot, wx, wz, host = null) {   // 월드 좌표 → 방 �
   if (f.mount === 'opening' || f.mount === 'wall') {   // 문·벽걸이: 가까운 벽에 붙는다
     const toX = W / 2 - Math.abs(x), toZ = D / 2 - Math.abs(z);
     const onX = f.mount === 'opening' ? true : toX <= toZ;   // 문은 좌·우 벽에만
-    const lim = (onX ? D : W) / 2 - (onX ? fp.d : fp.w) / 2 - 0.15;
+    const lim = (onX ? D : W) / 2 - f.w / 2 - 0.05;   // 벽 방향 길이는 항상 f.w (모서리로 삐져나오지 않게)
     if (onX) {
       const sx = x >= 0 ? 1 : -1;
       return { slot, x: +(sx * W / 2).toFixed(2), z: +Math.max(-lim, Math.min(Math.min(lim, zMax), Math.round(z / GRID) * GRID)).toFixed(2), y: f.wallY ?? 0, rot: sx > 0 ? 9 : 3, wall: true };
@@ -4116,7 +4116,7 @@ function commitPlace() {
   if (FURN[placeType].sizable && q.w) { added.w = q.w; added.h = q.h; }
   if (FURN[placeType].link) added.link = -1;
   target.items.push(added);
-  roomSave(); buildFurnitureAll();
+  roomSave(); refreshRoom(placeType);      // 창문·문은 벽 구멍까지 다시 만든다
   sfxTone(700, 0.07, 'sine', 0.1);
   const placedType = placeType;
   if (FURN[placedType].link) {            // 문·계단은 놓자마자 연결할 방을 고른다
@@ -4175,16 +4175,20 @@ function endMove(ok) {
     toast('다른 가구와 겹칩니다');
     return;                              // 겹치면 계속 이동 상태
   }
+  const mt = moveItem.type;
   moveItem = null; moveOrig = null;
-  roomSave(); buildFurnitureAll(); syncOutline(); syncGuides();
+  roomSave(); refreshRoom(mt); syncOutline(); syncGuides();
   toast(ok ? '🖐 이동 완료' : '이동 취소');
 }
+function cutsWall(type) { return type === 'window' || type === 'door' || type === 'stairs'; }
+function refreshRoom(type) { if (cutsWall(type)) buildWorld(); else buildFurnitureAll(); }
 function removeSelected() {
   if (!srPickSel) { toast('제거할 가구를 먼저 고르세요'); return; }
   const arr = curRoom().items, i = arr.indexOf(srPickSel);
+  const t = srPickSel.type;
   if (i >= 0) arr.splice(i, 1);
   setSel(null);
-  roomSave(); buildFurnitureAll(); hideCtx();
+  roomSave(); refreshRoom(t); hideCtx();
   toast('가구 제거');
 }
 function rotateCurrent() {
@@ -4206,8 +4210,15 @@ function resetRooms() {                   // 방 전체 초기화 (4×4 한 칸�
   roomSave(); buildWorld(); roomRenderUI();
   toast('🧨 방을 초기화했습니다 (4×4)');
 }
-function closeRoom() {                    // 이 방을 폐쇄 — 연결된 문·계단을 없앤다
-  const idx = roomStore.cur, me = curRoom();
+function standingSlot() {                 // 생활모드면 지금 서 있는 방, 아니면 편집 중인 방
+  if (srMode !== 'live') return roomStore.cur;
+  const here = insideRooms(live.x, live.z);
+  return here >= 0 ? here : (live.active ?? roomStore.cur);
+}
+function closeRoom() {                    // 서 있는 방만 폐쇄 — 연결만 끊고 문·계단은 남긴다
+  const idx = standingSlot(), me = roomStore.slots[idx];
+  if (!me) return;
+  if (idx === 0) { toast('🏠 기본 방(' + roomStore.slots[0].name + ')은 폐쇄할 수 없습니다'); return; }
   if (me.closed) {                        // 다시 열기
     me.closed = false;
     roomSave(); buildWorld(); roomRenderUI();
@@ -4218,6 +4229,7 @@ function closeRoom() {                    // 이 방을 폐쇄 — 연결된 문
   for (const it of me.items) {            // 이 방의 연결만 끊는다 (문·계단은 남긴다)
     if ((it.type === 'door' || it.type === 'stairs') && Number.isInteger(it.link) && it.link >= 0) { it.link = -1; cut++; }
   }
+  if (roomStore.cur !== idx) roomStore.cur = idx;   // 서 있는 방을 기준으로 맞춘다
   roomStore.slots.forEach((sl, i) => {    // 이 방을 향한 연결만 끊는다 (다른 방끼리는 그대로)
     if (i === idx) return;
     for (const it of sl.items) {
@@ -4239,17 +4251,55 @@ function clearRoom() {                    // 다른 방과 이어진 문·계단
   setSel(null); roomSave(); buildWorld();
   toast('🧹 가구 ' + removed + '개 정리 — 연결된 문·계단은 남겨둠');
 }
+let dryBuild = false;                    // 시험 배치 중 (알림·소리 없음)
+function snapItems() {                   // 시험 배치가 문 위치를 건드려도 되돌릴 수 있게
+  const out = [];
+  for (const sl of roomStore.slots)
+    for (const it of sl.items) out.push({ it, x: it.x, z: it.z, rot: it.rot, link: it.link, blocked: it.blocked, why: it.why });
+  return out;
+}
+function restoreItems(snap) {
+  for (const r of snap) Object.assign(r.it, { x: r.x, z: r.z, rot: r.rot, link: r.link, blocked: r.blocked, why: r.why });
+}
+function tryExpand(axis) {               // 늘리면 이어진 방이 밀려나는지 시험해 본다
+  const room = curRoom();
+  const cur = axis === 'w' ? roomW(room) : roomD(room);
+  if (cur >= ROOM_MAX) return false;
+  if (worldRooms.length <= 1) return true;
+  const before = worldRooms.map(r => r.slot), snap = snapItems();
+  room[axis] = cur + ROOM_STEP;
+  dryBuild = true;
+  buildWorld();
+  const ok = before.every(sl => worldRooms.some(r => r.slot === sl));
+  room[axis] = cur;
+  restoreItems(snap);                    // 시험 중 옮겨진 문을 되돌린다
+  buildWorld();
+  dryBuild = false;
+  return ok;
+}
+let expandMemo = { key: null, w: true, d: true };
+function expandKey() {                   // 방 크기·연결이 바뀌면 다시 시험한다
+  return roomStore.cur + '|' + roomStore.slots.map(sl => roomW(sl) + 'x' + roomD(sl) + (sl.closed ? 'c' : '')
+    + sl.items.filter(i => i.type === 'door' || i.type === 'stairs').map(i => i.link + '@' + i.x + ',' + i.z).join('/')).join(';');
+}
+function canExpand(axis) {
+  const k = expandKey();
+  if (expandMemo.key !== k) expandMemo = { key: k, w: tryExpand('w'), d: tryExpand('d') };
+  return expandMemo[axis];
+}
 function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m 늘린다 — 줄이기는 없음
   const room = curRoom();
   const cur = axis === 'w' ? roomW(room) : roomD(room);
   if (cur >= ROOM_MAX) { toast('이미 최대 ' + ROOM_MAX + 'm 입니다'); return; }
   if (coins < EXPAND_COST) { toast('코인이 부족합니다 (' + EXPAND_COST.toLocaleString() + '🪙)'); return; }
   const before = new Set(worldRooms.map(r => r.slot));      // 확장 전 이어져 있던 방
+  const snap = snapItems();
   room[axis] = cur + ROOM_STEP;
   buildWorld();
   const lost = [...before].filter(sl => !worldRooms.some(r => r.slot === sl));
   if (lost.length) {                                        // 넓히면 이웃 방이 밀려난다 — 확장 취소
     room[axis] = cur;
+    restoreItems(snap);                                     // 옮겨진 문까지 되돌린다
     buildWorld(); roomRenderUI();
     toast('🚫 ' + lost.map(i => roomStore.slots[i].name).join(', ') + ' 자리가 없어 확장할 수 없습니다');
     return;
@@ -4266,12 +4316,14 @@ function addRoomSlot(link) {              // 문·계단에서만 새 방을 만
   const idx = roomStore.slots.length;
   roomStore.slots.push({ name: 'ROOM ' + (idx + 1), w: ROOM_MIN, d: ROOM_MIN, bg: 'forest', items: [] });
   if (link) {
-    const prev = link.link ?? -1;
+    const prev = link.link ?? -1, snap = snapItems();
     link.link = idx;
     buildWorld();
     if (link.blocked) {
-      link.link = prev; roomStore.slots.pop(); buildWorld();
-      toast('🚫 그 방향엔 이미 다른 방이 있어 새 방을 놓을 수 없습니다');
+      const msg = linkFailMsg(link);
+      restoreItems(snap); roomStore.slots.pop();
+      if (prev < 0) { cancelLinkItem(link, msg); return null; }
+      buildWorld(); toast(msg);
       return null;
     }
   }
@@ -4369,6 +4421,39 @@ function connectedToRoot(slot) {          // MY ROOM(0)에서 문·계단으로 
   }
   return seen.has(slot);
 }
+function linkFailMsg(it) {                // 왜 연결할 수 없는지
+  const kind = it.type === 'stairs' ? '계단' : '문';
+  if (it.why === 'offwall') return '🚫 옆방 벽의 그 위치에는 ' + kind + '을 낼 수 없습니다 (벽 끝에 너무 가까움)';
+  if (it.why === 'nospace') return '🚫 그 방향에 방을 놓을 자리가 없습니다';
+  return '🚫 그 방향엔 이미 다른 방이 있어 연결할 수 없습니다';
+}
+function cancelLinkItem(it, msg) {        // 연결이 불가능한 문·계단은 설치를 취소한다
+  const arr = curRoom().items, i = arr.indexOf(it);
+  if (i >= 0) arr.splice(i, 1);
+  setSel(null); hideCtx();
+  roomSave(); buildWorld(); roomRenderUI();
+  toast(msg + ' — 설치를 취소했습니다');
+}
+function tryLink(it, target) {            // 문·계단 연결 — 불가하면 되돌리고 설치도 취소
+  if (!roomStore.slots[target]) return false;
+  const prev = it.link ?? -1, snap = snapItems();
+  const wasClosed = !!roomStore.slots[target].closed;
+  if (wasClosed) roomStore.slots[target].closed = false;    // 연결하면 폐쇄 해제
+  it.link = target;
+  buildWorld();
+  if (it.blocked) {
+    const msg = linkFailMsg(it);
+    restoreItems(snap);
+    if (wasClosed) roomStore.slots[target].closed = true;
+    if (prev < 0) { cancelLinkItem(it, msg); return false; }
+    buildWorld(); toast(msg);
+    return false;
+  }
+  if (it.type === 'door') ensureReturnDoor(roomStore.cur, it);
+  roomSave(); buildWorld(); hideCtx(); srRenderModeUI(); roomRenderUI();
+  toast('🚪 ' + roomStore.slots[target].name + ' 와 연결' + (wasClosed ? ' (폐쇄 해제)' : ''));
+  return true;
+}
 function ctxLinkHtml() {                 // 문·계단: 어디로 이을지
   if (!srPickSel || !FURN[srPickSel.type].link) return '';
   if (curRoom().closed) return '<div class="ctxHead">폐쇄된 방은 연결할 수 없습니다</div>';
@@ -4399,22 +4484,7 @@ function showCtx(x, y) {
     for (const b of wrap.querySelectorAll('[data-link]')) {
       b.addEventListener('click', ev => {
         ev.stopPropagation();
-        const prev = srPickSel.link ?? -1;
-        const target = +b.dataset.link;
-        const wasClosed = !!roomStore.slots[target].closed;
-        if (wasClosed) roomStore.slots[target].closed = false;   // 연결하면 폐쇄 해제
-        srPickSel.link = target;
-        buildWorld();
-        if (srPickSel.blocked) {          // 그 자리에 이미 다른 방이 있다
-          srPickSel.link = prev;
-          if (wasClosed) roomStore.slots[target].closed = true;
-          buildWorld();
-          toast('🚫 그 방향엔 이미 다른 방이 있어 연결할 수 없습니다');
-          return;
-        }
-        if (srPickSel.type === 'door') ensureReturnDoor(roomStore.cur, srPickSel);
-        roomSave(); buildWorld(); hideCtx(); srRenderModeUI(); roomRenderUI();
-        toast('🚪 ' + roomStore.slots[srPickSel.link].name + ' 와 연결' + (wasClosed ? ' (폐쇄 해제)' : ''));
+        tryLink(srPickSel, +b.dataset.link);
       });
     }
   }
@@ -4435,8 +4505,11 @@ function roomRenderUI() {
   const rm = curRoom(), cw = roomW(rm), cd = roomD(rm);
   sz.innerHTML =
     `<div class="szNow">현재 ${cw}m × ${cd}m<span>최대 ${ROOM_MAX}m</span></div>`
-    + `<button data-grow="w" class="buy"${cw >= ROOM_MAX ? ' disabled' : ''}>가로 +${ROOM_STEP}m<i>${EXPAND_COST.toLocaleString()}🪙</i></button>`
-    + `<button data-grow="d" class="buy"${cd >= ROOM_MAX ? ' disabled' : ''}>세로 +${ROOM_STEP}m<i>${EXPAND_COST.toLocaleString()}🪙</i></button>`;
+    + [['w', cw, '가로'], ['d', cd, '세로']].map(([ax, len, label]) => {
+      const max = len >= ROOM_MAX, room = !max && !canExpand(ax);
+      const note = max ? '최대' : room ? '자리 없음' : EXPAND_COST.toLocaleString() + '🪙';
+      return `<button data-grow="${ax}" class="buy"${max || room ? ' disabled' : ''}>${label} +${ROOM_STEP}m<i>${note}</i></button>`;
+    }).join('');
   for (const b of sz.querySelectorAll('[data-grow]'))
     b.addEventListener('click', e => { e.stopPropagation(); expandRoom(b.dataset.grow); });
   const bg = document.getElementById('srBg');
@@ -4461,7 +4534,13 @@ function roomRenderUI() {
   const del = document.getElementById('srDel');
   if (del) del.classList.toggle('on', !!srPickSel);
   const cbtn = document.getElementById('srCloseRoom');
-  if (cbtn) { cbtn.textContent = curRoom().closed ? '🔓 폐쇄 해제' : '🚫 방 폐쇄'; cbtn.classList.toggle('on', !!curRoom().closed); }
+  if (cbtn) {
+    const tgt = roomStore.slots[standingSlot()] ?? curRoom();
+    cbtn.textContent = tgt.closed ? '🔓 폐쇄 해제' : '🚫 방 폐쇄';
+    cbtn.classList.toggle('on', !!tgt.closed);
+    cbtn.classList.toggle('off', standingSlot() === 0);   // 기본 방은 폐쇄 불가
+    cbtn.title = standingSlot() === 0 ? '기본 방은 폐쇄할 수 없습니다' : tgt.name;
+  }
   const nameEl = document.getElementById('srName');
   if (nameEl) nameEl.textContent = curRoom().name;
 }
@@ -4603,7 +4682,11 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
       let cz = null;
       if (placed.has(nbSlot)) {                                // 이미 놓인 방이면 그 자리와 맞는지만 본다
         const o = placed.get(nbSlot);
-        if (Math.abs(o.cx - cx) > 0.01 || Math.abs(o.cy - rm.cy) > 0.01 || !fits(o.cz)) { door.blocked = true; continue; }
+        if (Math.abs(o.cx - cx) > 0.01 || Math.abs(o.cy - rm.cy) > 0.01 || !fits(o.cz)) {
+          door.blocked = true;
+          door.why = (Math.abs(o.cx - cx) > 0.01 || Math.abs(o.cy - rm.cy) > 0.01) ? 'elsewhere' : 'offwall';
+          continue;
+        }
         cz = o.cz;
       } else {
         for (let k = 0; k <= 40 && cz === null; k++) {          // 면 중심에서 시작해 0.5m씩 양쪽으로
@@ -4613,7 +4696,7 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
             cz = try_; break;
           }
         }
-        if (cz === null) { door.blocked = true; continue; }     // 놓을 자리가 없다
+        if (cz === null) { door.blocked = true; door.why = 'nospace'; continue; }   // 놓을 자리가 없다
         placed.set(nbSlot, { slot: nbSlot, cx, cz, cy: rm.cy, w: nw, d: nd, bg: nb.bg, gaps: [], holes: [] });
         q.push({ slot: nbSlot });
       }
@@ -4626,7 +4709,7 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
         back.rot = -side > 0 ? 9 : 3;
         linkNotes.push(nb.name + ' 쪽 문이 ' + (wantZ >= 0 ? '+' : '') + wantZ.toFixed(1) + 'm 위치로 옮겨졌습니다');
       }
-      door.blocked = false;
+      door.blocked = false; door.why = null;
       rm.gaps.push({ side, z: door.z, w: DOOR_W, y0: 0, y1: RM_DOOR_H });
       nbRoom.gaps.push({ side: -side, z: wantZ, w: DOOR_W, y0: 0, y1: RM_DOOR_H });
       liveDoors.push({
@@ -4685,10 +4768,12 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
     live.y = nowRoom.cy || 0;
   }
   syncGuides();
-  if (linkNotes.length) { toast('🚪 ' + linkNotes[0]); linkNotes.length = 0; }
-  SR_FULL.dist = Math.max(4.2, Math.max(roomW(first), roomD(first)) * 0.85 + 1.8);
+  if (linkNotes.length) { if (!dryBuild) toast('🚪 ' + linkNotes[0]); linkNotes.length = 0; }
+  const wantDist = Math.max(4.2, Math.max(roomW(first), roomD(first)) * 0.85 + 1.8);
+  const grew = Math.abs(wantDist - SR_FULL.dist) > 0.01;
+  SR_FULL.dist = wantDist;
   SR_FULL.y = 1.0;
-  if (srMode === 'pose') srReset();
+  if (srMode === 'pose' && grew) srReset();   // 방 크기가 바뀔 때만 시점 초기화
 }
 function makeDoorPanel() {
   const grp = new THREE.Group();
@@ -5697,7 +5782,7 @@ window.__game = {
   liveDrag(dx, dy) { live.camYaw -= dx * 0.008; live.camPitch += dy * 0.004; liveStep(1 / 60); return { yaw: +live.camYaw.toFixed(3), pitch: +live.camPitch.toFixed(3) }; },
   livePos() { return { mode: srMode, x: +live.x.toFixed(2), z: +live.z.toFixed(2), y: +live.y.toFixed(2), rooms3: worldRooms.map(r => ({ s: r.slot, cy: +(r.cy || 0).toFixed(2) })), yaw: +live.yaw.toFixed(3), camYaw: +live.camYaw.toFixed(3), camDist: +live.camDist.toFixed(2), srYaw: +srYaw.toFixed(3), rootRot: +(srRoot?.rotation.y ?? 0).toFixed(3), active: live.active, doors: liveDoors.length, rooms: worldRooms.map(r => ({ slot: r.slot, cx: +r.cx.toFixed(2), cz: +r.cz.toFixed(2), w: r.w, d: r.d })) }; },
   liveStep(n = 1, k = {}) { for (let i = 0; i < n; i++) { Object.assign(keys, k); liveStep(1 / 60); } for (const kk of Object.keys(k)) keys[kk] = false; return { x: +live.x.toFixed(2), z: +live.z.toFixed(2), y: +live.y.toFixed(2), active: live.active }; },
-  linkDoor(i, to) { const it = curRoom().items[i]; if (!it || it.type !== 'door') return null; it.link = to; ensureReturnDoor(roomStore.cur, it); roomSave(); buildWorld(); return it.link; },
+  linkDoor(i, to) { const it = curRoom().items[i]; if (!it || it.type !== 'door') return null; const ok = tryLink(it, to); return { ok, link: it.link ?? -1, items: curRoom().items.length }; },
   showroom() { return { on: srOn, sel: srSel, yaw: +srYaw.toFixed(3), spin: srSpin, target: { y: +srTarget.y.toFixed(2), dist: +srTarget.dist.toFixed(2) }, pan: +srPan.x.toFixed(2), view: { y: +srView.y.toFixed(2), dist: +srView.dist.toFixed(2) }, clip: srCurrent?.getClip().name ?? null }; },
   openDoor(i) { const d = doors[i]; if (d) openDoor(d); return doors.length; },
   placeMarker() { placeMarker(); return markers.length; },
