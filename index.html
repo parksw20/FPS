@@ -212,7 +212,7 @@
   .addRow button:hover{border-color:#7df3ff; background:rgba(64,214,255,.15)}
   .addRow button:disabled{opacity:.35; cursor:not-allowed}
   #addOk{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700}
-  #addLevel{font-size:.8rem; color:#8fd8f5; text-align:center; margin-bottom:6px}
+  #addLevel{font-size:.85rem; color:#8fd8f5; min-width:74px; text-align:center; align-self:center}
   #srSlots .slotHint{grid-column:1/-1; font-size:.66rem; color:#7aa8bd; line-height:1.5; padding:4px 2px 0}
   #srSlots .slotHint b{color:#cfe8f5}
   #srSlots .slotHint span{display:block; color:#ffd76b}
@@ -222,6 +222,10 @@
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
   #srMap{position:absolute; left:24px; bottom:18px; display:none; z-index:23; border-radius:10px;
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
+  #srMapEdit{position:absolute; left:150px; bottom:22px; display:none; z-index:24; cursor:pointer;
+    padding:4px 8px; font-size:.7rem; color:#bfe9f7; border-radius:6px;
+    background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
+  #srMapEdit:hover{border-color:#7df3ff; background:rgba(64,214,255,.2)}
   #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:8px; z-index:23}
   #srModes button{padding:8px 16px; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
@@ -481,7 +485,7 @@
 </div>
 <div id="addRoom"><div id="addPanel">
   <div class="optTitle">새 방 배치</div>
-  <div id="addLevel">1층</div>
+  <div class="addRow" style="margin:0 0 6px"><button data-lv="-1">▼ 아래층</button><span id="addLevel">1층</span><button data-lv="1">▲ 위층</button></div>
   <canvas id="addMap" width="440" height="360"></canvas>
   <div id="addNote"></div>
   <div class="addRow">
@@ -535,6 +539,7 @@
     </div>
   </div>
   <canvas id="srMap" width="176" height="176"></canvas>
+  <div id="srMapEdit" title="방 배치 편집">✏ 배치</div>
   <div id="srModes">
     <button data-mode="pose" class="on">🧍 포즈모드</button>
     <button data-mode="live">🚶 생활모드</button>
