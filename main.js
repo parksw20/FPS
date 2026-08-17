@@ -3714,7 +3714,7 @@ function roomLoad() {
         items: (Array.isArray(sl.items) ? sl.items.filter(it => FURN[it.type]) : []).map(it => {
           const f = FURN[it.type];
           if (f.mount === 'ceiling') it.y = +(ROOM_H - f.h).toFixed(2);        // 천장물
-          else if (f.mount === 'wall' && !(it.y > 0.2)) it.y = f.wallY ?? 1.3; // 벽걸이
+          else if (f.mount === 'wall' && !(it.y > 0.05)) it.y = f.wallY ?? 1.3; // 벽걸이
           return it;
         }),
       }));
@@ -3733,7 +3733,7 @@ function roomSave() {                     // 저장 전에 설치면 높이를 �
       const f = FURN[it.type];
       if (!f) continue;
       if (f.mount === 'ceiling') it.y = +(ROOM_H - f.h).toFixed(2);
-      else if (f.mount === 'wall' && !(it.y > 0.2)) it.y = f.wallY ?? 1.3;
+      else if (f.mount === 'wall' && !(it.y > 0.05)) it.y = f.wallY ?? 1.3;
     }
   }
   localStorage.setItem('fps.rooms', JSON.stringify(roomStore));
@@ -3905,6 +3905,46 @@ function overlaps(type, rot, x, z, y, skip, list) {   // 같은 높이대에서 
     if (y + h <= oy + 0.02 || oy + f2.h <= y + 0.02) continue;   // 높이대가 다르면 통과
     if (Math.abs(x - it.x) < (fp.w + o.w) / 2 - 0.03 && Math.abs(z - it.z) < (fp.d + o.d) / 2 - 0.03) return true;
   }
+  return false;
+}
+function wallSpan(sl, type, it) {         // 벽걸이가 차지하는 (벽, 가로, 높이) 구간
+  const f = FURN[type];
+  const onX = Math.abs(Math.abs(it.x) - roomW(sl) / 2) < 0.05;
+  const w = it.w ?? f.w, h = it.h ?? f.h;
+  const u = onX ? it.z : it.x;
+  const y = it.y ?? f.wallY ?? 1.3;
+  return { wall: onX ? (it.x > 0 ? 'x+' : 'x-') : 'z-', u0: u - w / 2, u1: u + w / 2, y0: y - h / 2, y1: y + h / 2 };
+}
+function wallClash(sl, type, it, skip) {  // 같은 벽에서 겹치는 벽걸이가 있는가
+  const f = FURN[type];
+  if (f.mount !== 'wall' && f.mount !== 'opening') return false;
+  const a = wallSpan(sl, type, it);
+  return sl.items.some(o => {
+    if (o === skip || o === it) return false;
+    const g = FURN[o.type];
+    if (!g || (g.mount !== 'wall' && g.mount !== 'opening')) return false;
+    const b = wallSpan(sl, o.type, o);
+    return a.wall === b.wall && a.u0 < b.u1 - 0.02 && b.u0 < a.u1 - 0.02 && a.y0 < b.y1 - 0.02 && b.y0 < a.y1 - 0.02;
+  });
+}
+function doorZone(sl, it) {               // 문이 열리고 지나가는 공간 (방 로컬)
+  const onX = Math.abs(Math.abs(it.x) - roomW(sl) / 2) < 0.05;
+  if (onX) return { x: it.x + (it.x > 0 ? -0.7 : 0.7), z: it.z, w: 1.4, d: DOOR_W + 0.3 };
+  return { x: it.x, z: it.z + (it.z > 0 ? -0.7 : 0.7), w: DOOR_W + 0.3, d: 1.4 };
+}
+function stairZone(it) {                  // 계단 + 오르내리는 앞자리
+  const fp = footprint('stairs', it.rot);
+  const a = (it.rot || 0) * ROT_STEP, alongZ = Math.abs(Math.cos(a)) > 0.7;
+  const pad = FURN.stairs.d / 2 + 0.9;
+  return {
+    x: it.x - (alongZ ? 0 : Math.sin(a) * pad / 2), z: it.z - (alongZ ? Math.cos(a) * pad / 2 : 0),
+    w: fp.w + 0.2 + (alongZ ? 0 : pad), d: fp.d + 0.2 + (alongZ ? pad : 0),
+  };
+}
+function zoneHit(a, b) { return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.z - b.z) < (a.d + b.d) / 2; }
+function doorStairClash(sl, type, it) {   // 문과 계단은 겹칠 수 없다
+  if (type === 'door') return sl.items.some(o => o.type === 'stairs' && zoneHit(doorZone(sl, it), stairZone(o)));
+  if (type === 'stairs') return sl.items.some(o => o.type === 'door' && zoneHit(doorZone(sl, o), stairZone(it)));
   return false;
 }
 function snapPos(type, rot, wx, wz, host = null) {   // 월드 좌표 → 방 로컬 · 격자 · 마그넷 · 상판/하부
@@ -4126,6 +4166,8 @@ function commitPlace() {
     if (!okRot(rot2)) rot2 = [0, 3, 6, 9].find(okRot) ?? rot2;
   }
   const added = { type: placeType, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: +(q.y || 0).toFixed(2), rot: rot2 };
+  if (doorStairClash(target, placeType, added)) { toast('🚫 문과 계단은 겹칠 수 없습니다'); return; }
+  if (wallClash(target, placeType, added)) { toast('🚫 벽에 이미 다른 것이 걸려 있습니다'); return; }
   if (FURN[placeType].sizable && q.w) { added.w = q.w; added.h = q.h; }
   if (FURN[placeType].link) added.link = -1;
   target.items.push(added);
@@ -4190,6 +4232,12 @@ function endMove(ok) {
   else if (ok && overlaps(moveItem.type, moveItem.rot || 0, moveItem.x, moveItem.z, moveItem.y || 0, moveItem, curRoom().items)) {
     toast('다른 가구와 겹칩니다');
     return;                              // 겹치면 계속 이동 상태
+  } else if (ok && doorStairClash(curRoom(), moveItem.type, moveItem)) {
+    toast('🚫 문과 계단은 겹칠 수 없습니다');
+    return;
+  } else if (ok && wallClash(curRoom(), moveItem.type, moveItem, moveItem)) {
+    toast('🚫 벽에 이미 다른 것이 걸려 있습니다');
+    return;
   }
   const mt = moveItem.type;
   moveItem = null; moveOrig = null;
@@ -4823,19 +4871,31 @@ function migrateLayout() {               // 예전 저장본: 문·계단을 따
 }
 const liveStairs = [];                   // 위·아래로 잇는 계단
 const linkNotes = [];                    // 문이 옮겨졌을 때 알릴 내용
-function autoDoor(aSlot, bSlot) {        // 두 방이 맞닿은 자리에 문 하나를 놓는다
+function autoDoor(aSlot, bSlot) {        // 두 방이 맞닿은 자리에 문 하나 — 계단을 피해서
   const A = roomStore.slots[aSlot], B = roomStore.slots[bSlot];
   const w = A && B ? wallBetween(slotRect(A), slotRect(B)) : null;
   if (!w || w.len < MIN_LINK - 0.01) return false;
-  const mid = (w.lo + w.hi) / 2;
-  if (w.axis === 'x') {
-    A.items.push({ type: 'door', x: +(w.side * roomW(A) / 2).toFixed(2), z: +(mid - ((A.gz || 0) + roomD(A) / 2)).toFixed(2), y: 0, rot: w.side > 0 ? 9 : 3, link: bSlot });
-  } else {                               // 앞뒤: 뒷벽(-z)을 가진 쪽에 문
-    const frontSlot = w.side === 1 ? bSlot : aSlot, backSlot = w.side === 1 ? aSlot : bSlot;
-    const F = roomStore.slots[frontSlot];
-    F.items.push({ type: 'door', x: +(mid - ((F.gx || 0) + roomW(F) / 2)).toFixed(2), z: +(-roomD(F) / 2).toFixed(2), y: 0, rot: 0, link: backSlot });
+  const mk = (sl, u, onXWall, side) => onXWall
+    ? { type: 'door', x: +(side * roomW(sl) / 2).toFixed(2), z: +(u - ((sl.gz || 0) + roomD(sl) / 2)).toFixed(2), y: 0, rot: side > 0 ? 9 : 3 }
+    : { type: 'door', x: +(u - ((sl.gx || 0) + roomW(sl) / 2)).toFixed(2), z: +(-roomD(sl) / 2).toFixed(2), y: 0, rot: 0 };
+  const mid = (w.lo + w.hi) / 2, lim = (w.len - DOOR_W) / 2 - 0.1;
+  const owner = w.axis === 'x' ? A : (w.side === 1 ? B : A);
+  const oSlot = w.axis === 'x' ? aSlot : (w.side === 1 ? bSlot : aSlot);
+  const other = oSlot === aSlot ? B : A;
+  const side = w.axis === 'x' ? w.side : -1;
+  for (let k = 0; k <= Math.max(0, Math.round(lim / 0.5)); k++) {
+    for (const sgn of (k === 0 ? [1] : [1, -1])) {
+      const u = mid + sgn * k * 0.5;
+      if (u - DOOR_W / 2 < w.lo || u + DOOR_W / 2 > w.hi) continue;
+      const item = mk(owner, u, w.axis === 'x', side);
+      const twin = mk(other, u, w.axis === 'x', -side);      // 반대쪽 방에서 본 같은 자리
+      if (doorStairClash(owner, 'door', item) || doorStairClash(other, 'door', twin)) continue;
+      item.link = oSlot === aSlot ? bSlot : aSlot;
+      owner.items.push(item);
+      return true;
+    }
   }
-  return true;
+  return false;
 }
 function doorWorld(sl, it) {             // 문의 월드 위치와 붙은 벽
   const R = slotRect(sl);
@@ -5201,7 +5261,7 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
       if (it.type === 'door' && liveDoors.some(d => d.item === it)) continue;   // 이어진 문은 별도 연출
       const fdef = FURN[it.type];        // 설치면에 맞는 높이로 항상 보정 (예전 저장본 포함)
       if (fdef.mount === 'ceiling') it.y = +(ROOM_H - fdef.h).toFixed(2);
-      else if (fdef.mount === 'wall' && !(it.y > 0.2)) it.y = fdef.wallY ?? 1.3;
+      else if (fdef.mount === 'wall' && !(it.y > 0.05)) it.y = fdef.wallY ?? 1.3;
       else if (fdef.mount === 'floor' && !(it.y >= 0)) it.y = 0;
       const m = furnMesh(it.type, it);
       const down = it.type === 'stairs' && it.dir === 'down' && it.link >= 0 && !it.blocked;
@@ -5395,14 +5455,20 @@ function drawRoomMap() {
     c.fillStyle = '#9fd8ea'; c.font = '9px system-ui'; c.textAlign = 'center';
     c.fillText(roomStore.slots[r.slot].name.slice(0, 8), px(r.cx), pz(r.cz - r.d / 2) + 11);
   }
-  for (const d of liveDoors) {           // 문 (축에 맞춰)
+  const onLv = slot => {                 // 이 층에 있는 방인가
+    const r = worldRooms.find(w => w.slot === slot);
+    return r && Math.abs((r.cy || 0) - lv0) < 0.01;
+  };
+  for (const d of liveDoors) {           // 문 (이 층만 · 축에 맞춰)
+    if (!onLv(d.from) && !onLv(d.to)) continue;
     c.strokeStyle = '#ffd76b'; c.lineWidth = 3;
     c.beginPath();
     if (d.axis === 'z') { c.moveTo(px(d.x - DOOR_W / 2), pz(d.z)); c.lineTo(px(d.x + DOOR_W / 2), pz(d.z)); }
     else { c.moveTo(px(d.x), pz(d.z - DOOR_W / 2)); c.lineTo(px(d.x), pz(d.z + DOOR_W / 2)); }
     c.stroke();
   }
-  for (const st of liveStairs) {         // 계단 (위층으로)
+  for (const st of liveStairs) {         // 계단 (이 층에 걸린 것만)
+    if (!onLv(st.from) && !onLv(st.to)) continue;
     c.fillStyle = '#9be7a0';
     c.beginPath(); c.arc(px(st.x), pz(st.z), 4, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#0a1a12'; c.font = 'bold 7px system-ui'; c.textAlign = 'center';
@@ -5714,7 +5780,8 @@ function srUpdate(dt) {
         if (!wp) return;
         const pos = wallItemPos(wp.side, wp.u, rm);
         moveItem.x = pos.x; moveItem.z = pos.z; moveItem.rot = pos.rot;
-        moveItem.y = f.sizable ? wp.y : (f.wallY ?? wp.y);
+        moveItem.y = f.mount === 'opening' ? 0
+          : Math.max(f.h / 2 + 0.05, Math.min(ROOM_H - f.h / 2 - 0.05, wp.y));   // 높이도 커서 기준
       } else {
         const hit = placePoint(e);
         if (!hit) return;
@@ -5728,6 +5795,22 @@ function srUpdate(dt) {
         m.position.set(rm.cx + moveItem.x, (rm.cy || 0) + moveItem.y, rm.cz + moveItem.z);
         m.rotation.y = (moveItem.rot || 0) * ROT_STEP;
       }
+      return;
+    }
+    if (placeType && !FURN[placeType].sizable && (FURN[placeType].mount === 'wall' || FURN[placeType].mount === 'opening')) {
+      const wp = wallPoint(e);                             // 벽걸이·문: 커서가 가리키는 벽 위 (높이도 커서 기준)
+      if (!wp || !placeGhost) return;
+      const rm = worldRooms.find(r => r.slot === roomStore.cur);
+      const f = FURN[placeType];
+      const pos = wallItemPos(wp.side, wp.u, rm);
+      const y = f.mount === 'opening' ? 0 : Math.max(f.h / 2 + 0.05, Math.min(ROOM_H - f.h / 2 - 0.05, wp.y));
+      const snap = { slot: roomStore.cur, ...pos, y: +y.toFixed(2), wall: true, side: wp.side };
+      placeGhost.userData.snap = snap;
+      placeGhost.position.set(rm.cx + pos.x, (rm.cy || 0) + y, rm.cz + pos.z);
+      placeGhost.rotation.y = pos.rot * ROT_STEP;
+      const bad = wallClash(roomStore.slots[roomStore.cur], placeType, { x: pos.x, z: pos.z, y })
+        || doorStairClash(roomStore.slots[roomStore.cur], placeType, { type: placeType, x: pos.x, z: pos.z, y, rot: pos.rot });
+      placeGhost.traverse(o => { if (o.isMesh) o.material.color.setHex(bad ? 0xff5a4a : FURN[placeType].color); });
       return;
     }
     if (placeType && FURN[placeType].sizable) {             // 창문·배너: 끌어서 크기
@@ -5750,7 +5833,7 @@ function srUpdate(dt) {
     const q = snapPos(placeType, placeRot, hit.p.x, hit.p.z, hit.host);
     placeGhost.userData.snap = q;
     const rm = worldRooms.find(r => r.slot === q.slot);
-    placeGhost.position.set((rm ? rm.cx : 0) + q.x, q.y || 0, (rm ? rm.cz : 0) + q.z);
+    placeGhost.position.set((rm ? rm.cx : 0) + q.x, (rm ? rm.cy || 0 : 0) + (q.y || 0), (rm ? rm.cz : 0) + q.z);
     placeGhost.rotation.y = (q.wall ? q.rot : placeRot) * ROT_STEP;
     const bad = overlaps(placeType, q.wall ? q.rot : placeRot, q.x, q.z, q.y || 0, q.under ?? q.on ?? null, roomStore.slots[q.slot]?.items);
     placeGhost.traverse(o => { if (o.isMesh) o.material.color.setHex(bad ? 0xff5a4a : FURN[placeType].color); });
