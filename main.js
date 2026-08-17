@@ -4920,7 +4920,8 @@ function loadRoomSlot(i) {
   }
   toast('📂 ' + curRoom().name + ' 불러옴');
 }
-const DARK = 0.15;                        // 불이 없는 방의 밝기 (더 어둡게)
+const DARK = 0.6;                         // 불 없는 방: 면 색 배율
+const DARK_L = 0.5;                       // 불 없는 방: 무대 조명 배율 (합쳐서 명암 50% 수준)
 function roomLit(sl) {                    // 방에 빛나는 가구(램프·천장등·모니터)가 있나
   return !!sl && sl.items.some(it => FURN[it.type]?.glow);
 }
@@ -5130,6 +5131,23 @@ function roomRenderUI() {
   const nameEl = document.getElementById('srName');
   if (nameEl) nameEl.textContent = curRoom().name;
 }
+function syncRoomDim() {                  // 불이 있으면 제 색, 없으면 어둡게 (면·가구·천장발광)
+  for (const r of worldRooms) {
+    const lit = roomLit(roomStore.slots[r.slot]) ? 1 : DARK;
+    if (r.litK === lit) continue;
+    r.litK = lit;
+    for (const sm of r.grp?.userData.surfMats || []) {
+      sm.m.color.set(sm.hex).multiplyScalar(lit);
+      if (sm.emis) sm.m.emissive.set(sm.hex).multiplyScalar(sm.emis * lit * lit);
+    }
+  }
+  if (srFurnGrp) for (const m of srFurnGrp.children) {
+    const lit = roomLit(roomStore.slots[m.userData.room]) ? 1 : DARK;
+    if (m.userData.litK === lit) continue;
+    m.userData.litK = lit;
+    m.traverse(o => { if (o.userData.baseCol) o.material.color.copy(o.userData.baseCol).multiplyScalar(lit); });
+  }
+}
 function syncCeilings() {                 // 천장은 아래에서 볼 때만 (위에서 내려다보면 투명)
   if (!srCam) return;
   const camY = srCam.position.y;
@@ -5141,7 +5159,8 @@ function syncCeilings() {                 // 천장은 아래에서 볼 때만 (
 function roomUpdate() {
   if (placeGhost && placeType) placeGhost.visible = true;
   syncCeilings();
-  syncStageLights();
+  syncRoomDim();
+  syncStageDim();
   if (srOutline) srOutline.update();
   if (srFurnGrp) {                        // 선택 표시(살짝 띄우기) — 설치 높이는 유지한다
     for (const m of srFurnGrp.children) {
@@ -5469,8 +5488,10 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   const grp = new THREE.Group();
   const W = r.w, D = r.d, h = ROOM_H;
   const sl0 = roomStore.slots[r.slot];
-  const lit = roomLit(sl0) ? 1 : DARK;   // 불이 없으면 절반 밝기
-  const floorMat = new THREE.MeshStandardMaterial({ color: dim(surfColor(sl0, 'floor'), lit), roughness: 0.85, metalness: 0.1 });
+  const surfMats = [];                   // 면 재질 (조명 유무에 따라 밝기를 바꾼다)
+  const floorHex = surfColor(sl0, 'floor');
+  const floorMat = new THREE.MeshStandardMaterial({ color: floorHex, roughness: 0.85, metalness: 0.1 });
+  surfMats.push({ m: floorMat, hex: floorHex });
   const hole = (r.holes || [])[0];       // 계단 자리는 뚫는다
   const slab = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.01 || z1 - z0 < 0.01) return;
@@ -5488,9 +5509,10 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   }
   const ceilHex = surfColor(sl0, 'ceil');   // 천장은 빛이 거의 닿지 않아 고른 색이 그대로 보이도록 자체발광을 섞는다
   const ceilMat = new THREE.MeshStandardMaterial({
-    color: dim(ceilHex, lit), roughness: 0.95, metalness: 0.05,
-    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55 * lit * lit), emissiveIntensity: 1,   // 불이 없으면 자체발광도 함께 줄인다
+    color: ceilHex, roughness: 0.95, metalness: 0.05,
+    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55), emissiveIntensity: 1,
   });
+  surfMats.push({ m: ceilMat, hex: ceilHex, emis: 0.55 });
   const ceilGrp = new THREE.Group();     // 천장 (위에서 볼 때는 감춘다)
   const ch = (r.ceilHoles || [])[0];
   const ceilSlab = (x0, x1, z0, z1) => {
@@ -5510,8 +5532,11 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   ceilGrp.userData.ceiling = true;
   grp.add(ceilGrp);
   const wallMats = {};                   // 벽마다 색을 따로 (좌·우·뒤)
-  for (const k of ['x-', 'x+', 'z-'])
-    wallMats[k] = new THREE.MeshStandardMaterial({ color: dim(surfColor(sl0, k), lit), roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
+  for (const k of ['x-', 'x+', 'z-']) {
+    const hex = surfColor(sl0, k);
+    wallMats[k] = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
+    surfMats.push({ m: wallMats[k], hex });
+  }
   const panel = (w, hh, x, y, z, ry, wall) => {
     if (w <= 0.001 || hh <= 0.001) return;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallMats[wall] ?? wallMats['z-']);
@@ -5558,6 +5583,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   grp.add(r.guide);
   r.wallGuide = makeWallGuides(W, D, h);
   grp.add(r.wallGuide);
+  grp.userData.surfMats = surfMats;
   grp.position.set(r.cx, r.cy || 0, r.cz);
   return grp;
 }
@@ -5661,8 +5687,14 @@ function buildFurnitureAll() {            // 두 방의 가구를 한 그룹에
       else if (fdef.mount === 'wall' && !(it.y > 0.05)) it.y = fdef.wallY ?? 1.3;
       else if (fdef.mount === 'floor' && !(it.y >= 0)) it.y = 0;
       const m = furnMesh(it.type, it);
-      if (!roomLit(roomStore.slots[r.slot]) && !FURN[it.type].glow)      // 불이 없는 방의 가구도 어둡게
-        m.traverse(o => { if (o.isMesh && o.material?.color && !o.userData.outline) { o.material = o.material.clone(); o.material.color.multiplyScalar(DARK); } });
+      if (!FURN[it.type].glow) {          // 조명 유무에 따라 밝기를 바꿀 수 있게 원래 색을 기억해 둔다
+        m.traverse(o => {
+          if (o.isMesh && o.material?.color && !o.userData.outline) {
+            o.material = o.material.clone();
+            o.userData.baseCol = o.material.color.clone();
+          }
+        });
+      }
       const down = it.type === 'stairs' && it.dir === 'down' && it.link >= 0 && !it.blocked;
       const baseY = (r.cy || 0) - (down ? LEVEL_H : 0);   // 이어진 내려가는 계단만 아래층에 놓인다
       m.position.set(r.cx + it.x, baseY + (it.y || 0), r.cz + it.z);
@@ -5821,13 +5853,15 @@ function liveStep(dt) {
   drawRoomMap();
 }
 // ---- 연결 미니맵 ----
-let srKey = null, srRim = null;           // 무대 조명 (캐릭터를 따라다닌다)
-function syncStageLights() {
-  if (!srKey || !srRim) return;
-  const x = live.x, y = live.y, z = live.z;
-  srKey.position.set(x + 1.2, y + 4.6, z + 3.0); srKey.target.position.set(x, y + 1.15, z);
-  srRim.position.set(x - 1.6, y + 3.6, z - 3.2); srRim.target.position.set(x, y + 1.35, z);
-  srKey.target.updateMatrixWorld(); srRim.target.updateMatrixWorld();
+let srStageLights = [];                   // 방의 조명 유무에 따라 세기를 조절한다
+function syncStageDim() {                 // 지금 있는 방에 불이 없으면 무대 조명을 낮춘다
+  const sl = roomStore.slots[srMode === 'live' ? (live.active ?? roomStore.cur) : roomStore.cur];
+  const k = roomLit(sl) ? 1 : DARK_L;
+  for (const l of srStageLights) {
+    const base = l.userData.base ?? l.intensity;
+    const want = base * k;
+    if (Math.abs(l.intensity - want) > 0.001) l.intensity += (want - l.intensity) * 0.25;   // 부드럽게
+  }
 }
 let mapZoom = 1;                          // 미니맵 배율 (휠)
 function drawRoomMap() {
@@ -5983,13 +6017,11 @@ function srBuild() {
   srScene.background = new THREE.Color(0x070d13);   // 어두운 무대 배경 (CSS 덮개 없음)
   srCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 60);
   // 인게임과 같은 대비를 유지하고(반구광 + 태양광) 스포트는 액센트로만
-  srScene.add(new THREE.HemisphereLight(0xffffff, 0x9aa4ae, 1.5));     // 중립 환경광 — 흰색이 흰색으로 보이게
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x9aa4ae, 1.5);     // 중립 환경광 — 흰색이 흰색으로 보이게
+  srScene.add(hemi);
   const sunL = new THREE.DirectionalLight(0xffeedd, 2.2); sunL.position.set(2.6, 4, 2.4); srScene.add(sunL);
-  srKey = new THREE.SpotLight(0xffffff, 45, 16, 0.66, 0.5, 1.2);        // 정면 위 스포트 (캐릭터를 따라간다)
-  srScene.add(srKey, srKey.target);
-  srRim = new THREE.SpotLight(0xdff2ff, 40, 16, 0.6, 0.5, 1.2);         // 뒤 림라이트
-  srScene.add(srRim, srRim.target);
-  syncStageLights();
+  srStageLights = [hemi, sunL];
+  for (const l of srStageLights) l.userData.base = l.intensity;   // 캐릭터에 붙던 스포트는 사용하지 않는다
   srRoot = skClone(playerGltf.scene);
   srRoot.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; } });
   srScene.add(srRoot);
