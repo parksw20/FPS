@@ -3810,9 +3810,11 @@ function furnMesh(type, it) {
       tex.colorSpace = THREE.SRGBColorSpace;
       mat.map = tex; mat.color.setHex(0xffffff); mat.needsUpdate = true;
     }
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-    pane.position.z = 0.05;
-    grp.add(pane);
+    if (!f.transparent || it?.img) {     // 배너는 판, 창문은 테두리만 (뒤가 뚫려 보인다)
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      pane.position.z = 0.05;
+      grp.add(pane);
+    }
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x1c242e, roughness: 0.6, metalness: 0.35 });
     for (const [fw, fh, fx, fy] of [[w + 0.1, 0.07, 0, h / 2], [w + 0.1, 0.07, 0, -h / 2], [0.07, h, -w / 2, 0], [0.07, h, w / 2, 0]]) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, 0.1), frameMat);
@@ -4627,12 +4629,37 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
         linkNotes.push(nb.name + ' 쪽 문이 ' + (wantZ >= 0 ? '+' : '') + wantZ.toFixed(1) + 'm 위치로 옮겨졌습니다');
       }
       door.blocked = false;
-      rm.gaps.push({ side, z: door.z });
-      nbRoom.gaps.push({ side: -side, z: wantZ });
+      rm.gaps.push({ side, z: door.z, w: DOOR_W, y0: 0, y1: RM_DOOR_H });
+      nbRoom.gaps.push({ side: -side, z: wantZ, w: DOOR_W, y0: 0, y1: RM_DOOR_H });
       liveDoors.push({
         item: door, x: rm.cx + side * (rm.w / 2 + ROOM_GAP / 2), z: doorZ, side,
         from: cur.slot, to: nbSlot, open: 0, panel: null,
       });
+    }
+  }
+  for (const r of placed.values()) {     // 창문은 벽을 뚫는다 (맞은편 방이 있으면 그 벽도)
+    for (const it of roomStore.slots[r.slot].items) {
+      if (it.type !== 'window') continue;
+      const hw = it.w ?? FURN.window.w, hh = it.h ?? FURN.window.h;
+      const onX = Math.abs(Math.abs(it.x) - r.w / 2) < 0.05;
+      const side = onX ? (it.x >= 0 ? 1 : -1) : 0;
+      const y0 = Math.max(0.05, (it.y ?? 1.6) - hh / 2), y1 = Math.min(ROOM_H - 0.05, (it.y ?? 1.6) + hh / 2);
+      if (onX) {
+        r.gaps.push({ side, z: it.z, w: hw, y0, y1, win: true });
+        for (const o of placed.values()) { // 옆방 벽도 뚫어 서로 보이게
+          if (o === r || Math.abs((o.cy || 0) - (r.cy || 0)) > 0.01) continue;
+          if (Math.abs(o.cx - (r.cx + side * (r.w / 2 + o.w / 2 + ROOM_GAP))) > 0.06) continue;
+          const zw = r.cz + it.z;                     // 옆방과 겹치는 폭만 뚫는다
+          const lo = Math.max(zw - hw / 2, o.cz - o.d / 2 + 0.05), hi = Math.min(zw + hw / 2, o.cz + o.d / 2 - 0.05);
+          if (hi - lo < 0.3) continue;
+          o.gaps.push({ side: -side, z: +((lo + hi) / 2 - o.cz).toFixed(2), w: +(hi - lo).toFixed(2), y0, y1, win: true });
+          r.winTunnels = r.winTunnels || [];   // 두 방 사이 틈으로 바깥이 보이지 않게 감싼다
+          r.winTunnels.push({ side, z: +((lo + hi) / 2 - r.cz).toFixed(2), w: +(hi - lo).toFixed(2), y0, y1 });
+        }
+      } else {
+        r.backGaps = r.backGaps || [];
+        r.backGaps.push({ x: it.x, w: hw, y0, y1 });
+      }
     }
   }
   for (const r of placed.values()) {
@@ -4720,19 +4747,40 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     m.position.set(x, y, z); m.rotation.y = ry;
     grp.add(m);
   };
-  for (const sgn of [-1, 1]) {           // 좌·우 벽 — 문이 뚫린 자리는 비운다
-    const x = sgn * W / 2;
-    const holes = (r.gaps || []).filter(g => g.side === sgn).map(g => g.z).sort((a, b) => a - b);
-    let from = -D / 2;
-    for (const hz of holes) {
-      const a = hz - DOOR_W / 2, b = hz + DOOR_W / 2;
-      panel(Math.max(0, a - from), h, x, h / 2, (from + a) / 2, sgn * Math.PI / 2);
-      panel(DOOR_W, h - RM_DOOR_H, x, (h + RM_DOOR_H) / 2, hz, sgn * Math.PI / 2);   // 문 위 상인방
-      from = b;
+  const wallRun = (len, holes, place) => {   // 구멍(문·창)을 피해 벽을 조각내 세운다
+    const list = [...holes].sort((a, b) => a.u - b.u);
+    let from = -len / 2;
+    for (const g of list) {
+      const a = g.u - g.w / 2, b = g.u + g.w / 2;
+      place(Math.max(0, a - from), h, (from + a) / 2, h / 2);          // 구멍 왼쪽
+      if (g.y0 > 0.001) place(g.w, g.y0, g.u, g.y0 / 2);               // 구멍 아래
+      if (g.y1 < h - 0.001) place(g.w, h - g.y1, g.u, (h + g.y1) / 2); // 구멍 위
+      from = Math.max(from, b);
     }
-    panel(Math.max(0, D / 2 - from), h, x, h / 2, (from + D / 2) / 2, sgn * Math.PI / 2);
+    place(Math.max(0, len / 2 - from), h, (from + len / 2) / 2, h / 2);
+  };
+  for (const sgn of [-1, 1]) {           // 좌·우 벽
+    const x = sgn * W / 2;
+    const holes = (r.gaps || []).filter(g => g.side === sgn)
+      .map(g => ({ u: g.z, w: g.w ?? DOOR_W, y0: g.y0 ?? 0, y1: g.y1 ?? RM_DOOR_H }));
+    wallRun(D, holes, (w, hh, u, cy) => panel(w, hh, x, cy, u, sgn * Math.PI / 2));
   }
-  panel(W, h, 0, h / 2, -D / 2, 0);      // 뒷벽 (창 없음)
+  const tunMat = new THREE.MeshStandardMaterial({ color: 0x323b47, roughness: 0.9, side: THREE.DoubleSide });
+  for (const t of r.winTunnels || []) {   // 창문 통로 (옆방과 이어진 구간)
+    const x = t.side * (W / 2 + ROOM_GAP / 2), hh = t.y1 - t.y0;
+    for (const [pw, ph, pz, py, ry] of [
+      [ROOM_GAP, t.w, 0, t.y0, 0], [ROOM_GAP, t.w, 0, t.y1, 0],          // 아래·위
+      [ROOM_GAP, hh, -t.w / 2, t.y0 + hh / 2, 0], [ROOM_GAP, hh, t.w / 2, t.y0 + hh / 2, 0],
+    ]) {
+      const flat = ph === t.w && (py === t.y0 || py === t.y1);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), tunMat);
+      m.position.set(x, py, t.z + pz);
+      if (flat) m.rotation.x = -Math.PI / 2;
+      grp.add(m);
+    }
+  }
+  const backHoles = (r.backGaps || []).map(g => ({ u: g.x, w: g.w, y0: g.y0, y1: g.y1 }));
+  wallRun(W, backHoles, (w, hh, u, cy) => panel(w, hh, u, cy, -D / 2, 0));   // 뒷벽 (창문 구멍)
   r.guide = makeFloorGuide(W, D);        // 설치 가이드 격자 (활성 방만 표시)
   grp.add(r.guide);
   r.wallGuide = makeWallGuides(W, D, h);
