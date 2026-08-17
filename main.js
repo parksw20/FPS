@@ -4279,31 +4279,31 @@ function standingSlot() {                 // 생활모드면 지금 서 있는 �
   const here = insideRooms(live.x, live.z);
   return here >= 0 ? here : (live.active ?? roomStore.cur);
 }
-function closeRoom() {                    // 서 있는 방만 폐쇄 — 연결만 끊고 문·계단은 남긴다
+function closeRoom() {                    // 서 있는 방만 폐쇄 — 문·계단은 없앤다
   const idx = standingSlot(), me = roomStore.slots[idx];
   if (!me) return;
   if (idx === 0) { toast('🏠 기본 방(' + roomStore.slots[0].name + ')은 폐쇄할 수 없습니다'); return; }
-  if (me.closed) {                        // 다시 열기
+  if (me.closed) {                        // 다시 열기 (문·계단은 다시 놓아야 한다)
     me.closed = false;
     roomSave(); buildWorld(); roomRenderUI();
-    toast('🔓 ' + me.name + ' 폐쇄 해제 — 문을 놓아 다시 연결하세요');
+    toast('🔓 ' + me.name + ' 폐쇄 해제 — 문·계단을 다시 놓아 연결하세요');
     return;
   }
   let cut = 0;
-  for (const it of me.items) {            // 이 방의 연결만 끊는다 (문·계단은 남긴다)
-    if ((it.type === 'door' || it.type === 'stairs') && Number.isInteger(it.link) && it.link >= 0) { it.link = -1; cut++; }
-  }
-  if (roomStore.cur !== idx) roomStore.cur = idx;   // 서 있는 방을 기준으로 맞춘다
-  roomStore.slots.forEach((sl, i) => {    // 이 방을 향한 연결만 끊는다 (다른 방끼리는 그대로)
+  const gone = it => FURN[it.type]?.link;
+  cut += me.items.filter(gone).length;
+  me.items = me.items.filter(it => !gone(it));            // 이 방의 문·계단 제거
+  roomStore.slots.forEach((sl, i) => {                    // 이 방을 향한 문·계단도 제거
     if (i === idx) return;
-    for (const it of sl.items) {
-      if ((it.type === 'door' || it.type === 'stairs') && it.link === idx) { it.link = -1; cut++; }
-    }
+    const before = sl.items.length;
+    sl.items = sl.items.filter(it => !(gone(it) && it.link === idx));
+    cut += before - sl.items.length;
   });
   me.closed = true;
+  if (roomStore.cur !== idx) roomStore.cur = idx;
   setSel(null); cancelPlace(); hideCtx();
   roomSave(); buildWorld(); roomRenderUI();
-  toast('🚫 ' + me.name + ' 폐쇄 — 연결 ' + cut + '개 해제 (문·계단은 남음)');
+  toast('🚫 ' + me.name + ' 폐쇄 — 문·계단 ' + cut + '개 제거');
 }
 function clearRoom() {                    // 다른 방과 이어진 문·계단은 남긴다
   const me = curRoom();
@@ -5437,6 +5437,12 @@ function drawRoomMap() {
   cv.style.display = show ? 'block' : 'none';
   const eb = document.getElementById('srMapEdit');
   if (eb) eb.style.display = show ? 'block' : 'none';
+  const lb = document.getElementById('srMapLv');
+  if (lb) {
+    lb.style.display = show ? 'block' : 'none';
+    const n = Math.round((srMode === 'live' ? live.y : activeLevel()) / LEVEL_H);
+    lb.textContent = n >= 0 ? (n + 1) + 'F' : 'B' + (-n);
+  }
   if (!show) return;
   const c = cv.getContext('2d');
   c.clearRect(0, 0, cv.width, cv.height);
@@ -5449,7 +5455,7 @@ function drawRoomMap() {
     minZ = Math.min(minZ, q.z0); maxZ = Math.max(maxZ, q.z1);
   }
   if (minX > maxX) return;
-  const pad = 8, k = Math.min((cv.width - pad * 2) / (maxX - minX), (cv.height - pad * 2) / (maxZ - minZ));
+  const pad = 18, k = Math.min((cv.width - pad * 2) / (maxX - minX), (cv.height - pad * 2) / (maxZ - minZ));
   const px = x => pad + (x - minX) * k, pz = z => pad + (z - minZ) * k;
   for (const r of worldRooms) {
     const lv = srMode === 'live' ? live.y : activeLevel();
@@ -5458,10 +5464,10 @@ function drawRoomMap() {
     c.fillStyle = r.slot === live.active ? 'rgba(64,214,255,.22)' : 'rgba(120,160,180,.12)';
     c.fillRect(px(q.x0), pz(q.z0), (q.x1 - q.x0) * k, (q.z1 - q.z0) * k);
     c.strokeStyle = r.slot === live.active ? '#7df3ff' : '#4a6b7a';
-    c.lineWidth = 1.5;
+    c.lineWidth = 2.5;
     c.strokeRect(px(q.x0), pz(q.z0), (q.x1 - q.x0) * k, (q.z1 - q.z0) * k);
-    c.fillStyle = '#9fd8ea'; c.font = '9px system-ui'; c.textAlign = 'center';
-    c.fillText(roomStore.slots[r.slot].name.slice(0, 8), px(r.cx), pz(r.cz - r.d / 2) + 11);
+    c.fillStyle = '#9fd8ea'; c.font = '13px system-ui'; c.textAlign = 'center';
+    c.fillText(roomStore.slots[r.slot].name.slice(0, 10), px(r.cx), pz(r.cz - r.d / 2) + 16);
   }
   const onLv = slot => {                 // 이 층에 있는 방인가
     const r = worldRooms.find(w => w.slot === slot);
@@ -5469,7 +5475,7 @@ function drawRoomMap() {
   };
   for (const d of liveDoors) {           // 문 (이 층만 · 축에 맞춰)
     if (!onLv(d.from) && !onLv(d.to)) continue;
-    c.strokeStyle = '#ffd76b'; c.lineWidth = 3;
+    c.strokeStyle = '#ffd76b'; c.lineWidth = 5;
     c.beginPath();
     if (d.axis === 'z') { c.moveTo(px(d.x - DOOR_W / 2), pz(d.z)); c.lineTo(px(d.x + DOOR_W / 2), pz(d.z)); }
     else { c.moveTo(px(d.x), pz(d.z - DOOR_W / 2)); c.lineTo(px(d.x), pz(d.z + DOOR_W / 2)); }
@@ -5491,18 +5497,13 @@ function drawRoomMap() {
       c.fillRect(px(sx - fp.w / 2), pz(sz - fp.d / 2), fp.w * k, fp.d * k);
       c.strokeStyle = it.blocked ? '#ff8a7a' : '#9be7a0'; c.lineWidth = 1;
       c.strokeRect(px(sx - fp.w / 2), pz(sz - fp.d / 2), fp.w * k, fp.d * k);
-      c.fillStyle = '#eafff0'; c.font = 'bold 9px system-ui'; c.textAlign = 'center';
-      c.fillText(own === goUp ? '▲' : '▼', px(sx), pz(sz) + 3);   // 이 층에서 오르는지 내리는지
+      c.fillStyle = '#eafff0'; c.font = 'bold 14px system-ui'; c.textAlign = 'center';
+      c.fillText(own === goUp ? '▲' : '▼', px(sx), pz(sz) + 5);   // 이 층에서 오르는지 내리는지
     }
   });
-  const lvl = srMode === 'live' ? live.y : activeLevel();
-  if (Math.abs(lvl) > 0.01) {            // 층 표시
-    c.fillStyle = '#9fd8ea'; c.font = '9px system-ui'; c.textAlign = 'left';
-    c.fillText((Math.round(lvl / (ROOM_H + ROOM_VGAP)) + 1) + 'F', 6, cv.height - 6);
-  }
-  if (srMode === 'live') {               // 플레이어
+  if (srMode === 'live') {               // 플레이어 (층 표시는 미니맵 옆 배지)
     c.fillStyle = '#7ee0a3';
-    c.beginPath(); c.arc(px(live.x), pz(live.z), 3.4, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(px(live.x), pz(live.z), 5, 0, Math.PI * 2); c.fill();
   }
 }
 function srRenderModeUI() {

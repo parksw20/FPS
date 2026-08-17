@@ -224,10 +224,13 @@
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
   #srMap{position:absolute; left:24px; bottom:18px; display:none; z-index:23; border-radius:10px;
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
-  #srMapEdit{position:absolute; left:150px; bottom:22px; display:none; z-index:24; cursor:pointer;
-    padding:4px 8px; font-size:.7rem; color:#bfe9f7; border-radius:6px;
+  #srMapEdit{position:absolute; left:255px; bottom:26px; display:none; z-index:24; cursor:pointer;
+    padding:7px 14px; font-size:.82rem; font-weight:700; color:#04161c; border-radius:8px;
+    background:rgba(125,243,255,.92); border:1px solid #7df3ff; box-shadow:0 0 12px rgba(64,214,255,.45)}
+  #srMapEdit:hover{background:#a8f8ff}
+  #srMapLv{position:absolute; left:34px; bottom:26px; display:none; z-index:24; pointer-events:none;
+    padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
-  #srMapEdit:hover{border-color:#7df3ff; background:rgba(64,214,255,.2)}
   #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:8px; z-index:23}
   #srModes button{padding:8px 16px; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
@@ -540,8 +543,9 @@
       <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 놓인 가구를 클릭하면 회전·제거 메뉴가 뜹니다.</p>
     </div>
   </div>
-  <canvas id="srMap" width="176" height="176"></canvas>
-  <div id="srMapEdit" title="방 배치 편집">✏ 배치</div>
+  <canvas id="srMap" width="352" height="352"></canvas>
+  <div id="srMapLv">1F</div>
+  <div id="srMapEdit" title="방 배치 편집">✏ 배치 편집</div>
   <div id="srModes">
     <button data-mode="pose" class="on">🧍 포즈모드</button>
     <button data-mode="live">🚶 생활모드</button>
