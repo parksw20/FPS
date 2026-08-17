@@ -4920,7 +4920,7 @@ function loadRoomSlot(i) {
   }
   toast('📂 ' + curRoom().name + ' 불러옴');
 }
-const DARK = 0.25;                        // 불이 없는 방의 밝기 (더 어둡게)
+const DARK = 0.15;                        // 불이 없는 방의 밝기 (더 어둡게)
 function roomLit(sl) {                    // 방에 빛나는 가구(램프·천장등·모니터)가 있나
   return !!sl && sl.items.some(it => FURN[it.type]?.glow);
 }
@@ -5488,7 +5488,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   const ceilHex = surfColor(sl0, 'ceil');   // 천장은 빛이 거의 닿지 않아 고른 색이 그대로 보이도록 자체발광을 섞는다
   const ceilMat = new THREE.MeshStandardMaterial({
     color: dim(ceilHex, lit), roughness: 0.95, metalness: 0.05,
-    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55 * lit), emissiveIntensity: 1,
+    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55 * lit * lit), emissiveIntensity: 1,   // 불이 없으면 자체발광도 함께 줄인다
   });
   const ceilGrp = new THREE.Group();     // 천장 (위에서 볼 때는 감춘다)
   const ch = (r.ceilHoles || [])[0];
