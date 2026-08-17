@@ -5477,7 +5477,11 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     slab(-W / 2, hx0, hz0, hz1);
     slab(hx1, W / 2, hz0, hz1);
   }
-  const ceilMat = new THREE.MeshStandardMaterial({ color: surfColor(sl0, 'ceil'), roughness: 0.95, metalness: 0.05 });
+  const ceilHex = surfColor(sl0, 'ceil');   // 천장은 빛이 거의 닿지 않아 고른 색이 그대로 보이도록 자체발광을 섞는다
+  const ceilMat = new THREE.MeshStandardMaterial({
+    color: ceilHex, roughness: 0.95, metalness: 0.05,
+    emissive: new THREE.Color(ceilHex).multiplyScalar(0.55), emissiveIntensity: 1,
+  });
   const ceilGrp = new THREE.Group();     // 천장 (위에서 볼 때는 감춘다)
   const ch = (r.ceilHoles || [])[0];
   const ceilSlab = (x0, x1, z0, z1) => {
