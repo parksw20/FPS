@@ -4172,6 +4172,12 @@ function commitPlace() {
   if (FURN[placeType].link) added.link = -1;
   target.items.push(added);
   roomSave(); refreshRoom(placeType);      // 창문·문은 벽 구멍까지 다시 만든다
+  if (added.type === 'door' && added.blocked && added.why === 'closed')
+    toast('🚫 폐쇄중인 방이라 이어지지 않습니다 — 폐쇄 해제 후 연결됩니다');
+  else if (added.type === 'door' && added.blocked)
+    toast(added.why === 'short' ? '🚪 ' + (added.near?.name ?? '옆방') + ' 과 ' + (added.near?.len ?? 0) + 'm만 맞닿았습니다 (' + MIN_LINK + 'm 이상 필요)'
+      : added.why === 'offwall' ? '🚪 맞닿은 구간을 벗어났습니다 — 문을 옆으로 옮기세요'
+        : '🚪 이 벽 뒤에 방이 없습니다');
   if (added.type === 'stairs' && added.blocked)
     toast(added.why === 'align' ? '🪜 계단이 닿는 자리에 방이 없습니다 — ＋ 새 방으로 만들어 주세요'
       : '🪜 ' + ((added.dir ?? 'up') === 'up' ? '위층' : '아래층') + ' 방이 없습니다 — ＋ 새 방으로 만들어 주세요');
@@ -4696,9 +4702,14 @@ function connectedToRoot(slot) {          // MY ROOM(0)에서 문·계단으로 
 function ctxLinkHtml() {                 // 문·계단: 방향과 새 방만 (연결은 배치가 결정한다)
   if (!srPickSel || !FURN[srPickSel.type].link) return '';
   const it = srPickSel;
-  const here = it.link >= 0 && roomStore.slots[it.link]
-    ? `<div class="ctxHead">🔗 ${roomStore.slots[it.link].name} 와 이어져 있습니다</div>`
-    : `<div class="ctxHead">${it.type === 'stairs' ? '닿는 자리에 방이 없습니다' : '이 벽 뒤에 방이 없습니다'}</div>`;
+  let msg;
+  if (it.link >= 0 && roomStore.slots[it.link]) msg = `🔗 ${roomStore.slots[it.link].name} 와 이어져 있습니다`;
+  else if (it.why === 'closed') msg = '폐쇄중인 방이라 이어지지 않습니다 — 폐쇄 해제 후 연결됩니다';
+  else if (it.type === 'stairs') msg = '닿는 자리에 방이 없습니다 — 배치 편집으로 맞춰 주세요';
+  else if (it.why === 'short') msg = `${it.near?.name ?? '옆방'} 과 ${it.near?.len ?? 0}m만 맞닿았습니다 (${MIN_LINK}m 이상 필요)`;
+  else if (it.why === 'offwall') msg = `문이 ${it.near?.name ?? '옆방'} 과 맞닿은 구간을 벗어났습니다 — 문을 옮기세요`;
+  else msg = '이 벽 뒤에 방이 없습니다';
+  const here = `<div class="ctxHead">${msg}</div>`;
   const dirRow = it.type === 'stairs'
     ? `<div class="ctxHead">계단 방향</div><button data-dir="up"${(it.dir ?? 'up') === 'up' ? ' class="on"' : ''}>⬆ 위층으로</button>`
       + `<button data-dir="down"${it.dir === 'down' ? ' class="on"' : ''}>⬇ 아래층으로</button>` : '';
@@ -4914,17 +4925,21 @@ function autoLinkAll() {                 // 문·계단은 맞닿은 방을 스�
     for (const it of sl.items) {
       if (it.type === 'door') {
         const d = doorWorld(sl, it);
-        let found = -1;
+        let found = -1, why = 'nowall', near = null;
         roomStore.slots.forEach((o, j) => {
-          if (j === i || sl.closed || o.closed) return;
+          if (j === i || found >= 0) return;
           const w = wallBetween(d.R, slotRect(o));
-          if (!w || w.len < MIN_LINK - 0.01 || w.axis !== (d.onX ? 'x' : 'z') || w.side !== d.side) return;
+          if (!w || w.axis !== (d.onX ? 'x' : 'z') || w.side !== d.side) return;
+          near = { slot: j, w };
+          if (sl.closed || o.closed) { why = 'closed'; return; }               // 폐쇄중이면 잇지 않는다
+          if (w.len < MIN_LINK - 0.01) { why = 'short'; return; }              // 맞닿았지만 2m 미만
           const u = d.onX ? d.z : d.x;
-          if (u - DOOR_W / 2 < w.lo - 0.01 || u + DOOR_W / 2 > w.hi + 0.01) return;
+          if (u - DOOR_W / 2 < w.lo - 0.01 || u + DOOR_W / 2 > w.hi + 0.01) { why = 'offwall'; return; }
           found = j;
         });
         it.link = found;
-        it.why = found < 0 ? 'nowall' : null;
+        it.why = found < 0 ? why : null;
+        it.near = found < 0 && near ? { name: roomStore.slots[near.slot].name, len: +near.w.len.toFixed(1) } : null;
         it.blocked = found < 0;
       } else if (it.type === 'stairs') {
         const R = slotRect(sl);
@@ -4934,16 +4949,18 @@ function autoLinkAll() {                 // 문·계단은 맞닿은 방을 스�
         const goUp = (it.dir ?? 'up') === 'up';
         const wantGy = (sl.gy || 0) + (goUp ? 1 : -1);
         let found = -1;
+        let closed = false;
         roomStore.slots.forEach((o, j) => {
-          if (j === i || sl.closed || o.closed || (o.gy || 0) !== wantGy) return;
+          if (j === i || (o.gy || 0) !== wantGy) return;
           const q = slotRect(o);
           const has = (x, z, m) => x > q.x0 + m && x < q.x1 - m && z > q.z0 + m && z < q.z1 - m;
           if (!has(sx, sz, 0.05)) return;
           if (goUp && !has(tx, tz, 0.3)) return;   // 올라가는 계단은 도착 지점도 그 방 안이어야 한다
+          if (sl.closed || o.closed) { closed = true; return; }
           found = j;
         });
         it.link = found;
-        it.why = found < 0 ? 'align' : null;
+        it.why = found < 0 ? (closed ? 'closed' : 'align') : null;
         it.blocked = found < 0;
       }
     }
