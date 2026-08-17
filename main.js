@@ -5241,10 +5241,12 @@ function syncGuides() {                   // 활성 방에만 가이드라인 ·
     if (r.wallGuide) r.wallGuide.visible = active && editing && onWall;
   }
   for (const d of liveDoors) if (d.panel) d.panel.visible = Math.abs((worldRooms.find(r => r.slot === d.from)?.cy || 0) - lvl) < 0.01;
-  if (srFurnGrp) for (const m of srFurnGrp.children) {   // 다른 층 가구·계단은 보이지 않게
+  if (srFurnGrp) for (const m of srFurnGrp.children) {   // 다른 층 가구는 감추고, 계단은 잇는 두 층에서 보인다
     const rr = worldRooms.find(r => r.slot === m.userData.room);
-    const onLv = !rr || Math.abs((rr.cy || 0) - lvl) < 0.01;
-    m.visible = onLv && ((rr?.grp?.visible ?? true) || m.userData.item?.type === 'stairs');
+    const stairs = m.userData.item?.type === 'stairs';
+    const lo = m.userData.roomY ?? (rr?.cy || 0);
+    const onLv = !rr || Math.abs(lo - lvl) < 0.01 || (stairs && Math.abs(lo + LEVEL_H - lvl) < 0.01);
+    m.visible = onLv && ((rr?.grp?.visible ?? true) || stairs);
   }
 }
 function addOutline(grp) {                // 메쉬 모서리에 검은 선
@@ -5350,7 +5352,7 @@ function blockedByFurniture(x, z) {
   return false;
 }
 function liveStep(dt) {
-  const sp = 2.2;
+  const sp = 4.4;                        // 기본 이동 = 달리기
   let mx = 0, mz = 0;
   if (keys['KeyW']) mz -= 1; if (keys['KeyS']) mz += 1;
   if (keys['KeyA']) mx -= 1; if (keys['KeyD']) mx += 1;
@@ -5422,7 +5424,7 @@ function liveStep(dt) {
     srRoot.position.set(live.x, live.y, live.z);
     srRoot.rotation.y = live.yaw;
   }
-  srPlay(live.y > ground + 0.06 ? 'rifle jump' : live.dashT > 0 ? 'rifle run' : live.moving ? 'walking' : 'rifle aiming idle');
+  srPlay(live.y > ground + 0.06 ? 'rifle jump' : live.moving ? 'rifle run' : 'rifle aiming idle');   // 기본이 달리기
   if (innerWidth > 0 && renderer.domElement.width !== Math.floor(innerWidth * (renderer.getPixelRatio() || 1))) renderer.setSize(innerWidth, innerHeight);   // 창 크기와 어긋나면 맞춘다
   liveApplyCam();
   drawRoomMap();
@@ -5473,13 +5475,26 @@ function drawRoomMap() {
     else { c.moveTo(px(d.x), pz(d.z - DOOR_W / 2)); c.lineTo(px(d.x), pz(d.z + DOOR_W / 2)); }
     c.stroke();
   }
-  for (const st of liveStairs) {         // 계단 (이 층에 걸린 것만)
-    if (!onLv(st.from) && !onLv(st.to)) continue;
-    c.fillStyle = '#9be7a0';
-    c.beginPath(); c.arc(px(st.x), pz(st.z), 4, 0, Math.PI * 2); c.fill();
-    c.fillStyle = '#0a1a12'; c.font = 'bold 7px system-ui'; c.textAlign = 'center';
-    c.fillText('▲', px(st.x), pz(st.z) + 2.5);
-  }
+  roomStore.slots.forEach((sl, i) => {   // 계단 — 이 층에 걸린 것 모두 (연결 안 된 것도)
+    const r = worldRooms.find(w => w.slot === i);
+    if (!r) return;
+    const own = Math.abs((r.cy || 0) - lv0) < 0.01;
+    for (const it of sl.items) {
+      if (it.type !== 'stairs') continue;
+      const goUp = (it.dir ?? 'up') === 'up';
+      const other = (r.cy || 0) + (goUp ? LEVEL_H : -LEVEL_H);
+      const near = Math.abs(other - lv0) < 0.01;
+      if (!own && !near) continue;
+      const sx = r.cx + it.x, sz = r.cz + it.z;
+      const fp = footprint('stairs', it.rot);
+      c.fillStyle = it.blocked ? 'rgba(255,120,100,.5)' : 'rgba(155,231,160,.5)';
+      c.fillRect(px(sx - fp.w / 2), pz(sz - fp.d / 2), fp.w * k, fp.d * k);
+      c.strokeStyle = it.blocked ? '#ff8a7a' : '#9be7a0'; c.lineWidth = 1;
+      c.strokeRect(px(sx - fp.w / 2), pz(sz - fp.d / 2), fp.w * k, fp.d * k);
+      c.fillStyle = '#eafff0'; c.font = 'bold 9px system-ui'; c.textAlign = 'center';
+      c.fillText(own === goUp ? '▲' : '▼', px(sx), pz(sz) + 3);   // 이 층에서 오르는지 내리는지
+    }
+  });
   const lvl = srMode === 'live' ? live.y : activeLevel();
   if (Math.abs(lvl) > 0.01) {            // 층 표시
     c.fillStyle = '#9fd8ea'; c.font = '9px system-ui'; c.textAlign = 'left';
