@@ -3692,6 +3692,18 @@ const BG_LIST = [
   { key: 'sea', name: '바다', icon: '🌊', tint: 0xc4e4f5 },
   { key: 'city', name: '도시', icon: '🌆', tint: 0xe6d2e8 },
 ];
+const SURFACES = [                        // 색을 바꿀 수 있는 면
+  { key: 'x-', name: '왼쪽 벽', def: 0x39434f },
+  { key: 'x+', name: '오른쪽 벽', def: 0x39434f },
+  { key: 'z-', name: '뒷벽', def: 0x39434f },
+  { key: 'floor', name: '바닥', def: 0x2b3440 },
+  { key: 'ceil', name: '천장', def: 0x333c48 },
+];
+const PALETTE = ['#39434f', '#2b3440', '#4a5560', '#6b7a8a', '#8f9aa6', '#c9d3dc',
+  '#6b4a34', '#8a6a45', '#a98b62', '#2f6b3a', '#3d6b7a', '#2b6f8f',
+  '#7a2f3a', '#a04a4a', '#c98a4a', '#d8c48a', '#5a4a6b', '#1c242e'];
+let surfSel = 'x-';                       // 지금 고른 면
+const surfColor = (sl, key) => sl?.surf?.[key] ?? ('#' + (SURFACES.find(s2 => s2.key === key).def).toString(16).padStart(6, '0'));
 const roomStore = { v: ROOMS_V, cur: 0, slots: [{ name: 'MY ROOM', w: ROOM_MIN, d: ROOM_MIN, gx: 0, gz: 0, gy: 0, bg: 'forest', items: [] }] };
 const slotCost = () => SLOT_COST_BASE * Math.pow(2, Math.max(0, roomStore.slots.length - 1));
 const roomW = r => r.w ?? r.size ?? ROOM_MIN, roomD = r => r.d ?? r.size ?? ROOM_MIN;
@@ -3711,6 +3723,7 @@ function roomLoad() {
         d: Math.max(ROOM_MIN, Math.min(ROOM_MAX, sl.d ?? sl.size ?? ROOM_MIN)),
         bg: sl.bg || 'forest', closed: !!sl.closed,
         gx: Math.round(sl.gx ?? 0), gz: Math.round(sl.gz ?? 0), gy: Math.round(sl.gy ?? 0),
+        surf: sl.surf && typeof sl.surf === 'object' ? { ...sl.surf } : {},
         items: (Array.isArray(sl.items) ? sl.items.filter(it => FURN[it.type]) : []).map(it => {
           const f = FURN[it.type];
           if (f.mount === 'ceiling') it.y = +(ROOM_H - f.h).toFixed(2);        // 천장물
@@ -4148,10 +4161,20 @@ function makePlaceMark(f) {
   grp.add(pole);
   return grp;
 }
+function makeWallCross() {                // 벽 위 시작점 표시 (격자 교차점)
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0x7df3ff, fog: false, toneMapped: false });
+  for (const [w, h] of [[0.34, 0.02], [0.02, 0.34]]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.02), mat);
+    grp.add(b);
+  }
+  return grp;
+}
 function startPlace(type) {
   placeType = type; placeRot = 0; setSel(null);
   if (placeMark) { srScene.remove(placeMark); placeMark = null; }
   if (FURN[type].mount === 'ceiling') { placeMark = makePlaceMark(FURN[type]); srScene.add(placeMark); }
+  if (FURN[type].sizable) { placeMark = makeWallCross(); srScene.add(placeMark); }
   syncGuides();
   if (placeGhost) srScene.remove(placeGhost);
   placeGhost = furnMesh(type);
@@ -4165,6 +4188,7 @@ function startPlace(type) {
 }
 function cancelPlace() {
   placeType = null; sizeAnchor = null;
+  if (placeGhost) placeGhost.visible = true;
   setTimeout(syncGuides, 0);
   if (placeMark) { srScene.remove(placeMark); placeMark = null; }
   if (placeGhost) { srScene.remove(placeGhost); placeGhost = null; }
@@ -4414,13 +4438,11 @@ function clearRoom() {                    // 다른 방과 이어진 문·계단
   setSel(null); roomSave(); buildWorld();
   toast('🧹 가구 ' + removed + '개 정리 — 연결된 문·계단은 남겨둠');
 }
-function resizeRoomItems(sl, newW, newD, newGx, newGz) {   // 방 크기·위치가 바뀌면 가구를 제자리·제벽에 맞춘다
+function resizeRoomItems(sl, newW, newD, growX = 1, growZ = 1) {   // 크기가 바뀐 만큼만 보정 (방을 옮기면 가구도 같이 따라간다)
   const w0 = roomW(sl), d0 = roomD(sl);
-  const gx0 = sl.gx || 0, gz0 = sl.gz || 0;
-  const gx1 = newGx ?? gx0, gz1 = newGz ?? gz0;
-  const shiftX = (gx1 + newW / 2) - (gx0 + w0 / 2);        // 방 중심이 움직인 만큼
-  const shiftZ = (gz1 + newD / 2) - (gz0 + d0 / 2);
-  if (!shiftX && !shiftZ && newW === w0 && newD === d0) return;
+  const shiftX = ((newW - w0) / 2) * growX;               // 늘어난 쪽에 따라 방 중심이 옮겨진 만큼
+  const shiftZ = ((newD - d0) / 2) * growZ;
+  if (newW === w0 && newD === d0) return;
   for (const it of sl.items) {
     const f = FURN[it.type];
     if (!f) continue;
@@ -4487,7 +4509,7 @@ function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m �
   const newW = axis === 'w' ? cur + ROOM_STEP : roomW(room), newD = axis === 'd' ? cur + ROOM_STEP : roomD(room);
   const newGx = (room.gx || 0) - (axis === 'w' && dir < 0 ? ROOM_STEP : 0);
   const newGz = (room.gz || 0) - (axis === 'd' && dir < 0 ? ROOM_STEP : 0);
-  resizeRoomItems(room, newW, newD, newGx, newGz);
+  resizeRoomItems(room, newW, newD, axis === 'w' ? dir : 1, axis === 'd' ? dir : 1);
   room.gx = newGx; room.gz = newGz;
   room[axis] = cur + ROOM_STEP;
   coins -= EXPAND_COST;
@@ -4609,7 +4631,7 @@ function applyLayoutEdit() {
   if (coins < cost) { toast('🪙 코인이 부족합니다 — ' + cost.toLocaleString() + ' 필요 (보유 ' + coins.toLocaleString() + ')'); return; }
   const grew = st.w !== roomW(sl) || st.d !== roomD(sl);
   const moved = st.gx !== (sl.gx || 0) || st.gz !== (sl.gz || 0);
-  resizeRoomItems(sl, st.w, st.d, st.gx, st.gz);
+  resizeRoomItems(sl, st.w, st.d, st.growX ?? 1, st.growZ ?? 1);
   sl.gx = st.gx; sl.gz = st.gz; sl.w = st.w; sl.d = st.d;
   const cut = moved ? stripLinks(st.edit) : 0;   // 자리를 옮기면 문·계단은 없앤다
   if (cost) { coins -= cost; document.getElementById('coinN').textContent = coins; persistProgress(); }
@@ -4866,6 +4888,7 @@ function addRoomSize(axis, delta) {
     return;
   }
   addState[key] = next; addState[gk] = fit[gk];
+  if (delta > 0) addState[key === 'w' ? 'growX' : 'growZ'] = fit[gk] === addState[gk] ? 1 : -1;   // 어느 쪽으로 늘렸나
   drawAddMap();
 }
 function loadRoomSlot(i) {
@@ -4896,6 +4919,29 @@ function loadRoomSlot(i) {
     live.vy = 0;
   }
   toast('📂 ' + curRoom().name + ' 불러옴');
+}
+function pickSurface(ev) {                // 3D에서 벽·바닥·천장을 집는다
+  const rm = worldRooms.find(r => r.slot === roomStore.cur);
+  if (!rm || !srCam) return null;
+  srApplyCam();
+  const rect = renderer.domElement.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const nd = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(nd, srCam);
+  for (const h of raycaster.intersectObject(rm.grp, true)) {
+    if (!h.object.isMesh) continue;
+    if (h.object.userData.wall) return h.object.userData.wall;
+    if (h.object.parent?.userData.ceiling) return 'ceil';
+    if (Math.abs(h.point.y - (rm.cy || 0)) < 0.2) return 'floor';
+  }
+  return null;
+}
+function setSurfColor(key, hex) {
+  const sl = curRoom();
+  sl.surf = sl.surf || {};
+  sl.surf[key] = hex;
+  roomSave(); buildWorld(); roomRenderUI();
+  toast('🎨 ' + (SURFACES.find(s2 => s2.key === key)?.name ?? key) + ' 색 변경');
 }
 function setBg(key) {
   curRoom().bg = key;
@@ -5026,6 +5072,25 @@ function roomRenderUI() {
     }).join('');
   for (const b of sz.querySelectorAll('[data-grow]'))
     b.addEventListener('click', e => { e.stopPropagation(); expandRoom(b.dataset.grow); });
+  const surf = document.getElementById('srSurf');
+  if (surf) {
+    surf.innerHTML = SURFACES.map(f =>
+      `<button data-surf="${f.key}" class="${surfSel === f.key ? 'on' : ''}">${f.name}</button>`).join('');
+    for (const b of surf.querySelectorAll('[data-surf]'))
+      b.addEventListener('click', e => { e.stopPropagation(); surfSel = b.dataset.surf; roomRenderUI(); });
+  }
+  const pal = document.getElementById('srPal');
+  if (pal) {
+    const now = String(surfColor(curRoom(), surfSel)).toLowerCase();
+    pal.innerHTML = PALETTE.map(hx =>
+      `<div class="sw${hx.toLowerCase() === now ? ' on' : ''}" data-col="${hx}" style="background:${hx}" title="${hx}"></div>`).join('')
+      + `<input type="color" id="srColPick" value="${now.startsWith('#') ? now : '#39434f'}" title="직접 고르기">`;
+    for (const b of pal.querySelectorAll('[data-col]'))
+      b.addEventListener('click', e => { e.stopPropagation(); setSurfColor(surfSel, b.dataset.col); });
+    const inp = pal.querySelector('#srColPick');
+    if (inp) inp.addEventListener('input', e => { e.stopPropagation(); setSurfColor(surfSel, e.target.value); });
+    inp?.addEventListener('click', e => e.stopPropagation());
+  }
   const bg = document.getElementById('srBg');
   if (bg) {
     bg.innerHTML = BG_LIST.map(b =>
@@ -5395,7 +5460,8 @@ function makeBackdrop(r) {
 function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구멍) · 격자
   const grp = new THREE.Group();
   const W = r.w, D = r.d, h = ROOM_H;
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.85, metalness: 0.1 });
+  const sl0 = roomStore.slots[r.slot];
+  const floorMat = new THREE.MeshStandardMaterial({ color: surfColor(sl0, 'floor'), roughness: 0.85, metalness: 0.1 });
   const hole = (r.holes || [])[0];       // 계단 자리는 뚫는다
   const slab = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.01 || z1 - z0 < 0.01) return;
@@ -5411,7 +5477,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     slab(-W / 2, hx0, hz0, hz1);
     slab(hx1, W / 2, hz0, hz1);
   }
-  const ceilMat = new THREE.MeshStandardMaterial({ color: 0x333c48, roughness: 0.95, metalness: 0.05 });
+  const ceilMat = new THREE.MeshStandardMaterial({ color: surfColor(sl0, 'ceil'), roughness: 0.95, metalness: 0.05 });
   const ceilGrp = new THREE.Group();     // 천장 (위에서 볼 때는 감춘다)
   const ch = (r.ceilHoles || [])[0];
   const ceilSlab = (x0, x1, z0, z1) => {
@@ -5430,11 +5496,14 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   }
   ceilGrp.userData.ceiling = true;
   grp.add(ceilGrp);
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x39434f, roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
-  const panel = (w, hh, x, y, z, ry) => {
+  const wallMats = {};                   // 벽마다 색을 따로 (좌·우·뒤)
+  for (const k of ['x-', 'x+', 'z-'])
+    wallMats[k] = new THREE.MeshStandardMaterial({ color: surfColor(sl0, k), roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
+  const panel = (w, hh, x, y, z, ry, wall) => {
     if (w <= 0.001 || hh <= 0.001) return;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallMat);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), wallMats[wall] ?? wallMats['z-']);
     m.position.set(x, y, z); m.rotation.y = ry;
+    m.userData.wall = wall; m.userData.room = r.slot;
     grp.add(m);
   };
   const wallRun = (len, holes, place) => {   // 구멍(문·창)을 피해 벽을 조각내 세운다
@@ -5453,7 +5522,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     const x = sgn * W / 2;
     const holes = (r.gaps || []).filter(g => g.side === sgn)
       .map(g => ({ u: g.z, w: g.w ?? DOOR_W, y0: g.y0 ?? 0, y1: g.y1 ?? RM_DOOR_H }));
-    wallRun(D, holes, (w, hh, u, cy) => panel(w, hh, x, cy, u, sgn * Math.PI / 2));
+    wallRun(D, holes, (w, hh, u, cy) => panel(w, hh, x, cy, u, sgn * Math.PI / 2, sgn > 0 ? 'x+' : 'x-'));
   }
   const tunMat = new THREE.MeshStandardMaterial({ color: 0x323b47, roughness: 0.9, side: THREE.DoubleSide });
   for (const t of r.winTunnels || []) {   // 창문 통로 (옆방과 이어진 구간)
@@ -5470,7 +5539,7 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     }
   }
   const backHoles = (r.backGaps || []).map(g => ({ u: g.x, w: g.w, y0: g.y0, y1: g.y1 }));
-  wallRun(W, backHoles, (w, hh, u, cy) => panel(w, hh, u, cy, -D / 2, 0));   // 뒷벽 (창문 구멍)
+  wallRun(W, backHoles, (w, hh, u, cy) => panel(w, hh, u, cy, -D / 2, 0, 'z-'));   // 뒷벽 (창문 구멍)
   r.guide = makeFloorGuide(W, D);        // 설치 가이드 격자 (활성 방만 표시)
   grp.add(r.guide);
   r.wallGuide = makeWallGuides(W, D, h);
@@ -5532,10 +5601,10 @@ function makeWallGuides(W, D, h) {        // 벽걸이·문 배치용 벽면 격
 function syncGuides() {                   // 활성 방에만 가이드라인 · 현재 층·시야 앞은 감춘다
   const lvl = activeLevel();
   const act = worldRooms.find(r => r.slot === roomStore.cur);
-  const frontZ = act ? act.cz + act.d / 2 : 0;
+  const frontZ = srMode === 'live' ? live.z - 0.5 : (act ? act.cz + act.d / 2 : 0);   // 카메라와 나 사이의 방은 감춘다
   for (const r of worldRooms) {
     const onLvl = Math.abs((r.cy || 0) - lvl) < 0.01;
-    const inFront = act && r !== act && r.cz - r.d / 2 > frontZ - 0.2;   // 카메라(+z)와 활성 방 사이
+    const inFront = act && r !== act && r.cz - r.d / 2 > frontZ - 0.2;   // 카메라(+z)와 나 사이에 있는 방
     r.grp.visible = onLvl && !inFront;    // 다른 층·앞을 가리는 방은 숨긴다
     if (r.backdrop) r.backdrop.visible = onLvl && !inFront;
     const editing = !!(placeType || moveItem || srPickSel) || srMode !== 'live';
@@ -6091,6 +6160,17 @@ function srUpdate(dt) {
     if (!srOn) return;
     if (e.target.closest('.srPanel, #srCtx, #srBottom, #srModes')) return;   // 패널 위에서는 패널이 스크롤
     e.preventDefault();
+    if (placeType && FURN[placeType].rotate === 'free') {   // 배치 미리보기: 휠로 30°씩 회전
+      placeRot = ((placeRot + (e.deltaY > 0 ? 1 : ROT_N - 1)) % ROT_N + ROT_N) % ROT_N;
+      if (lastCursor) sr.dispatchEvent(new PointerEvent('pointermove', { clientX: lastCursor[0], clientY: lastCursor[1], bubbles: true }));
+      return;
+    }
+    if (moveItem && FURN[moveItem.type].rotate === 'free') { // 이동 중에도 휠로 회전
+      moveItem.rot = ((((moveItem.rot || 0) + (e.deltaY > 0 ? 1 : ROT_N - 1)) % ROT_N) + ROT_N) % ROT_N;
+      const rm0 = worldRooms.find(r => r.slot === roomStore.cur);
+      moveTo(moveItem.x + (rm0?.cx || 0), moveItem.z + (rm0?.cz || 0));
+      return;
+    }
     if (srMode === 'live') { live.camDist = Math.max(1.6, Math.min(7, live.camDist + Math.sign(e.deltaY) * 0.3)); return; }
     srTarget.dist = Math.max(0.7, Math.min(6, srTarget.dist + Math.sign(e.deltaY) * 0.25));
     if (!srSel && !srPanned) {           // 부위를 고르지 않았으면 쇄골을 중심으로 당긴다
@@ -6147,13 +6227,21 @@ function srUpdate(dt) {
       const wp = wallPoint(e);
       if (!wp || !placeGhost) return;
       const rm = worldRooms.find(r => r.slot === roomStore.cur);
-      const box = sizeAnchor && sizeAnchor.side === wp.side ? sizableGhost(sizeAnchor, wp)
-        : { u: wp.u, y: wp.y, w: GRID, h: GRID };   // 첫 클릭 전에는 시작점만 보여준다
+      const anchored = sizeAnchor && sizeAnchor.side === wp.side;
+      const box = anchored ? sizableGhost(sizeAnchor, wp)
+        : { u: wp.u, y: wp.y, w: GRID, h: GRID };   // 첫 클릭 전에는 십자(시작점)만 보여준다
+      placeGhost.visible = !!anchored;
       const pos = wallItemPos(wp.side, box.u, rm);
       placeGhost.userData.snap = { slot: roomStore.cur, ...pos, y: box.y, w: box.w, h: box.h, wall: true, side: wp.side };
       placeGhost.position.set(rm.cx + pos.x, (rm.cy || 0) + box.y, rm.cz + pos.z);
       placeGhost.rotation.y = pos.rot * ROT_STEP;
       placeGhost.scale.set(box.w / FURN[placeType].w, box.h / FURN[placeType].h, 1);
+      if (placeMark) {                     // 십자는 커서가 가리키는 격자 교차점에
+        placeMark.visible = !anchored;
+        const p0 = wallItemPos(wp.side, wp.u, rm);
+        placeMark.position.set(rm.cx + p0.x, (rm.cy || 0) + wp.y, rm.cz + p0.z);
+        placeMark.rotation.y = p0.rot * ROT_STEP;
+      }
       return;
     }
     const hit = placePoint(e);
@@ -6185,7 +6273,13 @@ function srUpdate(dt) {
     if (srTab !== 'room') return;
     if (moveItem) return;
     const picked = pickFurniture(e);      // 놓인 가구 고르기
-    if (picked) { setSel(picked); showCtx(e.clientX, e.clientY); }   // 빈 곳을 눌러도 메뉴는 닫기 전까지 유지
+    if (picked) { setSel(picked); showCtx(e.clientX, e.clientY); return; }   // 빈 곳을 눌러도 메뉴는 닫기 전까지 유지
+    const face = pickSurface(e);          // 가구가 아니면 벽·바닥·천장을 고른다 (색 바꾸기)
+    if (face && srTab === 'room') {
+      surfSel = face;
+      roomRenderUI();
+      toast('🎨 ' + (SURFACES.find(f => f.key === face)?.name ?? face) + ' 선택 — 색을 고르세요');
+    }
   });
   addEventListener('keydown', e => {
     if (!srOn) return;

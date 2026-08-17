@@ -174,6 +174,15 @@
   #srRoomName{width:100%; box-sizing:border-box; padding:8px 10px; margin-bottom:4px; border-radius:7px;
     background:rgba(4,16,24,.9); border:1.5px solid rgba(64,214,255,.35); color:#eaf9ff; font:inherit; font-size:.9rem}
   #srSizes{display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
+  #srSurf{display:grid; grid-template-columns:repeat(5,1fr); gap:4px}
+  #srSurf button{padding:6px 0; font-size:.7rem; cursor:pointer; color:#bfe9f7; border-radius:6px;
+    background:rgba(4,20,28,.85); border:1px solid rgba(64,214,255,.35)}
+  #srSurf button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700}
+  #srPal{display:grid; grid-template-columns:repeat(8,1fr); gap:4px; margin-top:5px}
+  #srPal .sw{height:20px; border-radius:5px; cursor:pointer; border:1px solid rgba(255,255,255,.25)}
+  #srPal .sw.on{border-color:#7df3ff; box-shadow:0 0 8px rgba(64,214,255,.7)}
+  #srPal input[type=color]{grid-column:span 2; width:100%; height:20px; padding:0; border:1px solid rgba(64,214,255,.4);
+    border-radius:5px; background:transparent; cursor:pointer}
   #srSizes button{padding:8px 0; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
   #srSizes button i{display:block; font-style:normal; font-size:.66rem; color:#ffd76b}
@@ -536,6 +545,9 @@
       <input id="srRoomName" maxlength="16" placeholder="MY ROOM">
       <div class="srHead">방 크기 (높이 3m · 줄이기 불가)</div>
       <div id="srSizes"></div>
+      <div class="srHead">벽·바닥 색상</div>
+      <div id="srSurf"></div>
+      <div id="srPal"></div>
       <div class="srHead">창밖 풍경</div>
       <div id="srBg"></div>
       <div class="srHead">가구</div>
