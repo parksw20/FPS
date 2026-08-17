@@ -3911,7 +3911,7 @@ function snapPos(type, rot, wx, wz, host = null) {   // 월드 좌표 → 방 �
   const x = wx - (rm ? rm.cx : 0), z = wz - (rm ? rm.cz : 0);
   const rmS = roomStore.slots[slot], W = roomW(rmS), D = roomD(rmS), S = W;
   const f = FURN[type], fp = footprint(type, rot);
-  const FRONT = 1.0;                     // 카메라 쪽(+z) 1m는 시야를 가리므로 비워 둔다
+  const FRONT = 0.4;                     // 카메라 쪽(+z) 40cm만 비워 둔다 (커서를 그대로 따라가게)
   const zMax = D / 2 - Math.max(FRONT, fp.d / 2);
   if (host && f.place.includes('top')) { // 상판을 직접 맞혔다면 그 위에
     const o = footprint(host.type, host.rot), top = itemTop(host);
@@ -3945,12 +3945,6 @@ function snapPos(type, rot, wx, wz, host = null) {   // 월드 좌표 → 방 �
     if (it === srPickSel) continue;
     const o = footprint(it.type, it.rot);
     if (Math.abs(px - it.x) > o.w / 2 || Math.abs(pz - it.z) > o.d / 2) continue;
-    const top = itemTop(it);
-    if (top !== null && f.place.includes('top') && fp.w <= o.w + 0.2 && fp.d <= o.d + 0.2) {
-      const cx = Math.max(it.x - o.w / 2 + fp.w / 2, Math.min(it.x + o.w / 2 - fp.w / 2, px));
-      const cz = Math.max(it.z - o.d / 2 + fp.d / 2, Math.min(it.z + o.d / 2 - fp.d / 2, pz));
-      return { slot, x: +cx.toFixed(2), z: +cz.toFixed(2), y: +top.toFixed(2), on: it };
-    }
     if (f.place.includes('under') && hostUnder(it, type)) {
       return { slot, x: +px.toFixed(2), z: +pz.toFixed(2), y: 0, under: it };
     }
@@ -3986,6 +3980,7 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
   raycaster.setFromCamera(nd, srCam);
   if (srFurnGrp) {                       // 가구를 맞혔으면 그 지점을 그대로 쓴다 (커서와 어긋나지 않게)
     for (const h of raycaster.intersectObjects(srFurnGrp.children, true)) {
+      if (!h.object.isMesh) continue;    // 선(외곽선·가이드)은 배치 판정에서 제외
       let o = h.object;
       while (o && !o.userData.item) o = o.parent;
       if (!o) continue;
@@ -3993,8 +3988,10 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
       const it = o.userData.item, top = itemTop(it);
       const mine = o.userData.room === roomStore.cur;
       const rr = worldRooms.find(r => r.slot === o.userData.room);
-      const onTop = mine && top !== null && Math.abs(h.point.y - (top + (rr?.cy || 0))) < 0.16;
-      return { p: h.point, host: onTop ? it : null };
+      const up = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld).y > 0.5 : false;
+      const onTop = mine && top !== null && up && Math.abs(h.point.y - (top + (rr?.cy || 0))) < 0.25;
+      if (!onTop) break;                 // 옆면·앞면이면 그 가구를 무시하고 커서 아래 바닥을 쓴다
+      return { p: h.point, host: it };
     }
   }
   // 방 안에서 처음 닿는 면(바닥 또는 벽)을 쓴다 — 벽 너머로 커서를 밀어도 그 자리에 머문다
@@ -4005,12 +4002,12 @@ function placePoint(ev) {                // 커서가 가리키는 배치 지점
   if (tf > 0) {
     const p = o.clone().addScaledVector(d, tf);
     const inside = !rm || (Math.abs(p.x - rm.cx) <= rm.w / 2 + 0.01 && Math.abs(p.z - rm.cz) <= rm.d / 2 + 0.01);
-    if (inside) best = { t: tf, p };
+    if (inside) return { p, host: null };   // 바닥을 가리키면 그 자리
   }
   if (rm) {
-    const planes = [
+    const planes = [                     // 좌·우·뒷벽만 (카메라 쪽 +z는 벽이 없다)
       { t: (rm.cx + rm.w / 2 - o.x) / d.x }, { t: (rm.cx - rm.w / 2 - o.x) / d.x },
-      { t: (rm.cz + rm.d / 2 - o.z) / d.z }, { t: (rm.cz - rm.d / 2 - o.z) / d.z },
+      { t: (rm.cz - rm.d / 2 - o.z) / d.z },
     ];
     for (const pl of planes) {
       if (!(pl.t > 0) || !isFinite(pl.t)) continue;
@@ -4139,6 +4136,7 @@ function pickFurniture(ev) {
   const nd = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(nd, srCam);
   for (const h of raycaster.intersectObjects(srFurnGrp.children, true)) {
+    if (!h.object.isMesh) continue;      // 외곽선 같은 선은 무시
     let o = h.object;
     while (o && !o.userData.item) o = o.parent;
     if (!o) continue;
@@ -4869,6 +4867,7 @@ function addOutline(grp) {                // 메쉬 모서리에 검은 선
     const ln = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0x0b0e12, transparent: true, opacity: 0.85 }));
     ln.position.copy(o.position); ln.rotation.copy(o.rotation); ln.scale.copy(o.scale);
     ln.userData.outline = true;
+    ln.raycast = () => { };              // 외곽선은 클릭·배치 판정에서 제외 (선은 1m 반경이 잡힌다)
     o.parent.add(ln);
   }
 }
@@ -5407,7 +5406,7 @@ function srUpdate(dt) {
       if (!wp || !placeGhost) return;
       const rm = worldRooms.find(r => r.slot === roomStore.cur);
       const box = sizeAnchor && sizeAnchor.side === wp.side ? sizableGhost(sizeAnchor, wp)
-        : { u: wp.u, y: wp.y, w: FURN[placeType].w, h: FURN[placeType].h };
+        : { u: wp.u, y: wp.y, w: GRID, h: GRID };   // 첫 클릭 전에는 시작점만 보여준다
       const pos = wallItemPos(wp.side, box.u, rm);
       placeGhost.userData.snap = { slot: roomStore.cur, ...pos, y: box.y, w: box.w, h: box.h, wall: true, side: wp.side };
       placeGhost.position.set(rm.cx + pos.x, (rm.cy || 0) + box.y, rm.cz + pos.z);
@@ -5666,6 +5665,26 @@ window.__game = {
   roomLoadSlot(i) { loadRoomSlot(i); return roomStore.cur; },
   roomBg(k) { setBg(k); return curRoom().bg; },
   liveMode(on) { on ? liveEnter() : liveExit(); return srMode; },
+  placeProbe(x, y, type = 'crate', rot = 0) {   // 커서 → 원래 지점 → 스냅 결과 비교
+    const hit = placePoint({ clientX: x, clientY: y });
+    if (!hit) return null;
+    const q = snapPos(type, rot, hit.p.x, hit.p.z, hit.host);
+    return { raw: [+hit.p.x.toFixed(2), +hit.p.y.toFixed(2), +hit.p.z.toFixed(2)], snap: { x: q.x, y: q.y, z: q.z, slot: q.slot } };
+  },
+  rayDump(x, y) {
+    srApplyCam();
+    const r = renderer.domElement.getBoundingClientRect();
+    const nd = new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(nd, srCam);
+    const hs = raycaster.intersectObjects(srFurnGrp ? srFurnGrp.children : [], true);
+    return {
+      rect: [r.left, r.top, +r.width.toFixed(1), +r.height.toFixed(1)], nd: [+nd.x.toFixed(3), +nd.y.toFixed(3)],
+      cam: srCam.position.toArray().map(v => +v.toFixed(2)), fov: srCam.fov, aspect: +srCam.aspect.toFixed(3),
+      dir: raycaster.ray.direction.toArray().map(v => +v.toFixed(3)),
+      hits: hs.slice(0, 2).map(h => ({ d: +h.distance.toFixed(2), p: h.point.toArray().map(v => +v.toFixed(2)), name: h.object.name || h.object.type })),
+      meshes: (srFurnGrp ? srFurnGrp.children : []).map(m => ({ t: m.userData.item?.type, pos: m.position.toArray().map(v => +v.toFixed(2)), wp: m.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)) })),
+    };
+  },
   ghostScreen() {
     if (!placeGhost || !srCam) return null;
     srApplyCam();
