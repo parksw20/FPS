@@ -5141,6 +5141,7 @@ function syncCeilings() {                 // 천장은 아래에서 볼 때만 (
 function roomUpdate() {
   if (placeGhost && placeType) placeGhost.visible = true;
   syncCeilings();
+  syncStageLights();
   if (srOutline) srOutline.update();
   if (srFurnGrp) {                        // 선택 표시(살짝 띄우기) — 설치 높이는 유지한다
     for (const m of srFurnGrp.children) {
@@ -5820,6 +5821,14 @@ function liveStep(dt) {
   drawRoomMap();
 }
 // ---- 연결 미니맵 ----
+let srKey = null, srRim = null;           // 무대 조명 (캐릭터를 따라다닌다)
+function syncStageLights() {
+  if (!srKey || !srRim) return;
+  const x = live.x, y = live.y, z = live.z;
+  srKey.position.set(x + 1.2, y + 4.6, z + 3.0); srKey.target.position.set(x, y + 1.15, z);
+  srRim.position.set(x - 1.6, y + 3.6, z - 3.2); srRim.target.position.set(x, y + 1.35, z);
+  srKey.target.updateMatrixWorld(); srRim.target.updateMatrixWorld();
+}
 let mapZoom = 1;                          // 미니맵 배율 (휠)
 function drawRoomMap() {
   const cv = document.getElementById('srMap');
@@ -5974,14 +5983,13 @@ function srBuild() {
   srScene.background = new THREE.Color(0x070d13);   // 어두운 무대 배경 (CSS 덮개 없음)
   srCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.05, 60);
   // 인게임과 같은 대비를 유지하고(반구광 + 태양광) 스포트는 액센트로만
-  srScene.add(new THREE.HemisphereLight(0x9db2d8, 0x3a4a30, 1.1));
-  const sunL = new THREE.DirectionalLight(0xffeedd, 2.6); sunL.position.set(2.6, 4, 2.4); srScene.add(sunL);
-  const key = new THREE.SpotLight(0xffffff, 45, 16, 0.66, 0.5, 1.2);    // 정면 위 스포트
-  key.position.set(1.2, 4.6, 3.0); key.target.position.set(0, 1.15, 0);
-  srScene.add(key, key.target);
-  const rim = new THREE.SpotLight(0xdff2ff, 40, 16, 0.6, 0.5, 1.2);     // 뒤 림라이트
-  rim.position.set(-1.6, 3.6, -3.2); rim.target.position.set(0, 1.35, 0);
-  srScene.add(rim, rim.target);
+  srScene.add(new THREE.HemisphereLight(0xffffff, 0x9aa4ae, 1.5));     // 중립 환경광 — 흰색이 흰색으로 보이게
+  const sunL = new THREE.DirectionalLight(0xffeedd, 2.2); sunL.position.set(2.6, 4, 2.4); srScene.add(sunL);
+  srKey = new THREE.SpotLight(0xffffff, 45, 16, 0.66, 0.5, 1.2);        // 정면 위 스포트 (캐릭터를 따라간다)
+  srScene.add(srKey, srKey.target);
+  srRim = new THREE.SpotLight(0xdff2ff, 40, 16, 0.6, 0.5, 1.2);         // 뒤 림라이트
+  srScene.add(srRim, srRim.target);
+  syncStageLights();
   srRoot = skClone(playerGltf.scene);
   srRoot.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; } });
   srScene.add(srRoot);
