@@ -3664,7 +3664,7 @@ const FURN = {
     mount: 'opening', place: ['wall'], provides: null, rotate: 'wall', blocking: false, link: 'side',
   },
   stairs: {
-    name: '계단', icon: '🪜', w: 1.2, d: 2.2, h: ROOM_H, color: 0x7a6a55,
+    name: '계단', icon: '🪜', w: 1.2, d: 2.2, h: LEVEL_H, color: 0x7a6a55,   // 층 높이만큼 올라간다
     mount: 'floor', place: ['floor'], provides: null, rotate: 'free', blocking: true, link: 'up',
   },
 };
@@ -4171,6 +4171,30 @@ function cancelPlace() {
   syncGuides();
   roomRenderUI();
 }
+function fitStairs(sl, x, z, rot) {       // 계단 자리 보정 — 발판·도착 지점 앞뒤로 통행 공간을 남긴다
+  const W = roomW(sl), D = roomD(sl), f = FURN.stairs;
+  const BACK = f.d / 2 + 0.5;            // 계단 아래에서 올라설 공간
+  const FRONT = f.d / 2 + 0.9 + 0.3;     // 다 올라선 지점 + 여유
+  for (const r2 of [rot, 0, 3, 6, 9]) {
+    const a = (r2 || 0) * ROT_STEP;
+    const ux = -Math.sin(a), uz = -Math.cos(a);
+    const alongZ = Math.abs(uz) > 0.7;                       // 진행 축
+    const half = (alongZ ? D : W) / 2, halfP = (alongZ ? W : D) / 2;
+    const sign = alongZ ? Math.sign(uz) : Math.sign(ux);     // +1 이면 축 방향으로 오른다
+    const lo = -half + BACK, hi = half - FRONT;              // 진행 축에서 가능한 위치 범위
+    if (hi - lo < -0.01) continue;                           // 이 방향으로는 공간이 안 나온다
+    let t = (alongZ ? z : x) * sign;                         // 오르는 방향 기준 좌표
+    t = Math.max(lo, Math.min(hi, t));
+    const perpLim = halfP - f.w / 2 - 0.1;
+    let pv = alongZ ? x : z;
+    pv = Math.max(-perpLim, Math.min(perpLim, pv));
+    const along = t * sign;
+    return alongZ
+      ? { x: +(Math.round(pv / GRID) * GRID).toFixed(2), z: +(Math.round(along / GRID) * GRID).toFixed(2), rot: r2 }
+      : { x: +(Math.round(along / GRID) * GRID).toFixed(2), z: +(Math.round(pv / GRID) * GRID).toFixed(2), rot: r2 };
+  }
+  return null;
+}
 function commitPlace() {
   if (!placeType || !placeGhost) return;
   const q = placeGhost.userData.snap ?? snapPos(placeType, placeRot, placeGhost.position.x, placeGhost.position.z);
@@ -4178,14 +4202,10 @@ function commitPlace() {
   const target = roomStore.slots[q.slot ?? roomStore.cur] ?? curRoom();
   if (overlaps(placeType, rot, q.x, q.z, q.y || 0, q.under ?? q.on ?? null, target.items)) { toast('다른 가구와 겹칩니다'); return; }
   let rot2 = rot;
-  if (placeType === 'stairs') {          // 계단은 방 안쪽을 향하도록 방향을 잡는다 (도착 지점이 방 안이어야 한다)
-    const W = roomW(target), D = roomD(target);
-    const okRot = r2 => {
-      const a = r2 * ROT_STEP;
-      const tx = q.x - Math.sin(a) * (FURN.stairs.d / 2 + 0.9), tz = q.z - Math.cos(a) * (FURN.stairs.d / 2 + 0.9);
-      return Math.abs(tx) < W / 2 - 0.3 && Math.abs(tz) < D / 2 - 0.3;
-    };
-    if (!okRot(rot2)) rot2 = [0, 3, 6, 9].find(okRot) ?? rot2;
+  if (placeType === 'stairs') {          // 계단: 오르내릴 공간이 남도록 방향과 자리를 잡는다
+    const fit = fitStairs(target, q.x, q.z, rot2);
+    if (!fit) { toast('🚫 방이 좁아 계단을 놓을 수 없습니다 (최소 4m 필요)'); return; }
+    q.x = fit.x; q.z = fit.z; rot2 = fit.rot;
   }
   const added = { type: placeType, x: +q.x.toFixed(2), z: +q.z.toFixed(2), y: +(q.y || 0).toFixed(2), rot: rot2 };
   if (doorStairClash(target, placeType, added)) { toast('🚫 문과 계단은 겹칠 수 없습니다'); return; }
@@ -4353,6 +4373,20 @@ function standingSlot() {                 // 생활모드면 지금 서 있는 �
   const here = insideRooms(live.x, live.z);
   return here >= 0 ? here : (live.active ?? roomStore.cur);
 }
+function stripLinks(idx) {                // 그 방의 문·계단과 그 방을 향한 문·계단을 없앤다
+  const me = roomStore.slots[idx];
+  if (!me) return 0;
+  const isLink = it => !!FURN[it.type]?.link;
+  let cut = me.items.filter(isLink).length;
+  me.items = me.items.filter(it => !isLink(it));
+  roomStore.slots.forEach((sl, i) => {
+    if (i === idx) return;
+    const before = sl.items.length;
+    sl.items = sl.items.filter(it => !(isLink(it) && it.link === idx));
+    cut += before - sl.items.length;
+  });
+  return cut;
+}
 function closeRoom() {                    // 서 있는 방만 폐쇄 — 문·계단은 없앤다
   const idx = standingSlot(), me = roomStore.slots[idx];
   if (!me) return;
@@ -4363,16 +4397,7 @@ function closeRoom() {                    // 서 있는 방만 폐쇄 — 문·�
     toast('🔓 ' + me.name + ' 폐쇄 해제 — 문·계단을 다시 놓아 연결하세요');
     return;
   }
-  let cut = 0;
-  const gone = it => FURN[it.type]?.link;
-  cut += me.items.filter(gone).length;
-  me.items = me.items.filter(it => !gone(it));            // 이 방의 문·계단 제거
-  roomStore.slots.forEach((sl, i) => {                    // 이 방을 향한 문·계단도 제거
-    if (i === idx) return;
-    const before = sl.items.length;
-    sl.items = sl.items.filter(it => !(gone(it) && it.link === idx));
-    cut += before - sl.items.length;
-  });
+  const cut = stripLinks(idx);            // 문·계단 제거
   me.closed = true;
   if (roomStore.cur !== idx) roomStore.cur = idx;
   setSel(null); cancelPlace(); hideCtx();
@@ -4586,10 +4611,12 @@ function applyLayoutEdit() {
   const moved = st.gx !== (sl.gx || 0) || st.gz !== (sl.gz || 0);
   resizeRoomItems(sl, st.w, st.d, st.gx, st.gz);
   sl.gx = st.gx; sl.gz = st.gz; sl.w = st.w; sl.d = st.d;
+  const cut = moved ? stripLinks(st.edit) : 0;   // 자리를 옮기면 문·계단은 없앤다
   if (cost) { coins -= cost; document.getElementById('coinN').textContent = coins; persistProgress(); }
   closeAddMap();
   roomSave(); buildWorld(); roomRenderUI(); srRenderModeUI();
-  toast('🏠 ' + sl.name + (moved ? ' 이동' : '') + (grew ? ' · ' + st.w + '×' + st.d + 'm' : '') + (cost ? ' (' + cost.toLocaleString() + '🪙)' : ''));
+  toast('🏠 ' + sl.name + (moved ? ' 이동' : '') + (grew ? ' · ' + st.w + '×' + st.d + 'm' : '')
+    + (cost ? ' (' + cost.toLocaleString() + '🪙)' : '') + (cut ? ' · 문·계단 ' + cut + '개 제거' : ''));
 }
 function editRoomClose() {                // 편집 창에서 폐쇄/해제
   const st = addState;
@@ -4732,6 +4759,32 @@ function drawAddMap() {
       c.restore();
     }
   }
+  for (const [i, sl] of roomStore.slots.entries()) {     // 문·계단 자리 표시
+    if ((sl.gy || 0) !== addState.gy) continue;
+    const R = i === addState.edit ? slotRect(addState) : slotRect(sl);   // 옮기는 방은 새 자리 기준
+    const cx = (R.x0 + R.x1) / 2, cz = (R.z0 + R.z1) / 2;
+    for (const it of sl.items) {
+      if (it.type === 'door') {
+        const wx = cx + it.x, wz = cz + it.z;
+        const onX = Math.abs(Math.abs(it.x) - (R.x1 - R.x0) / 2) < 0.2;
+        c.strokeStyle = it.link >= 0 ? '#ffd76b' : '#ff8a7a';
+        c.lineWidth = 4;
+        c.beginPath();
+        if (onX) { c.moveTo(v.px(wx), v.pz(wz - DOOR_W / 2)); c.lineTo(v.px(wx), v.pz(wz + DOOR_W / 2)); }
+        else { c.moveTo(v.px(wx - DOOR_W / 2), v.pz(wz)); c.lineTo(v.px(wx + DOOR_W / 2), v.pz(wz)); }
+        c.stroke();
+      } else if (it.type === 'stairs') {
+        const fp = footprint('stairs', it.rot);
+        const wx = cx + it.x, wz = cz + it.z;
+        c.fillStyle = it.link >= 0 ? 'rgba(155,231,160,.45)' : 'rgba(255,140,120,.4)';
+        c.strokeStyle = it.link >= 0 ? '#9be7a0' : '#ff8a7a'; c.lineWidth = 1.5;
+        c.fillRect(v.px(wx - fp.w / 2), v.pz(wz - fp.d / 2), fp.w * v.k, fp.d * v.k);
+        c.strokeRect(v.px(wx - fp.w / 2), v.pz(wz - fp.d / 2), fp.w * v.k, fp.d * v.k);
+        c.fillStyle = '#eafff0'; c.font = 'bold 11px system-ui'; c.textAlign = 'center';
+        c.fillText((it.dir ?? 'up') === 'up' ? '▲' : '▼', v.px(wx), v.pz(wz) + 4);
+      }
+    }
+  }
   const g = slotRect(addState), chk = addRoomCheck();
   c.fillStyle = chk.ok ? 'rgba(126,224,163,.28)' : 'rgba(255,90,74,.25)';
   c.strokeStyle = chk.ok ? '#7ee0a3' : '#ff5a4a'; c.lineWidth = 2.5;
@@ -4743,10 +4796,14 @@ function drawAddMap() {
   if (note) { note.textContent = chk.note; note.className = chk.ok ? 'ok' : 'bad'; }
   const edit = addState.edit !== undefined;
   const ok = document.getElementById('addOk');
+  const need = edit ? editCost() : (addState.cost || 0);
+  const poor = coins < need;
   if (ok) {
-    ok.disabled = !chk.ok;
-    const c = edit ? editCost() : (addState.cost || 0);
-    ok.textContent = (edit ? '이 자리로 적용' : '이 자리에 배치') + (c ? ' (' + c.toLocaleString() + '🪙)' : '');
+    ok.disabled = !chk.ok || poor;
+    ok.title = poor ? '코인이 부족합니다 (보유 ' + coins.toLocaleString() + ')' : '';
+    ok.textContent = poor
+      ? '코인 부족 · ' + (need - coins).toLocaleString() + '🪙 더 필요'
+      : (edit ? '이 자리로 적용' : '이 자리에 배치') + (need ? ' (' + need.toLocaleString() + '🪙)' : '');
   }
   const cb = document.getElementById('addClose');
   if (cb) {
@@ -4755,8 +4812,13 @@ function drawAddMap() {
   }
   const nb2 = document.getElementById('addNew');
   if (nb2) {
+    const nc = slotCost(), np = coins < nc;
     nb2.style.display = edit ? '' : 'none';
-    nb2.textContent = '＋ 새 방 (' + slotCost().toLocaleString() + '🪙)';
+    nb2.disabled = np;
+    nb2.title = np ? '코인이 부족합니다 (보유 ' + coins.toLocaleString() + ')' : '';
+    nb2.textContent = np
+      ? '＋ 새 방 · 코인 부족 (' + (nc - coins).toLocaleString() + '🪙 더 필요)'
+      : '＋ 새 방 (' + nc.toLocaleString() + '🪙)';
   }
   const ttl = document.querySelector('#addPanel .optTitle');
   if (ttl) ttl.textContent = addState.edit !== undefined ? (roomStore.slots[addState.edit]?.name ?? '방') + ' 옮기기' : '새 방 배치';
@@ -4957,9 +5019,10 @@ function roomRenderUI() {
   sz.innerHTML =
     `<div class="szNow">현재 ${cw}m × ${cd}m<span>최대 ${ROOM_MAX}m</span></div>`
     + [['w', cw, '가로'], ['d', cd, '세로']].map(([ax, len, label]) => {
-      const max = len >= ROOM_MAX, room = !max && !canExpand(ax);
-      const note = max ? '최대' : room ? '자리 없음' : EXPAND_COST.toLocaleString() + '🪙';
-      return `<button data-grow="${ax}" class="buy"${max || room ? ' disabled' : ''}>${label} +${ROOM_STEP}m<i>${note}</i></button>`;
+      const max = len >= ROOM_MAX, room = !max && !canExpand(ax), poor = !max && !room && coins < EXPAND_COST;
+      const note = max ? '최대' : room ? '자리 없음' : poor ? '코인 부족' : EXPAND_COST.toLocaleString() + '🪙';
+      const tip = room ? growBlockMsg(curRoom(), ax).replace(/^🚫 /, '') : poor ? '보유 ' + coins.toLocaleString() + '🪙' : '';
+      return `<button data-grow="${ax}" class="buy"${max || room || poor ? ' disabled' : ''} title="${tip}">${label} +${ROOM_STEP}m<i>${note}</i></button>`;
     }).join('');
   for (const b of sz.querySelectorAll('[data-grow]'))
     b.addEventListener('click', e => { e.stopPropagation(); expandRoom(b.dataset.grow); });
@@ -4995,8 +5058,17 @@ function roomRenderUI() {
   const nameEl = document.getElementById('srName');
   if (nameEl) nameEl.textContent = curRoom().name;
 }
+function syncCeilings() {                 // 천장은 아래에서 볼 때만 (위에서 내려다보면 투명)
+  if (!srCam) return;
+  const camY = srCam.position.y;
+  for (const r of worldRooms) {
+    if (!r.ceil) continue;
+    r.ceil.visible = (r.grp?.visible ?? true) && camY < (r.cy || 0) + ROOM_H - 0.05;
+  }
+}
 function roomUpdate() {
   if (placeGhost && placeType) placeGhost.visible = true;
+  syncCeilings();
   if (srOutline) srOutline.update();
   if (srFurnGrp) {                        // 선택 표시(살짝 띄우기) — 설치 높이는 유지한다
     for (const m of srFurnGrp.children) {
@@ -5201,6 +5273,8 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
       st.blocked = false; st.why = null;
       const fp = footprint('stairs', st.rot);
       high.holes.push({ x: sx - high.cx, z: sz - high.cz, w: fp.w + 0.3, d: fp.d + 0.3 });
+      low.ceilHoles = low.ceilHoles || [];        // 아래층 천장도 같이 뚫는다
+      low.ceilHoles.push({ x: sx - low.cx, z: sz - low.cz, w: fp.w + 0.3, d: fp.d + 0.3 });
       liveStairs.push({ item: st, x: sx, z: sz, rot: st.rot, y0: low.cy, y1: high.cy, from: low.slot, to: high.slot, own: i });
     }
   });
@@ -5257,6 +5331,7 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
   }
   for (const r of placed.values()) {
     r.grp = buildRoomMesh(r);
+    r.ceil = r.grp.children.find(o => o.userData.ceiling) ?? null;
     srScene.add(r.grp);
     r.backdrop = makeBackdrop(r);
     srScene.add(r.backdrop);
@@ -5336,6 +5411,25 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
     slab(-W / 2, hx0, hz0, hz1);
     slab(hx1, W / 2, hz0, hz1);
   }
+  const ceilMat = new THREE.MeshStandardMaterial({ color: 0x333c48, roughness: 0.95, metalness: 0.05 });
+  const ceilGrp = new THREE.Group();     // 천장 (위에서 볼 때는 감춘다)
+  const ch = (r.ceilHoles || [])[0];
+  const ceilSlab = (x0, x1, z0, z1) => {
+    if (x1 - x0 < 0.01 || z1 - z0 < 0.01) return;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.1, z1 - z0), ceilMat);
+    m.position.set((x0 + x1) / 2, h + 0.05, (z0 + z1) / 2);
+    ceilGrp.add(m);
+  };
+  if (!ch) ceilSlab(-W / 2, W / 2, -D / 2, D / 2);
+  else {
+    const cx0 = ch.x - ch.w / 2, cx1 = ch.x + ch.w / 2, cz0 = ch.z - ch.d / 2, cz1 = ch.z + ch.d / 2;
+    ceilSlab(-W / 2, W / 2, -D / 2, cz0);
+    ceilSlab(-W / 2, W / 2, cz1, D / 2);
+    ceilSlab(-W / 2, cx0, cz0, cz1);
+    ceilSlab(cx1, W / 2, cz0, cz1);
+  }
+  ceilGrp.userData.ceiling = true;
+  grp.add(ceilGrp);
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x39434f, roughness: 0.9, metalness: 0.05, side: THREE.DoubleSide });
   const panel = (w, hh, x, y, z, ry) => {
     if (w <= 0.001 || hh <= 0.001) return;
@@ -5659,16 +5753,17 @@ function drawRoomMap() {
   const c = cv.getContext('2d');
   c.clearRect(0, 0, cv.width, cv.height);
   const lv0 = srMode === 'live' ? live.y : activeLevel();
-  let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
-  for (const r of worldRooms) {
-    if (Math.abs((r.cy || 0) - lv0) > 1.4) continue;
-    const q = roomRect(r);
-    minX = Math.min(minX, q.x0); maxX = Math.max(maxX, q.x1);
-    minZ = Math.min(minZ, q.z0); maxZ = Math.max(maxZ, q.z1);
-  }
-  if (minX > maxX) return;
-  const pad = 18, k = Math.min((cv.width - pad * 2) / (maxX - minX), (cv.height - pad * 2) / (maxZ - minZ));
+  const here = worldRooms.find(r => r.slot === live.active) ?? worldRooms.find(r => r.slot === roomStore.cur);
+  if (!here) return;
+  // 내가 있는 방을 가운데에 두고 그 주변만 보여준다 (방이 많아도 미니맵이 커지지 않게)
+  const view = Math.max(16, Math.min(34, Math.max(here.w, here.d) * 2.2));
+  const cxm = srMode === 'live' ? live.x : here.cx, czm = srMode === 'live' ? live.z : here.cz;
+  const pad = 10, span = cv.width - pad * 2;
+  const k = span / view;
+  const minX = cxm - view / 2, minZ = czm - view / 2;
   const px = x => pad + (x - minX) * k, pz = z => pad + (z - minZ) * k;
+  c.save();
+  c.beginPath(); c.rect(pad - 2, pad - 2, span + 4, span + 4); c.clip();   // 미니맵 밖으로 새지 않게
   for (const r of worldRooms) {
     const lv = srMode === 'live' ? live.y : activeLevel();
     if (Math.abs((r.cy || 0) - lv) > 1.4) continue;   // 현재 층만
@@ -5717,6 +5812,7 @@ function drawRoomMap() {
     c.fillStyle = '#7ee0a3';
     c.beginPath(); c.arc(px(live.x), pz(live.z), 5, 0, Math.PI * 2); c.fill();
   }
+  c.restore();
 }
 function srRenderModeUI() {
   for (const b of document.querySelectorAll('#srModes button'))
