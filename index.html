@@ -195,6 +195,24 @@
   #srSlots button.closed i{color:#ff8a5c}
   #srRoomBtns2 button.on{border-color:#ff8a5c; color:#ffd9c9}
   #srRoomBtns2 button.off{opacity:.35; cursor:not-allowed}   /* 기본 방은 폐쇄 불가 */
+  /* 새 방 배치 (미니맵 1m 격자) */
+  #addRoom{position:fixed; inset:0; z-index:44; display:none; pointer-events:auto;
+    background:rgba(3,8,12,.74); backdrop-filter:blur(3px); color:#eaf9ff}
+  #addRoom.on{display:block}
+  #addPanel{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    background:rgba(4,16,24,.96); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:18px 20px;
+    box-shadow:0 0 30px rgba(64,214,255,.35)}
+  #addPanel .optTitle{font-size:1rem; letter-spacing:.25em; color:#7df3ff; text-align:center; margin:0 0 10px}
+  #addMap{display:block; border:1px solid rgba(64,214,255,.35); border-radius:8px; cursor:crosshair; touch-action:none}
+  #addNote{margin:8px 0; font-size:.85rem; text-align:center; min-height:1.2em}
+  #addNote.ok{color:#9ff0c0} #addNote.bad{color:#ff9c90}
+  .addRow{display:flex; gap:6px; margin-top:6px; justify-content:center; flex-wrap:wrap}
+  .addRow button{padding:7px 12px; font-size:.82rem; color:#bfe9f7; cursor:pointer; border-radius:8px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.45)}
+  .addRow button:hover{border-color:#7df3ff; background:rgba(64,214,255,.15)}
+  .addRow button:disabled{opacity:.35; cursor:not-allowed}
+  #addOk{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700}
+  #addLevel{font-size:.8rem; color:#8fd8f5; text-align:center; margin-bottom:6px}
   #srSlots .slotHint{grid-column:1/-1; font-size:.66rem; color:#7aa8bd; line-height:1.5; padding:4px 2px 0}
   #srSlots .slotHint b{color:#cfe8f5}
   #srSlots .slotHint span{display:block; color:#ffd76b}
@@ -461,6 +479,18 @@
   <button id="optClose">닫기</button>
   </div>
 </div>
+<div id="addRoom"><div id="addPanel">
+  <div class="optTitle">새 방 배치</div>
+  <div id="addLevel">1층</div>
+  <canvas id="addMap" width="440" height="360"></canvas>
+  <div id="addNote"></div>
+  <div class="addRow">
+    <button data-size="w-">가로 −2m</button><button data-size="w+">가로 +2m</button>
+    <button data-size="d-">세로 −2m</button><button data-size="d+">세로 +2m</button>
+  </div>
+  <div class="addRow"><button id="addOk">배치</button><button id="addCancel">취소</button></div>
+  <p class="srTip" style="text-align:center">칸을 끌거나 방향키로 옮기세요 · 1m 격자 · 벽이 2m 이상 맞닿아야 연결됩니다</p>
+</div></div>
 <div id="showroom">
   <div id="srTop"><h3>쇼 룸</h3></div>
   <div id="srName">ARENA OPERATOR</div>
