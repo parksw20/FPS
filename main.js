@@ -4347,7 +4347,10 @@ function expandRoom(axis) {               // 가로(w) 또는 세로(d)를 2m �
 let addState = null;                     // 새 방 배치 중 {w,d,gx,gz,gy,stair}
 function addRoomSlot(link) {             // 새 방 — 미니맵에서 자리를 잡아 배치한다
   const cost = slotCost();
-  if (coins < cost) { toast('코인이 부족합니다 (' + cost.toLocaleString() + '🪙)'); return null; }
+  if (coins < cost) {
+    toast('🪙 코인이 부족합니다 — ' + cost.toLocaleString() + ' 필요 (보유 ' + coins.toLocaleString() + ')');
+    return null;
+  }
   const me = curRoom();
   const stair = link && link.type === 'stairs' ? link : null;
   const door = link && link.type === 'door' ? link : null;
@@ -4699,7 +4702,9 @@ function ctxLinkHtml() {                 // 문·계단: 방향과 새 방만 (�
   const dirRow = it.type === 'stairs'
     ? `<div class="ctxHead">계단 방향</div><button data-dir="up"${(it.dir ?? 'up') === 'up' ? ' class="on"' : ''}>⬆ 위층으로</button>`
       + `<button data-dir="down"${it.dir === 'down' ? ' class="on"' : ''}>⬇ 아래층으로</button>` : '';
-  return dirRow + here + `<button data-newroom="1" class="new">＋ 새 방<i>${slotCost().toLocaleString()}🪙</i></button>`;
+  const cost = slotCost(), poor = coins < cost;
+  return dirRow + here
+    + `<button data-newroom="1" class="new${poor ? ' off' : ''}">＋ 새 방<i>${cost.toLocaleString()}🪙${poor ? ' · 부족' : ''}</i></button>`;
 }
 function showCtx(x, y) {
   const el = document.getElementById('srCtx');
@@ -4738,7 +4743,8 @@ function roomRenderUI() {
   if (!slots) return;
   slots.innerHTML = roomStore.slots.map((sl, i) =>
     `<button data-slot="${i}" class="${i === roomStore.cur ? 'on' : ''}${sl.closed ? ' closed' : ''}">${sl.name}<i>${sl.closed ? '폐쇄중' : roomW(sl) + '×' + roomD(sl) + 'm'}</i></button>`).join('')
-    + `<div class="slotHint">새 방은 <b>문·계단</b>을 놓고 <b>＋ 새 방</b>을 고르면 추가됩니다<span>다음 ${slotCost().toLocaleString()}🪙</span></div>`;
+    + `<div class="slotHint">새 방은 <b>문·계단</b>을 놓고 <b>＋ 새 방</b>을 고르면 추가됩니다`
+    + `<span${coins < slotCost() ? ' class="poor"' : ''}>다음 ${slotCost().toLocaleString()}🪙 · 보유 ${coins.toLocaleString()}</span></div>`;
   for (const b of slots.querySelectorAll('[data-slot]'))
     b.addEventListener('click', e => { e.stopPropagation(); loadRoomSlot(+b.dataset.slot); });
   const sz = document.getElementById('srSizes');
