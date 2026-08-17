@@ -3876,7 +3876,7 @@ function furnMesh(type, it) {
     grp.add(top);
   }
   if (f.glow) {
-    const lamp = new THREE.PointLight(f.color, 1.6, 4);
+    const lamp = new THREE.PointLight(f.color, 2.4, 4.5);   // 조명 밝기 +50%
     lamp.position.y = f.h * 0.9;
     grp.add(lamp);
   }
@@ -4920,7 +4920,7 @@ function loadRoomSlot(i) {
   }
   toast('📂 ' + curRoom().name + ' 불러옴');
 }
-const DARK = 0.5;                         // 불이 없는 방의 밝기
+const DARK = 0.25;                        // 불이 없는 방의 밝기 (더 어둡게)
 function roomLit(sl) {                    // 방에 빛나는 가구(램프·천장등·모니터)가 있나
   return !!sl && sl.items.some(it => FURN[it.type]?.glow);
 }
@@ -6178,7 +6178,7 @@ function srUpdate(dt) {
     if (!srOn) return;
     if (e.target.closest('#srMap, #srMapEdit, #srMapZoom, #srMapLv')) {      // 미니맵 위에서는 미니맵 배율
       e.preventDefault();
-      mapZoom = Math.max(0.5, Math.min(4, +(mapZoom * (e.deltaY > 0 ? 0.85 : 1.18)).toFixed(2)));
+      mapZoom = Math.max(0.5, Math.min(2, +(mapZoom * (e.deltaY > 0 ? 0.85 : 1.18)).toFixed(2)));   // 0.5~2배
       drawRoomMap();
       return;
     }
@@ -6317,6 +6317,7 @@ function srUpdate(dt) {
   document.getElementById('srReset2').addEventListener('click', e => { e.stopPropagation(); resetRooms(); });
   document.getElementById('srCloseRoom').addEventListener('click', e => { e.stopPropagation(); closeRoom(); });
   document.getElementById('srMapEdit')?.addEventListener('click', e => { e.stopPropagation(); openLayoutEdit(standingSlot()); });
+  document.getElementById('srMapZoom')?.addEventListener('click', e => { e.stopPropagation(); mapZoom = 1; drawRoomMap(); toast('🔍 배율 1.0×'); });
   document.getElementById('srOkBtn')?.addEventListener('click', e => { e.stopPropagation(); confirmPending(); });
   document.getElementById('srNoBtn')?.addEventListener('click', e => { e.stopPropagation(); cancelPending(); });
   const addMap = document.getElementById('addMap');
