@@ -3876,7 +3876,7 @@ function furnMesh(type, it) {
     grp.add(top);
   }
   if (f.glow) {
-    const lamp = new THREE.PointLight(f.color, 24, 9);      // 하나로 방이 환해지도록 (기존 10배)
+    const lamp = new THREE.PointLight(f.color, 1.5, 3);     // 세기 1.5 · 도달 3m
     lamp.position.y = f.h * 0.9;
     grp.add(lamp);
   }
