@@ -16,6 +16,7 @@ const MIME = {
 };
 
 await mkdir(join(ROOT, 'shots'), { recursive: true });
+await mkdir(join(ROOT, 'saves'), { recursive: true });
 
 createServer(async (req, res) => {
   try {
@@ -29,6 +30,21 @@ createServer(async (req, res) => {
       await writeFile(join(ROOT, 'shots', safe + '.png'), png);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end('{"ok":true}');
+      return;
+    }
+    if (req.method === 'POST' && p === '/rooms') {        // 방 저장본 전체를 파일 하나로
+      let body = '';
+      for await (const ch of req) body += ch;
+      await writeFile(join(ROOT, 'saves', 'rooms.json'), body);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+      return;
+    }
+    if (p === '/rooms') {                                 // 없으면 빈 목록
+      let data = '[]';
+      try { data = await readFile(join(ROOT, 'saves', 'rooms.json'), 'utf8'); } catch { }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(data);
       return;
     }
     if (p === '/') p = '/index.html';
