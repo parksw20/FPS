@@ -28,6 +28,21 @@
   #minimap{position:absolute; left:18px; top:18px; border-radius:50%; background:rgba(10,14,20,.6); border:1px solid rgba(126,224,163,.3)}
   #combo{position:absolute; left:50%; top:calc(33% - 50px); transform:translateX(-50%); font-size:1.9rem; font-weight:800; letter-spacing:.08em; color:#ffcf4d; text-shadow:0 0 18px rgba(255,207,77,.8); opacity:0; pointer-events:none}
   #combo.pop{animation:comboPop 1.1s ease-out}
+  /* 피해량: 머리 위에서 빠르게 솟았다 사라진다 */
+  .dmgPop{position:absolute; transform:translate(-50%,-100%); font-weight:800; font-style:italic; font-size:1.5rem;
+    pointer-events:none; white-space:nowrap; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,.85);
+    font-variant-numeric:tabular-nums; animation:dmgRise .62s cubic-bezier(.12,.9,.25,1) forwards}
+  .dmgPop.crit{font-size:2rem; color:#ffd24d}
+  .dmgPop.parry{font-size:2rem; color:#8fe9ff}
+  .dmgPop.pen{font-size:1.05rem; color:#c8b6ff; letter-spacing:.12em}
+  .dmgPop.self{font-size:1.75rem; color:#ff4d3d; text-shadow:0 0 12px rgba(255,60,40,.65),0 2px 8px rgba(0,0,0,.9)}
+  .dmgPop.parryText{font-size:1.6rem; color:#8fe9ff; letter-spacing:.06em; text-shadow:0 0 12px rgba(120,220,255,.8),0 2px 8px rgba(0,0,0,.9)}
+  @keyframes dmgRise{
+    0%{opacity:0; transform:translate(-50%,-100%) translateY(10px) scale(.7)}
+    12%{opacity:1; transform:translate(-50%,-100%) translateY(-34px) scale(1.12)}
+    28%{transform:translate(-50%,-100%) translateY(-42px) scale(1)}
+    70%{opacity:1; transform:translate(-50%,-100%) translateY(-54px) scale(1)}
+    100%{opacity:0; transform:translate(-50%,-100%) translateY(-86px) scale(.92)}}
   .hitPop{position:absolute; transform:translate(-50%,-100%); font-weight:800; font-style:italic; letter-spacing:.1em;
     pointer-events:none; white-space:nowrap; opacity:0; text-shadow:0 2px 10px rgba(0,0,0,.7)}
   .hitPop.crit{font-size:2.3rem; animation:critRise .95s cubic-bezier(.16,1,.3,1) forwards}  /* 2배 · 흰→노랑 */
@@ -46,23 +61,47 @@
     62%{opacity:1; color:#ff2d1f; transform:translate(-50%,-100%) translateY(-40px) scale(1)}
     100%{opacity:0; color:#ff2d1f; transform:translate(-50%,-100%) translateY(-130px) scale(.92)}}
   @keyframes comboPop{0%{opacity:0; transform:translateX(-50%) scale(.4)}15%{opacity:1; transform:translateX(-50%) scale(1.25)}30%{transform:translateX(-50%) scale(1)}75%{opacity:1}100%{opacity:0; transform:translateX(-50%) scale(1)}}
-  #ammo{position:absolute; left:50%; bottom:70px; transform:translateX(-50%); text-align:center; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
+  #ammo{position:absolute; left:50%; margin-left:-90px; bottom:70px; transform:translateX(-100%); text-align:center; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
   #ammo small{color:#9fb0c4; font-size:.75rem}
   /* 수류탄 단축 슬롯 (잔탄 오른쪽) */
-  #gSlot{position:absolute; left:50%; margin-left:150px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #rSlot{position:absolute; left:50%; margin-left:68px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+    background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
+  #rSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); line-height:0}
+  #rSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7df3ff; border-radius:4px; padding:1px 5px}
+  #rSlot.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.5)}
+  #pSlot{position:absolute; left:50%; margin-left:150px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+    background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
+  #pSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:1.5rem; white-space:nowrap}
+  #pSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7df3ff; border-radius:4px; padding:1px 5px}
+  #pSlot.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.5)}
+  #pSlot.empty{opacity:.3; filter:grayscale(.85); cursor:default}
+  #ammo.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.45)}
+  #gSlot{position:absolute; left:50%; margin-left:232px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(126,224,163,.3); border-radius:12px}
   #gSlot img{width:100%; height:100%; object-fit:contain; padding:6px; box-sizing:border-box}
   #gSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7ee0a3; border-radius:4px; padding:1px 5px}
   #gSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffd76b; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
   #gSlot.empty{opacity:.35; filter:grayscale(.8)}
   #gSlot.active{border-color:#7ee0a3; box-shadow:0 0 16px rgba(126,224,163,.5)}
-  #mSlot{position:absolute; left:50%; margin-left:232px; bottom:66px; width:76px; height:76px;
+  #mSlot{position:absolute; left:50%; margin-left:314px; bottom:66px; width:76px; height:76px;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(255,90,60,.35); border-radius:12px}
   #mSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
   #mSlot.empty{opacity:.35; filter:grayscale(.8)}
   #mSlot.active{border-color:#ff7a4d; box-shadow:0 0 16px rgba(255,110,60,.55)}
   #mSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#ff8a5c; border-radius:4px; padding:1px 5px}
-  #kSlot{position:absolute; left:50%; margin-left:314px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #mSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffb08a; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
+  #wSlot{position:absolute; left:50%; margin-left:396px; bottom:66px; width:76px; height:76px; pointer-events:none;
+    background:rgba(10,14,20,.6); border:1.5px solid rgba(255,120,190,.45); border-radius:12px}
+  #wSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
+  #wSlot .gKey{position:absolute; left:4px; top:3px; font-size:.66rem; font-weight:800; color:#2a0812; background:#ff5fa8; border-radius:4px; padding:1px 5px}
+  #wSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.9rem; font-weight:800; color:#ff9ecb; text-shadow:0 0 6px rgba(0,0,0,.9)}
+  .cdOv{position:absolute; inset:0; border-radius:inherit; display:none; align-items:center; justify-content:center; pointer-events:none;
+    background:conic-gradient(from 0deg, rgba(3,8,12,.8) calc(var(--p,0) * 360deg), rgba(3,8,12,0) 0)}
+  .cdOv.on{display:flex}
+  .cdOv i{font-style:normal; font-size:1.5rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums;
+    text-shadow:0 0 8px #000, 0 2px 5px #000}
+  #wSlot.empty{opacity:.32; filter:grayscale(.8)}
+  #kSlot{position:absolute; left:50%; margin-left:478px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
   #kSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem; line-height:0}
   #kSlot .mIcon img{width:46px; height:46px; display:block}
@@ -94,6 +133,7 @@
     30%{transform:translateX(-50%) scale(1)}72%{opacity:1}100%{opacity:0; transform:translateX(-50%) translateY(-24px)}}
   #ammo.inf #ammoN{color:#6bb8ff; text-shadow:0 0 12px rgba(107,184,255,.8)}
   #wave{left:50%; top:18px; transform:translateX(-50%); font-size:.9rem; letter-spacing:.15em; text-transform:uppercase; color:#9fb0c4}
+  #wave.rnd{left:18px; top:326px; transform:none}   /* 랜덤맵: 미니맵 바로 아래 */
   #wave b{color:#e8a33d}
   #banner{position:absolute; left:50%; top:26%; transform:translateX(-50%); font-size:2rem; letter-spacing:.35em; color:#e8a33d; text-shadow:0 0 24px rgba(232,163,61,.6); opacity:0; transition:opacity .4s; text-transform:uppercase; white-space:nowrap}
   #pickup{position:absolute; left:50%; top:60%; transform:translateX(-50%); font-size:1rem; color:#7ee0a3; text-shadow:0 0 14px rgba(126,224,163,.7); opacity:0; transition:opacity .3s; white-space:nowrap}
@@ -165,24 +205,27 @@
   .srSlot .nm{font-size:.9rem; font-weight:700}
   .srSlot .eq{margin-left:auto; font-size:.75rem; color:#9fb0c4}
   #srTabs{display:flex; gap:8px; margin-bottom:10px}
-  #srTabs button{flex:1; padding:7px 0; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:7px;
+  #srTabs button{flex:1; padding:7px 0; cursor:pointer; font-size:.78rem; white-space:nowrap; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
   #srTabs button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srInv{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
   #srRoomPane{display:none}
   #srRoomPane.on{display:block}
-  #srRoomName{width:100%; box-sizing:border-box; padding:8px 10px; margin-bottom:4px; border-radius:7px;
-    background:rgba(4,16,24,.9); border:1.5px solid rgba(64,214,255,.35); color:#eaf9ff; font:inherit; font-size:.9rem}
+  .srSec{display:none}
+  .srSec.on{display:block}
+  #srRight.room{width:min(420px,36vw)}   /* 가구를 한 줄에 4개 놓을 만큼 넓게 */
   #srSizes{display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
-  #srSurf{display:grid; grid-template-columns:repeat(5,1fr); gap:4px}
-  #srSurf button{padding:6px 0; font-size:.7rem; cursor:pointer; color:#bfe9f7; border-radius:6px;
-    background:rgba(4,20,28,.85); border:1px solid rgba(64,214,255,.35)}
-  #srSurf button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700}
-  #srPal{display:grid; grid-template-columns:repeat(8,1fr); gap:4px; margin-top:5px}
-  #srPal .sw{height:20px; border-radius:5px; cursor:pointer; border:1px solid rgba(255,255,255,.25)}
+  #srSurf .surfMap{width:100%; display:block; border-radius:8px; background:rgba(4,16,24,.9);
+    border:1.5px solid rgba(64,214,255,.3)}
+  #srSurf polygon{cursor:pointer}
+  #srSurf polygon:hover{stroke:#7df3ff; stroke-width:2.5}
+  #srSurf text{font-size:11px; font-weight:700; text-anchor:middle; dominant-baseline:middle;
+    fill:#0b1218; paint-order:stroke; stroke:rgba(255,255,255,.55); stroke-width:2.5; pointer-events:none}
+  #srSurf text.on{fill:#04161c; stroke:#7df3ff; stroke-width:3}
+  #srPal{display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:6px}
+  #srPal .sw{aspect-ratio:1; border-radius:8px; cursor:pointer; border:1.5px solid rgba(255,255,255,.25)}
   #srPal .sw.on{border-color:#7df3ff; box-shadow:0 0 8px rgba(64,214,255,.7)}
-  #srPal input[type=color]{grid-column:span 2; width:100%; height:20px; padding:0; border:1px solid rgba(64,214,255,.4);
-    border-radius:5px; background:transparent; cursor:pointer}
+  #srPal .sw.locked{opacity:.3; filter:grayscale(.85)}          /* 아직 파밍하지 않은 색 */
   #srSizes button{padding:8px 0; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
   #srSizes button i{display:block; font-style:normal; font-size:.66rem; color:#ffd76b}
@@ -192,8 +235,13 @@
   #srSizes button[disabled]{opacity:.35; cursor:default}
   #srSizes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srSizes button.buy{border-color:rgba(255,215,107,.45)}
-  #srFurn{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  #srFurn{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+  #srFurn .srItem{font-size:1.6rem}
+  #srFurn .srItem span{font-size:.64rem}
+  #srFurn .srItem b{font-size:.56rem}
   #srSlots{display:grid; grid-template-columns:repeat(2,1fr); gap:6px}
+  #srFloorPick{grid-column:1/-1; width:100%; padding:7px 9px; border-radius:7px; font-family:inherit; font-size:.8rem;
+    color:#eaf9ff; background:rgba(8,20,28,.9); border:1.5px solid rgba(64,214,255,.4); cursor:pointer}
   #srSlots button{padding:8px 4px; cursor:pointer; font-size:.78rem; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   #srSlots button i{display:block; font-style:normal; font-size:.64rem; color:#9fb0c4}
@@ -215,6 +263,17 @@
     box-shadow:0 0 30px rgba(64,214,255,.35)}
   #addPanel .optTitle{font-size:1rem; letter-spacing:.25em; color:#7df3ff; text-align:center; margin:0 0 10px}
   #addMap{display:block; border:1px solid rgba(64,214,255,.35); border-radius:8px; cursor:crosshair; touch-action:none}
+  .addBody{display:flex; gap:10px; align-items:flex-start}
+  #addList{width:150px; max-height:360px; overflow:auto; display:flex; flex-direction:column; gap:5px}
+  #addList .alHead{font-size:.68rem; letter-spacing:.2em; color:#7aa8bd; margin:2px 0 4px}
+  #addList .alNone{font-size:.72rem; color:#5f7f92; padding:6px 2px}
+  #addList button{padding:7px 9px; text-align:left; cursor:pointer; font-size:.8rem; color:#bfe9f7; border-radius:7px;
+    background:rgba(8,20,28,.85); border:1.5px solid rgba(64,214,255,.28)}
+  #addList button:hover{border-color:#7df3ff}
+  #addList button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700}
+  #addList button.closed{opacity:.45}
+  #addList button i{display:block; font-style:normal; font-size:.66rem; color:#9fb0c4}
+  #addList button.on i{color:#0a3a44}
   #addNote{margin:8px 0; font-size:.85rem; text-align:center; min-height:1.2em}
   #addNote.ok{color:#9ff0c0} #addNote.bad{color:#ff9c90}
   .addRow{display:flex; gap:6px; margin-top:6px; justify-content:center; flex-wrap:wrap}
@@ -229,29 +288,109 @@
   #srSlots .slotHint span{display:block; color:#ffd76b}
   #srCtx button.new{color:#ffd76b; border-top:1px dashed rgba(120,200,230,.2); margin-top:3px}
   #srCtx button.new i{font-style:normal; font-size:.66rem; color:#9fb0c4; margin-left:6px}
+  .ctxSize{display:grid; grid-template-columns:1fr 1fr; gap:4px; border-top:1px solid rgba(64,214,255,.25); margin-top:4px; padding:6px 6px 2px}
+  .ctxSize span{grid-column:1/-1; font-size:.68rem; color:#7aa8bd; text-align:center}
+  .ctxSize .ctxHint{font-size:.62rem; color:#5f8ba0}
+  .ctxSize button{padding:6px 4px; font-size:.74rem; cursor:pointer; color:#bfe9f7; border-radius:6px;
+    background:rgba(4,20,28,.85); border:1px solid rgba(64,214,255,.35)}
+  .ctxSize button:hover{border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  .ctxFits{display:flex; flex-direction:column; border-top:1px solid rgba(64,214,255,.25); margin-top:4px; padding-top:4px}
+  .ctxFits button{padding:7px 12px; font-size:.76rem; text-align:left; cursor:pointer; color:#bfe9f7;
+    background:transparent; border:0; border-radius:6px}
+  .ctxFits button:hover{background:rgba(64,214,255,.14)}
+  .ctxFits button.on{color:#04161c; background:#7df3ff; font-weight:700}
   #srSlots button.buy i{color:#ffd76b}
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
   #srMap{position:absolute; left:24px; bottom:18px; display:none; z-index:23; border-radius:10px;
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
-  #srMapEdit{position:absolute; left:255px; bottom:26px; display:none; z-index:24; cursor:pointer;
-    padding:7px 14px; font-size:.82rem; font-weight:700; color:#04161c; border-radius:8px;
-    background:rgba(125,243,255,.92); border:1px solid #7df3ff; box-shadow:0 0 12px rgba(64,214,255,.45)}
+  #srMapEdit{margin-top:6px; color:#04161c; font-weight:700;   /* 패널 안 버튼 (방 이름 아래) */
+    background:rgba(125,243,255,.92); border-color:#7df3ff}
   #srMapEdit:hover{background:#a8f8ff}
-  #srConfirm{position:absolute; left:50%; bottom:96px; transform:translateX(-50%); display:none; z-index:27;
-    align-items:center; gap:10px; padding:9px 14px; border-radius:10px; color:#eaf9ff;
-    background:rgba(4,16,24,.95); border:1.5px solid rgba(64,214,255,.6); box-shadow:0 0 18px rgba(64,214,255,.35)}
-  #srConfirm.on{display:flex}
-  #srConfirmMsg{font-size:.85rem; color:#bfe9f7}
-  #srConfirm button{padding:7px 14px; font-size:.84rem; font-weight:700; cursor:pointer; border-radius:8px}
-  #srOkBtn{color:#04161c; background:#7ee0a3; border:1px solid #7ee0a3}
-  #srOkBtn:hover{background:#a6f0c4}
-  #srNoBtn{color:#ffd9d4; background:rgba(255,90,74,.18); border:1px solid rgba(255,120,100,.7)}
-  #srNoBtn:hover{background:rgba(255,90,74,.32)}
-  #srMapZoom{position:absolute; left:34px; bottom:26px; display:none; z-index:25; cursor:pointer;
+  #optResetAsk{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:60;
+    flex-direction:column; gap:10px; padding:20px 22px; border-radius:12px; color:#eaf9ff; text-align:center; max-width:340px;
+    background:rgba(16,6,8,.97); border:1.5px solid rgba(255,120,100,.7); box-shadow:0 0 26px rgba(255,90,74,.35)}
+  #optResetAsk.on{display:flex}
+  #optResetAsk span{font-size:.95rem; font-weight:800; color:#ffb9ae}
+  #optResetAsk small{font-size:.74rem; color:#cfd8e2; line-height:1.6}
+  #optResetAsk .askRow{display:flex; gap:8px}
+  #optResetAsk button{flex:1; padding:10px 0; font-size:.84rem; font-weight:700; cursor:pointer; border-radius:8px}
+  #optResetOk{color:#2a0806; background:#ff7a63; border:1px solid #ff7a63}
+  #optResetOk:hover{background:#ff9b88}
+  #optResetNo{color:#bfe9f7; background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.45)}
+  #optResetNo:hover{border-color:#7df3ff}
+  #srNameAsk{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:41;
+    flex-direction:column; gap:8px; padding:16px 18px; border-radius:12px; color:#eaf9ff; text-align:center; min-width:250px;
+    background:rgba(4,16,24,.97); border:1.5px solid rgba(64,214,255,.6); box-shadow:0 0 24px rgba(64,214,255,.4)}
+  #srNameAsk.on{display:flex}
+  #srNameAsk span{font-size:.8rem; color:#bfe9f7}
+  #srNameAsk small{font-size:.72rem; color:#8fd0ff; display:flex; align-items:center; justify-content:center; gap:3px}
+  #srNameAsk input{width:100%; box-sizing:border-box; padding:9px 11px; border-radius:7px; font-family:inherit; font-size:.95rem;
+    color:#eaf9ff; background:rgba(8,20,28,.9); border:1.5px solid rgba(64,214,255,.4)}
+  #srNameAsk .askRow{display:flex; gap:8px}
+  #srNameAsk button{flex:1; padding:9px 0; font-size:.84rem; font-weight:700; cursor:pointer; border-radius:8px}
+  #srNameAskOk{color:#04161c; background:#7ee0a3; border:1px solid #7ee0a3}
+  #srNameAskOk:hover{background:#a6f0c4}
+  #srNameAskNo{color:#bfe9f7; background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.45)}
+  #srNameAskNo:hover{border-color:#7df3ff}
+  #srLoadMenu{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:41;
+    flex-direction:column; gap:10px; padding:18px 20px; border-radius:12px; color:#eaf9ff; min-width:430px; max-height:80vh; overflow:hidden;
+    background:rgba(4,16,24,.97); border:1.5px solid rgba(64,214,255,.6); box-shadow:0 0 24px rgba(64,214,255,.4)}
+  #srLoadMenu.on{display:flex}
+  #srLoadMenu > span{font-size:.8rem; color:#bfe9f7; text-align:center}
+  #srLoadList{display:flex; flex-direction:column; gap:10px; overflow:auto; max-height:58vh; padding-right:2px}
+  #srLoadList .svRow{display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:center;
+    padding:10px 12px; border-radius:10px; background:rgba(8,20,28,.85); border:1.5px solid rgba(64,214,255,.25)}
+  #srLoadList .svRow.cur{border-color:#7df3ff; box-shadow:0 0 12px rgba(64,214,255,.25)}
+  #srLoadList img{width:64px; height:64px; object-fit:cover; border-radius:8px; background:#0a1218}
+  #srLoadList .no{width:64px; height:64px; display:flex; align-items:center; justify-content:center; font-size:.6rem; color:#5f7f92;
+    border-radius:8px; background:rgba(4,12,18,.9); border:1px dashed rgba(120,200,230,.25)}
+  #srLoadList .meta{min-width:0}
+  #srLoadList .acts{display:flex; gap:6px}
+  #srLoadList .acts button{padding:7px 12px; font-size:.74rem; cursor:pointer; color:#bfe9f7; border-radius:7px; white-space:nowrap;
+    background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.35)}
+  #srLoadList .acts button:hover:not([disabled]){border-color:#7df3ff; background:rgba(64,214,255,.14)}
+  #srLoadList .acts button[disabled]{opacity:.35; cursor:default}
+  #srLoadMenu > span b{color:#8fd0ff; float:right; font-size:.78rem}
+  #srLoadList .slotBuy{padding:8px 0; font-size:.76rem; text-align:center; color:#8fd0ff; border-radius:8px;
+    background:rgba(4,20,28,.85); border:1.5px dashed rgba(120,190,255,.5); cursor:pointer}
+  #srLoadList .slotBuy.full{color:#5f7f92; border-style:solid; border-color:rgba(120,150,170,.35); cursor:default}
+  #srLoadList b{display:block; font-size:.84rem}
+  #srLoadList i{font-style:normal; font-size:.66rem; color:#7aa8bd}
+  #srLoadClose{flex:none; padding:10px 0; font-size:.82rem; font-weight:700; cursor:pointer; color:#bfe9f7; border-radius:8px;
+    background:rgba(4,20,28,.95); border:1.5px solid rgba(64,214,255,.5)}
+  #srLoadClose:hover{border-color:#7df3ff; background:rgba(64,214,255,.14)}
+  #srSaveAsk{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:41;
+    flex-direction:column; gap:8px; padding:16px 18px; border-radius:12px; color:#eaf9ff; text-align:center; min-width:250px;
+    background:rgba(4,16,24,.97); border:1.5px solid rgba(64,214,255,.6); box-shadow:0 0 24px rgba(64,214,255,.4)}
+  #srSaveAsk.on{display:flex}
+  #srSaveAsk span{font-size:.8rem; color:#bfe9f7}
+  #srSaveAsk input{width:100%; box-sizing:border-box; padding:9px 11px; border-radius:7px; font-family:inherit; font-size:.95rem;
+    color:#eaf9ff; background:rgba(8,20,28,.9); border:1.5px solid rgba(64,214,255,.4)}
+  #srSaveAsk .askRow{display:flex; gap:8px}
+  #srSaveAsk button{flex:1; padding:9px 0; font-size:.84rem; font-weight:700; cursor:pointer; border-radius:8px}
+  #srSaveAskOk{color:#04161c; background:#7ee0a3; border:1px solid #7ee0a3}
+  #srSaveAskOk:hover{background:#a6f0c4}
+  #srSaveAskNo{color:#bfe9f7; background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.45)}
+  #srSaveAskNo:hover{border-color:#7df3ff}
+  #srLeave{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:40;
+    flex-direction:column; gap:8px; padding:16px 18px; border-radius:12px; color:#eaf9ff; text-align:center;
+    background:rgba(4,16,24,.97); border:1.5px solid rgba(64,214,255,.6); box-shadow:0 0 24px rgba(64,214,255,.4)}
+  #srLeave.on{display:flex}
+  #srLeave span{font-size:.85rem; color:#bfe9f7; margin-bottom:4px}
+  #srLeave button{padding:9px 16px; font-size:.84rem; font-weight:700; cursor:pointer; border-radius:8px}
+  #srLeaveSave{color:#04161c; background:#7ee0a3; border:1px solid #7ee0a3}
+  #srLeaveSave:hover{background:#a6f0c4}
+  #srLeaveDrop{color:#ffd9d4; background:rgba(255,90,74,.18); border:1px solid rgba(255,120,100,.7)}
+  #srLeaveDrop:hover{background:rgba(255,90,74,.32)}
+  #srLeaveStay{color:#bfe9f7; background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.45)}
+  #srLeaveStay:hover{border-color:#7df3ff}
+  #srRoomBtns2 button.dirty{border-color:#ffd76b; color:#ffe9a8}   /* 저장하지 않은 변경 */
+  #srRoomBtns2 button[disabled]{opacity:.35; cursor:default}
+  #srMapZoom{position:absolute; left:284px; bottom:30px; display:none; z-index:25; cursor:pointer;   /* 미니맵 우하단 */
     padding:4px 10px; font-size:.78rem; font-weight:700; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.4)}
   #srMapZoom:hover{color:#04161c; background:#7df3ff; border-color:#7df3ff}
-  #srMapLv{position:absolute; left:34px; top:auto; bottom:330px; display:none; z-index:24; pointer-events:none;
+  #srMapLv{position:absolute; left:36px; top:auto; bottom:330px; display:none; z-index:24; pointer-events:none;   /* 미니맵 좌상단 */
     padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
   #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:8px; z-index:23}
@@ -267,6 +406,35 @@
   #srCtx button.on{color:#04161c; background:#7df3ff; font-weight:800}
   #srCtx .ctxHead{font-size:.62rem; letter-spacing:.16em; color:#7aa8bd; padding:6px 10px 2px}
   #srCtx button i{display:block; font-style:normal; font-size:.6rem; color:#ff8a5c}
+  .srHead .hint{font-size:.6rem; letter-spacing:0; color:#5f7f92; margin-left:6px}
+  .wideBtn{width:100%; padding:9px 10px; font-size:.82rem; cursor:pointer; color:#bfe9f7; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35); font-family:inherit}
+  .wideBtn b{color:#eaf9ff}
+  .wideBtn:hover{border-color:#7df3ff}
+  #srHeads{float:right; color:#8fd0ff; letter-spacing:.06em}
+  #srSaves{display:flex; flex-direction:column; gap:6px}
+  .svSlot{display:grid; grid-template-columns:56px 1fr; grid-template-rows:auto auto; gap:4px 8px; padding:6px;
+    border-radius:8px; background:rgba(8,20,28,.8); border:1.5px solid rgba(64,214,255,.22)}
+  .svSlot img{grid-row:1/3; width:56px; height:56px; object-fit:cover; border-radius:6px; background:#0a1218}
+  .svSlot .svNo{grid-row:1/3; width:56px; height:56px; display:flex; align-items:center; justify-content:center;
+    font-size:.56rem; color:#5f7f92; border-radius:6px; background:rgba(4,12,18,.9); border:1px dashed rgba(120,200,230,.25)}
+  .svSlot .svInfo b{font-size:.82rem; display:block}
+  .svSlot .svInfo i{font-style:normal; font-size:.62rem; color:#7aa8bd}
+  .svSlot .svBtns{display:flex; gap:4px}
+  .svSlot .svBtns button{flex:1; padding:5px 0; font-size:.66rem; cursor:pointer; color:#bfe9f7; border-radius:6px;
+    background:rgba(4,20,28,.85); border:1px solid rgba(64,214,255,.35)}
+  .svSlot .svBtns button:hover:not([disabled]){border-color:#7df3ff}
+  .svSlot .svBtns button[disabled]{opacity:.35; cursor:default}
+  .svBuy{padding:8px 0; font-size:.78rem; cursor:pointer; color:#8fd0ff; border-radius:7px;
+    background:rgba(4,20,28,.85); border:1.5px dashed rgba(120,190,255,.5)}
+  .svBuy i{font-style:normal; color:#bfe0ff; margin-left:4px}
+  .svBuy.full{text-align:center; color:#5f7f92; border-style:solid; border-color:rgba(120,150,170,.35); cursor:default}
+  .svBuy:hover{border-color:#8fd0ff}
+  .srItem b.head{color:#dfe9f2; display:flex; align-items:center; gap:1px}
+  .hc{height:1.05em; width:auto; vertical-align:-0.18em; display:inline-block}   /* 세로 기준 — 원본 비율 유지 */
+  #srHeads .hc{height:1.15em}
+  .svBuy .hc, .srHead .hint .hc{height:1em}
+  #srPal .sw.head{outline:2px solid rgba(143,208,255,.8); outline-offset:-2px}
   #srRoomBtns2{display:flex; gap:6px; margin-top:6px}
   #srRoomBtns2 button{flex:1; padding:8px 0; cursor:pointer; font-size:.78rem; color:#bfe9f7; border-radius:7px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.3)}
@@ -288,22 +456,33 @@
   .srItem:hover{border-color:#7df3ff; background:rgba(64,214,255,.14)}
   .srItem.on{border-color:#ffd76b; box-shadow:0 0 14px rgba(255,215,107,.4)}
   .srItem.locked{opacity:.55; filter:grayscale(.5)}
+  .srItem.buy{border-color:rgba(255,215,107,.45)}   /* 코인으로 바로 살 수 있는 가구 */
   .srItem b{position:absolute; right:2px; bottom:1px; font-size:.52rem; color:#ffd76b; font-weight:800}
   .srItem b.loot{color:#7df3ff}
   .srItem{position:relative}
+  #srLiveBar{position:absolute; left:50%; bottom:26px; transform:translateX(-50%); display:none; gap:8px; align-items:center; z-index:26}
+  #srLiveBar button{padding:8px 14px; font-size:.8rem; cursor:pointer; color:#bfe9f7; border-radius:8px;
+    background:rgba(4,20,28,.9); border:1.5px solid rgba(64,214,255,.4)}
+  #srLiveBar button:hover:not([disabled]){border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  #srLiveBar button[disabled]{opacity:.35; cursor:default}
+  #srLiveBar button.dirty{border-color:#ffd76b; color:#ffe9a8}
   #srBottom{position:absolute; left:50%; bottom:26px; transform:translateX(-50%); display:flex; gap:10px; align-items:center}
   #srBottom .srBtn{padding:9px 16px; cursor:pointer; font-size:.85rem; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
   #srBottom .srBtn:hover{border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  #fpsHud{position:absolute; left:18px; top:372px; display:none; padding:3px 8px; border-radius:6px;   /* 미니맵·단계 표시 밑 */
+    font-size:.78rem; color:#7ee0a3; background:rgba(4,12,18,.75); border:1px solid rgba(126,224,163,.35)}
   #srHint{position:absolute; left:50%; bottom:6px; transform:translateX(-50%); font-size:.72rem; color:#7aa8bd}
   #srName{position:absolute; left:50%; top:56px; transform:translateX(-50%); font-size:.78rem; letter-spacing:.2em; color:#9fb0c4}
-  @media (max-width:900px){ .srPanel{width:40vw; padding:10px} .srSlot .nm{font-size:.78rem} }
+  @media (max-width:900px){ .srPanel{width:40vw; padding:10px} #srRight.room{width:54vw} .srSlot .nm{font-size:.78rem} }
   /* 시작 전 맵 선택 */
   #mapPick{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:22px;
     background:rgba(3,8,12,.72); backdrop-filter:blur(3px); z-index:20; overflow:auto; padding:24px 12px; box-sizing:border-box}
   #mapPick h3{font-size:1.15rem; letter-spacing:.34em; color:#7df3ff; text-shadow:0 0 12px rgba(64,214,255,.8); margin:0}
   #mapPick .menuBtn{width:100%; text-align:center}
   #mapPick .menuBtn span{font-size:1.35rem}
+  #mapPick #mapBack{width:min(280px,60vw); text-align:center}
+  #mapPick #mapBack span{font-size:1.05rem; color:#9fb0c4}
   .mapCols{display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap; justify-content:center}
   .mapCol{display:flex; flex-direction:column; gap:18px; width:min(540px, 42vw); min-width:300px}
   .mapCard{background:#05080c; border:1px solid rgba(64,214,255,.25); border-radius:6px; overflow:hidden;
@@ -338,9 +517,59 @@
     #briefBtns .menuBtn{width:150px}
   }
   /* ESC 일시정지 */
+  #gearGot{position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:70;
+    background:rgba(3,8,12,.78); backdrop-filter:blur(4px); pointer-events:auto}
+  #gearGot.on{display:flex}
+  #gearGot .gBox{display:flex; flex-direction:column; align-items:center; gap:14px; padding:34px 44px; border-radius:18px;
+    background:rgba(8,16,24,.95); border:2px solid rgba(64,214,255,.55); box-shadow:0 0 60px rgba(64,214,255,.28); text-align:center}
+  #gearGot .gHd{font-size:.9rem; letter-spacing:.3em; color:#7df3ff; text-transform:uppercase}
+  #gearGot .gSlot{position:relative; width:168px; height:168px; border-radius:22px; background:rgba(10,14,20,.9);
+    border:3px solid #7df3ff; box-shadow:0 0 40px rgba(64,214,255,.5), inset 0 0 30px rgba(64,214,255,.15);
+    display:flex; align-items:center; justify-content:center; font-size:4.4rem; animation:gearPop .45s ease-out}
+  #gearGot .gSlot i{position:absolute; left:10px; top:8px; font-style:normal; font-size:1rem; font-weight:800;
+    color:#0a0e14; background:#7df3ff; border-radius:6px; padding:2px 10px}
+  #gearGot .gName{font-size:1.6rem; font-weight:800; color:#eaf9ff; text-shadow:0 0 16px rgba(64,214,255,.6)}
+  #gearGot .gDesc{max-width:420px; font-size:.9rem; line-height:1.6; color:#9fb0c4}
+  #gearGot .menuBtn{margin-top:6px; min-width:200px}
+  @keyframes gearPop{0%{transform:scale(.4); opacity:0} 60%{transform:scale(1.12)} 100%{transform:scale(1); opacity:1}}
+  .tpBtn{margin-top:10px; border-color:rgba(190,140,255,.7); box-shadow:0 0 14px rgba(170,120,255,.35), inset 0 0 12px rgba(170,120,255,.12)}
+  .tpBtn span{color:#e6d5ff; text-shadow:0 0 10px rgba(180,130,255,.85)}
+  .tpBtn:hover{background:rgba(170,120,255,.2); border-color:#c39bff; box-shadow:0 0 26px rgba(170,120,255,.7)}
+  #curTop{position:fixed; left:18px; top:18px; z-index:60; display:none; gap:8px; pointer-events:none}
+  #curTop.on{display:flex}
+  #curTop .cur{display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:9px; font-size:.9rem; font-weight:800;
+    background:rgba(4,16,24,.88); border:1.5px solid rgba(64,214,255,.45); color:#eaf9ff; font-variant-numeric:tabular-nums;
+    box-shadow:0 0 14px rgba(0,0,0,.5)}
+  #curTop .cur.coin b{color:#ffd76b}
+  #curTop .cur.head{border-color:rgba(255,215,107,.5)}
+  #curTop .cur.head b{color:#ffd76b}
+  #tpMenu{position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:45;
+    background:rgba(3,8,12,.78); backdrop-filter:blur(4px); pointer-events:auto}
+  #tpMenu.on{display:flex}
+  #tpMenu .tpBox{width:min(92vw,560px); max-height:80vh; display:flex; flex-direction:column; gap:10px; padding:22px 24px;
+    border-radius:14px; background:rgba(4,16,24,.96); border:2px solid rgba(170,120,255,.6); color:#eaf9ff; text-align:center;
+    box-shadow:0 0 30px rgba(170,120,255,.35)}
+  #tpMenu h3{font-size:1rem; letter-spacing:.2em; color:#c39bff; text-transform:uppercase}
+  #tpMenu .tpHint{font-size:.8rem; color:#9fb0c4}
+  #tpMenu .tpHint b{color:#ffd76b}
+  #tpList{display:flex; flex-direction:column; gap:7px; overflow-y:auto; padding:2px}
+  #tpList .tpRow{display:grid; grid-template-columns:78px 1fr 1fr; gap:8px; align-items:center;
+    padding:7px 10px; border-radius:9px; background:rgba(8,20,28,.9); border:1.5px solid rgba(170,120,255,.28)}
+  #tpList .tpRow b{font-size:.95rem; color:#eaf9ff; text-align:left}
+  #tpList button{padding:8px 6px; border-radius:8px; cursor:pointer; font-size:.82rem; font-weight:700;
+    color:#bfe9f7; background:rgba(4,20,28,.9); border:1.5px solid rgba(64,214,255,.45); font-variant-numeric:tabular-nums}
+  #tpList button.head{border-color:rgba(255,215,107,.5); color:#ffd76b}
+  #tpList button:hover:not(:disabled){border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  #tpList button.head:hover:not(:disabled){border-color:#ffd76b; background:rgba(255,200,90,.16)}
+  #tpList button:disabled{opacity:.38; cursor:default}
+  #tpList .tpNone{padding:18px 12px; font-size:.84rem; color:#9fb0c4; line-height:1.6}
+  #tpClose{margin-top:2px; padding:9px 0; border-radius:8px; cursor:pointer; font-size:.85rem; font-weight:700;
+    color:#bfe9f7; background:rgba(4,20,28,.9); border:1.5px solid rgba(64,214,255,.45)}
+  #tpClose:hover{border-color:#7df3ff}
   #pauseOv{position:fixed; inset:0; display:none; background:rgba(3,8,12,.55); backdrop-filter:blur(2px); z-index:10}
-  #pauseBtns{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:16px; width:300px}
-  #btnQuit{position:absolute; right:5%; bottom:7%; width:min(280px,40vw);
+  #pauseBtns{position:absolute; right:5%; bottom:7%; left:auto; top:auto; transform:none;
+    display:flex; flex-direction:column; gap:16px; width:min(280px,40vw)}   /* 되돌아가기 위 · 게임 종료 아래 */
+  #btnQuit{
     border-color:rgba(255,77,77,.75); box-shadow:0 0 14px rgba(255,77,77,.4), inset 0 0 12px rgba(255,77,77,.12)}
   #btnQuit span{color:#ffd9d9; text-shadow:0 0 10px rgba(255,77,77,.85)}
   #btnQuit:hover{background:rgba(255,77,77,.2); box-shadow:0 0 28px rgba(255,77,77,.75), inset 0 0 16px rgba(255,77,77,.25); border-color:#ff6b6b}
@@ -368,18 +597,25 @@
     padding:7px 12px; color:#bfe9f7; font-size:.85rem; cursor:pointer; box-shadow:0 0 8px rgba(64,214,255,.2)}
   #optMenu button:hover{border-color:#7df3ff; background:rgba(64,214,255,.15)}
   #optMenu button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:700; box-shadow:0 0 16px rgba(64,224,255,.7)}
-  #shopMenu{position:fixed; left:50%; bottom:120px; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
+  #shopMenu{position:fixed; left:50%; top:calc(13vh + 100px); bottom:auto; transform:translateX(-50%); z-index:40; pointer-events:auto; display:none;
     background:rgba(4,16,24,.9); border:2px solid rgba(64,214,255,.6); border-radius:12px; padding:18px 24px; color:#eaf9ff; text-align:center;
-    font-size:20px; max-width:min(96vw,1500px); box-sizing:border-box;
+    font-size:20px; width:min(94vw,1180px); max-width:none; box-sizing:border-box;   /* 상단 위치·가로 폭 고정 */
     box-shadow:0 0 26px rgba(64,214,255,.35), inset 0 0 14px rgba(64,214,255,.08)}
   #shopMenu h3{font-size:1.15em; letter-spacing:.15em; color:#7df3ff; margin-bottom:8px; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
   #shopCoins{font-size:1.05em; color:#9fb0c4; margin-bottom:12px}
   #shopCoins b{color:#ffd76b; font-variant-numeric:tabular-nums}
+  #shopTabs{display:flex; gap:8px; justify-content:center; margin:0 0 14px; flex-wrap:wrap}
+  #shopTabs button{min-width:118px; padding:8px 14px; border-radius:9px; cursor:pointer; font-size:.82em; font-weight:700;
+    color:#bfe9f7; background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
+  #shopTabs button:hover:not(:disabled){border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  #shopTabs button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; box-shadow:0 0 18px rgba(64,214,255,.6)}
+  #shopTabs button.lock{opacity:.5; cursor:default; border-style:dashed; border-color:rgba(159,176,196,.45); color:#9fb0c4}
+  #shopTabs button i{display:block; font-style:normal; font-size:.72em; font-weight:600; color:#7aa8bd; margin-top:2px}
   #shopMenu .shopHint{margin-top:12px; font-size:.8em; color:#9fb0c4}
   #itemList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center;
     margin-top:14px; padding-top:12px; border-top:1px dashed rgba(64,214,255,.25)}
   #itemLabel{font-size:.75em; letter-spacing:.25em; color:#7aa8bd; margin-bottom:8px}
-  #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center}
+  #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center; min-height:96px; align-content:flex-start}
   #upgList button, #itemList button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.55); border-radius:8px;
     padding:12px 20px; color:#eaf9ff; font-size:1em; cursor:pointer; text-align:center;
     box-shadow:0 0 10px rgba(64,214,255,.25), inset 0 0 8px rgba(64,214,255,.08)}
@@ -437,15 +673,16 @@
 <div id="hud">
   <div id="crosshair"></div>
   <div id="hitmark"></div>
-  <div id="wave" class="panel">WAVE <b id="waveN">1</b> — <span id="left">0</span>마리 남음</div>
+  <div id="wave" class="panel">단계 <b id="waveN">1</b><span id="leftWrap"> — <span id="left">0</span>마리 남음</span></div>
   <div id="banner"></div>
   <div id="combo"></div>
   <div id="multiKill"></div>
-  <div id="floorHud">FLOOR <b id="floorN">1</b> · <span id="floorT">60s</span></div>
+  <div id="floorHud">⏱ <b id="floorT">60s</b></div>
   <div id="seedTag">SEED ----</div>
   <div id="beaconHud">📦 보급 <b id="beaconT">0</b>s · <span id="beaconD">0</span>m</div>
   <div id="pickup"></div>
   <canvas id="minimap" width="300" height="300"></canvas>
+  <div id="fpsHud"></div>
   <div id="buff">∞ 무한 탄약 <span id="buffT">10</span>s</div>
   <div id="topChips">
     <div class="chip">🪙 <span id="coinN">0</span> <small>COINS</small></div>
@@ -453,10 +690,13 @@
     <div class="chip">💀 <span id="kills">0</span> <small>KILLS</small></div>
   </div>
   <div id="stats">HP <span id="hpT">100</span><div class="hpbar"><div class="hpfill" id="hpF"></div></div></div>
-  <div id="ammo"><span class="gKey ammoKey">1</span><span id="ammoN">20</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
-  <div id="gSlot"><span class="gKey">2</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
-  <div id="mSlot" class="empty"><span class="gKey">3</span><span class="mIcon">🧨</span><span class="gCnt" id="mCnt">0</span></div>
-  <div id="kSlot" class="empty"><span class="gKey">F</span><span class="mIcon">📍</span><span class="gCnt" id="kCnt">0</span></div>
+  <div id="ammo"><span id="ammoN">20</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
+  <div id="rSlot"><span class="gKey">1</span><span class="mIcon"><svg viewBox="0 0 40 24" width="42" height="26" aria-hidden="true"><rect x="3" y="9.5" width="30" height="3.4" rx="1" fill="#8a929c"/><rect x="30" y="8.4" width="7" height="2" rx="1" fill="#b9c2cc"/><rect x="12" y="12.5" width="6.5" height="7" rx="1.2" fill="#5c646e"/><path d="M3 9.5 L3 13 L9 15.5 L9 12.9 Z" fill="#6b7480"/><rect x="19" y="7" width="9" height="2.2" rx="1" fill="#5c646e"/></svg></span></div>
+  <div id="pSlot"><span class="gKey">2</span><span class="mIcon">🔫🛡</span></div>
+  <div id="gSlot"><span class="gKey">3</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
+  <div id="mSlot" class="empty"><span class="gKey">4</span><span class="mIcon">🧨</span><span class="gCnt" id="mCnt">0</span></div>
+  <div id="wSlot" class="empty"><span class="gKey">휠</span><span class="mIcon">🎀</span><span class="gCnt" id="wCnt">3</span></div>
+  <div id="kSlot"><span class="gKey">F</span><span class="mIcon">📍</span><span class="gCnt" id="kCnt">∞</span></div>
   <div id="msg" class="panel"><h2>YOU DIED</h2><div id="rankList"></div><button id="deathOk">확인</button></div>
 </div>
 <div id="warpFx"></div>
@@ -475,6 +715,8 @@
   <h3>화면</h3>
   <div class="optRow">
     <button id="optOutline" class="tog">검은 외곽선</button>
+    <button id="optShadow" class="tog">그림자: 높음</button>
+    <button id="optFull" class="tog">전체화면으로 보기</button>
   </div>
   <h3>조작</h3>
   <div class="optRow">
@@ -497,7 +739,8 @@
     <h3>디버그</h3>
     <div class="optRow">
       <button id="dbgCoins">코인 +1억</button>
-      <button id="dbgWave">웨이브 스킵</button>
+      <button id="dbgHead">헤드 +500</button>
+      <button id="dbgWave">단계 넘기기</button>
     </div>
     <div class="optRow">
       <button id="dbgPortal" class="tog">포탈 표시</button>
@@ -507,20 +750,33 @@
       <button id="dbgFast" class="tog">이동 3배속</button>
       <button id="dbgAmmo" class="tog">무한 탄창</button>
     </div>
+    <div class="optRow">
+      <button id="dbgDeco" class="tog">방꾸미기 모드</button>
+      <button id="dbgFps" class="tog">FPS 표시</button>
+    </div>
+  </div>
+  <h3>데이터</h3>
+  <div class="optRow">
+    <button id="optReset">🧨 전체 초기화</button>
   </div>
   <button id="optClose">닫기</button>
   </div>
 </div>
+<div id="optResetAsk">
+  <span>정말 초기화할까요?</span>
+  <small>코인·헤드코인·업그레이드가 처음 상태로 돌아갑니다.<br>방 배치와 저장 슬롯, 랭킹은 그대로 남습니다.</small>
+  <div class="askRow"><button id="optResetOk">🧨 초기화</button><button id="optResetNo">✕ 취소</button></div>
+</div>
 <div id="addRoom"><div id="addPanel">
   <div class="optTitle">새 방 배치</div>
   <div class="addRow" style="margin:0 0 6px"><button data-lv="-1">▼ 아래층</button><span id="addLevel">1층</span><button data-lv="1">▲ 위층</button></div>
-  <canvas id="addMap" width="440" height="360"></canvas>
+  <div class="addBody"><canvas id="addMap" width="440" height="360"></canvas><div id="addList"></div></div>
   <div id="addNote"></div>
   <div class="addRow">
     <button data-size="w-">가로 −2m</button><button data-size="w+">가로 +2m</button>
     <button data-size="d-">세로 −2m</button><button data-size="d+">세로 +2m</button>
   </div>
-  <div class="addRow"><button id="addOk">배치</button><button id="addClose">🚫 폐쇄</button><button id="addNew">＋ 새 방</button><button id="addCancel">취소</button></div>
+  <div class="addRow"><button id="addOk">배치</button><button id="addClose">🚫 폐쇄</button><button id="addNew">＋ 새 방</button><button id="addCancel">닫기</button></div>
   <p class="srTip" style="text-align:center">칸을 끌거나 방향키로 옮기세요 · 1m 격자 · 벽이 2m 이상 맞닿아야 연결됩니다</p>
 </div></div>
 <div id="showroom">
@@ -539,44 +795,74 @@
     <div id="srTabs">
       <button data-tab="gear" class="on">장비</button>
       <button data-tab="wear">의상</button>
-      <button data-tab="room">공간</button>
+      <button data-tab="room">방 설정</button>
+      <button data-tab="paint">벽 칠하기</button>
+      <button data-tab="view">풍경</button>
+      <button data-tab="furn">가구</button>
     </div>
     <div id="srInv"></div>
     <div id="srRoomPane">
-      <div class="srHead">내 방</div>
-      <div id="srSlots"></div>
-      <div class="srHead">방 이름</div>
-      <input id="srRoomName" maxlength="16" placeholder="MY ROOM">
-      <div class="srHead">방 크기 (높이 3m · 줄이기 불가)</div>
-      <div id="srSizes"></div>
-      <div class="srHead">벽·바닥 색상</div>
-      <div id="srSurf"></div>
-      <div id="srPal"></div>
-      <div class="srHead">창밖 풍경</div>
-      <div id="srBg"></div>
-      <div class="srHead">가구</div>
-      <div id="srFurn"></div>
-      <div id="srRoomBtns">
-        <button id="srRot">회전 R</button>
-        <button id="srDel">제거 Del</button>
+      <div class="srSec" data-sec="room">
+        <div class="srHead">내 방</div>
+        <div id="srSlots"></div>
+        <div class="srHead">방 이름</div>
+        <button id="srRename" class="wideBtn">✎ <b id="srRoomNameLbl">MY ROOM</b> — 이름 변경</button>
+        <button id="srMapEdit" class="wideBtn">▭ 배치 편집</button>
       </div>
-      <div id="srRoomBtns2">
-        <button id="srSave">💾 방 저장</button>
-        <button id="srClear">🧹 방 비우기</button>
-        <button id="srReset2">🧨 전체 초기화</button>
-        <button id="srCloseRoom">🚫 방 폐쇄</button>
+      <div class="srSec" data-sec="paint">
+        <div class="srHead">벽·바닥 색상</div>
+        <div id="srSurf"></div>
+        <div id="srPal"></div>
+        <p class="srTip">면을 고르고 색을 누르세요. 3D 화면에서 벽·바닥·천장을 직접 클릭해도 골라집니다.</p>
       </div>
-      <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 놓인 가구를 클릭하면 회전·제거 메뉴가 뜹니다.</p>
+      <div class="srSec" data-sec="view">
+        <div class="srHead">창밖 풍경</div>
+        <div id="srBg"></div>
+        <p class="srTip">창문을 놓으면 고른 풍경이 보이고, 실내 조명 색도 함께 바뀝니다.</p>
+      </div>
+      <div class="srSec" data-sec="furn">
+        <div class="srHead">가구</div>
+        <div id="srFurn"></div>
+        <p class="srTip">가구를 고르고 바닥을 클릭하면 10cm 격자에 맞춰 놓입니다. 놓인 가구를 클릭하면 이동·회전·제거 메뉴가 뜹니다. (R 회전 · Del 제거)</p>
+      </div>
     </div>
   </div>
   <canvas id="srMap" width="352" height="352"></canvas>
   <div id="srMapLv">1F</div>
   <div id="srMapZoom">🔍 1.0×</div>
-  <div id="srMapEdit" title="방 배치 편집">✏ 배치 편집</div>
-  <div id="srConfirm"><span id="srConfirmMsg"></span><button id="srOkBtn">✔ 승인</button><button id="srNoBtn">✕ 취소</button></div>
+  <div id="srNameAsk">
+    <span>방 이름 변경</span>
+    <input id="srNameAskInput" maxlength="16" placeholder="MY ROOM">
+    <small id="srNameCost"></small>
+    <div class="askRow"><button id="srNameAskOk">✔ 확인</button><button id="srNameAskNo">✕ 취소</button></div>
+  </div>
+  <div id="srLoadMenu">
+    <span>저장 슬롯 <b id="srHeads"><img class="hc" src="assets/headcoin.png" alt="헤드"> 0</b></span>
+    <div id="srLoadList"></div>
+    <button id="srLoadClose">✕ 닫기</button>
+  </div>
+  <div id="srSaveAsk">
+    <span>이 슬롯에 저장할 이름</span>
+    <input id="srSaveAskName" maxlength="16" placeholder="MY ROOM">
+    <div class="askRow"><button id="srSaveAskOk">✔ 확인</button><button id="srSaveAskNo">✕ 취소</button></div>
+  </div>
+  <div id="srLeave">
+    <span>저장하지 않은 변경사항이 있습니다</span>
+    <button id="srLeaveSave">💾 저장하고 나가기</button>
+    <button id="srLeaveDrop">✕ 저장 안 함</button>
+    <button id="srLeaveStay">↩ 계속 편집</button>
+  </div>
   <div id="srModes">
     <button data-mode="pose" class="on">🧍 포즈모드</button>
     <button data-mode="live">🚶 생활모드</button>
+  </div>
+  <div id="srLiveBar">
+    <button data-act="save">💾 변경사항 저장</button>
+    <button data-act="undo" disabled>↩ 실행 취소</button>
+    <button data-act="load">📂 불러오기</button>
+    <button data-act="clear">🧹 방 비우기</button>
+    <button data-act="reset">🧨 전체 초기화</button>
+    <button data-act="close">🚫 방 폐쇄</button>
   </div>
   <div id="srBottom">
     <div class="srBtn" id="srSpin">회전 ⟳</div>
@@ -586,8 +872,10 @@
   <div id="srCtx">
     <button data-ctx="move">🖐 이동</button>
     <button data-ctx="img" style="display:none">🖼 이미지</button>
+    <button data-ctx="size" style="display:none">📐 크기 수정</button>
     <button data-ctx="rot">⟳ 회전</button>
     <button data-ctx="del">🗑 제거</button>
+    <button data-ctx="delAll" style="display:none">🧹 모두 제거</button>
     <button data-ctx="close">✕ 닫기</button>
   </div>
   <div id="srHint">좌드래그 회전 · 우드래그 카메라 이동 · 휠 확대(쇄골 기준) · 좌측 슬롯을 누르면 해당 부위를 비춥니다</div>
@@ -595,9 +883,10 @@
 <div id="shopMenu">
   <h3>업그레이드 상점</h3>
   <div id="shopCoins">보유 코인: <b id="shopCoinN">0</b> 🪙</div>
+  <div id="shopTabs"></div>
   <div id="upgList"></div>
   <div id="itemList"></div>
-  <p class="shopHint">레벨당 기본 성능 +5% · 킬로 코인 획득</p>
+  <p class="shopHint">탭마다 강화 항목이 다릅니다 · 적을 잡으면 코인 획득</p>
 </div>
 <div id="mobileUI">
   <div id="joyZone"></div>
@@ -625,9 +914,11 @@
     <span class="key"><b>좌클릭</b> 사격</span>
     <span class="key"><b>우클릭</b> 줌</span>
     <span class="key"><b>R</b> 재장전</span>
-    <span class="key"><b>1</b> 총</span>
-    <span class="key"><b>2</b> 수류탄</span>
-    <span class="key"><b>3</b> 지뢰</span>
+    <span class="key"><b>1</b> 소총</span>
+    <span class="key"><b>2</b> 권총+방패</span>
+    <span class="key"><b>3</b> 수류탄</span>
+    <span class="key"><b>4</b> 지뢰</span>
+    <span class="key"><b>휠클릭</b> 리본 (11단계)</span>
     <span class="key"><b>F</b> 마커</span>
   </div>
 </div>
@@ -638,9 +929,9 @@
       <div class="mapCard">
         <div class="shot">
           <img src="assets/prev_plaza.jpg" alt="">
-          <div class="chip">WAVE <b>1</b> — 9마리 남음</div>
+          <div class="chip">단계 <b>1</b> — 9마리 남음</div>
         </div>
-        <div class="desc">광장형태의 맵에서 웨이브를 방어하며 언제든 성장!</div>
+        <div class="desc">광장형태의 맵에서 몰려오는 단계를 방어하며 언제든 성장!</div>
       </div>
       <div class="menuBtn primary" data-startmap="plaza"><span>🏛&nbsp; 광장</span></div>
     </div>
@@ -648,13 +939,15 @@
       <div class="mapCard">
         <div class="shot">
           <img src="assets/prev_random.jpg" alt="">
-          <div class="chip floor">FLOOR <b>2</b> · 55s</div>
+          <div class="chip floor">단계 <b>2</b> · 55s</div>
         </div>
-        <div class="desc">랜덤맵에서 포탈을 타고 층을 올라갈 때 성장!</div>
+        <div class="desc">랜덤맵에서 포탈을 타고 단계를 올라갈 때 성장!</div>
       </div>
       <div class="menuBtn" data-startmap="random"><span>🎲&nbsp; 랜덤 맵</span></div>
+      <div class="menuBtn tpBtn" id="tpOpen"><span>🌀&nbsp; 던전 이동</span></div>
     </div>
   </div>
+  <div class="menuBtn" id="mapBack"><span>◂&nbsp; 뒤로</span></div>
 </div>
 <div id="brief">
   <h3 id="briefTitle">광장</h3>
@@ -664,11 +957,32 @@
     <div class="menuBtn primary" id="briefGo"><span>▶&nbsp; 시작</span></div>
   </div>
 </div>
+<div id="gearGot">
+  <div class="gBox">
+    <div class="gHd">새 장비 획득</div>
+    <div class="gSlot"><i id="gearKey">2</i><span id="gearIcon">🔫🛡</span></div>
+    <div class="gName" id="gearName">권총 + 방패</div>
+    <div class="gDesc" id="gearDesc"></div>
+    <div class="menuBtn primary" id="gearOk"><span>확인</span></div>
+  </div>
+</div>
+<div id="curTop">
+  <span class="cur coin">🪙 <b id="curCoin">0</b></span>
+  <span class="cur head"><img class="hc" src="assets/headcoin.png" alt="헤드"> <b id="curHead">0</b></span>
+</div>
+<div id="tpMenu">
+  <div class="tpBox">
+    <h3>던전 이동</h3>
+    <p class="tpHint">내려가 본 층으로 바로 시작합니다 · 최고 기록 <b id="tpDeep">1</b>층</p>
+    <div id="tpList"></div>
+    <button id="tpClose">닫기</button>
+  </div>
+</div>
 <div id="pauseOv">
   <div id="pauseBtns">
     <div class="menuBtn primary" id="btnResume"><span>▶&nbsp; 되돌아가기</span></div>
+    <div class="menuBtn" id="btnQuit"><span>⏻&nbsp; 게임 종료</span></div>
   </div>
-  <div class="menuBtn" id="btnQuit"><span>⏻&nbsp; 게임 종료</span></div>
 </div>
 <div id="rankMenu">
   <h3>TOP 10</h3>
