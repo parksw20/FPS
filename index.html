@@ -69,28 +69,28 @@
   #rSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); line-height:0}
   #rSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7df3ff; border-radius:4px; padding:1px 5px}
   #rSlot.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.5)}
-  #pSlot{position:absolute; left:50%; margin-left:150px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #pSlot{position:absolute; left:50%; margin-left:160px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
   #pSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:1.5rem; white-space:nowrap}
   #pSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7df3ff; border-radius:4px; padding:1px 5px}
   #pSlot.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.5)}
   #pSlot.empty{opacity:.3; filter:grayscale(.85); cursor:default}
   #ammo.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.45)}
-  #gSlot{position:absolute; left:50%; margin-left:232px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #gSlot{position:absolute; left:50%; margin-left:252px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(126,224,163,.3); border-radius:12px}
   #gSlot img{width:100%; height:100%; object-fit:contain; padding:6px; box-sizing:border-box}
   #gSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7ee0a3; border-radius:4px; padding:1px 5px}
   #gSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffd76b; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
   #gSlot.empty{opacity:.35; filter:grayscale(.8)}
   #gSlot.active{border-color:#7ee0a3; box-shadow:0 0 16px rgba(126,224,163,.5)}
-  #mSlot{position:absolute; left:50%; margin-left:314px; bottom:66px; width:76px; height:76px;
+  #mSlot{position:absolute; left:50%; margin-left:344px; bottom:66px; width:76px; height:76px;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(255,90,60,.35); border-radius:12px}
   #mSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
   #mSlot.empty{opacity:.35; filter:grayscale(.8)}
   #mSlot.active{border-color:#ff7a4d; box-shadow:0 0 16px rgba(255,110,60,.55)}
   #mSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#ff8a5c; border-radius:4px; padding:1px 5px}
   #mSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffb08a; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
-  #wSlot{position:absolute; left:50%; margin-left:396px; bottom:66px; width:76px; height:76px; pointer-events:none;
+  #wSlot{position:absolute; left:50%; margin-left:436px; bottom:66px; width:76px; height:76px; pointer-events:none;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(255,120,190,.45); border-radius:12px}
   #wSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
   #wSlot .gKey{position:absolute; left:4px; top:3px; font-size:.66rem; font-weight:800; color:#2a0812; background:#ff5fa8; border-radius:4px; padding:1px 5px}
@@ -101,7 +101,7 @@
   .cdOv i{font-style:normal; font-size:1.5rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums;
     text-shadow:0 0 8px #000, 0 2px 5px #000}
   #wSlot.empty{opacity:.32; filter:grayscale(.8)}
-  #kSlot{position:absolute; left:50%; margin-left:478px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #kSlot{position:absolute; left:50%; margin-left:528px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
   #kSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem; line-height:0}
   #kSlot .mIcon img{width:46px; height:46px; display:block}
@@ -122,7 +122,7 @@
   #floorHud b{color:#fff; font-size:1.8rem}
   #floorHud.danger{border-color:rgba(255,70,70,.8); color:#ff9a9a; animation:floorPulse 1s infinite}
   @keyframes floorPulse{0%,100%{box-shadow:0 0 6px rgba(255,60,60,.4)}50%{box-shadow:0 0 22px rgba(255,60,60,.9)}}
-  #seedTag{position:absolute; left:18px; top:330px; display:none; font-size:.78rem; letter-spacing:.18em;
+  #seedTag{position:absolute; left:18px; top:374px;   /* 단계 배지 아래 */ display:none; font-size:.78rem; letter-spacing:.18em;
     color:#7ee0a3; opacity:.8; text-shadow:0 0 8px rgba(0,0,0,.9)}
   #beaconHud{position:absolute; left:50%; top:calc(50% - 240px); transform:translate(-50%,-50%); display:none;
     background:rgba(10,14,20,.6); border:1px solid rgba(255,213,74,.5); border-radius:10px; padding:7px 16px;
@@ -393,8 +393,8 @@
   #srMapLv{position:absolute; left:36px; top:auto; bottom:330px; display:none; z-index:24; pointer-events:none;   /* 미니맵 좌상단 */
     padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
-  #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:8px; z-index:23}
-  #srModes button{padding:8px 16px; cursor:pointer; font-size:.82rem; color:#bfe9f7; border-radius:8px;
+  #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:16px; z-index:23}
+  #srModes button{padding:16px 32px; cursor:pointer; font-size:1.64rem; white-space:nowrap; color:#bfe9f7; border-radius:16px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
   #srModes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srCtx{position:fixed; z-index:24; display:none; min-width:118px; padding:5px; border-radius:8px;
@@ -470,7 +470,7 @@
   #srBottom .srBtn{padding:9px 16px; cursor:pointer; font-size:.85rem; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
   #srBottom .srBtn:hover{border-color:#7df3ff; background:rgba(64,214,255,.16)}
-  #fpsHud{position:absolute; left:18px; top:372px; display:none; padding:3px 8px; border-radius:6px;   /* 미니맵·단계 표시 밑 */
+  #fpsHud{position:absolute; left:18px; top:398px; display:none; padding:3px 8px; border-radius:6px;   /* 미니맵·단계 표시 밑 */
     font-size:.78rem; color:#7ee0a3; background:rgba(4,12,18,.75); border:1px solid rgba(126,224,163,.35)}
   #srHint{position:absolute; left:50%; bottom:6px; transform:translateX(-50%); font-size:.72rem; color:#7aa8bd}
   #srName{position:absolute; left:50%; top:56px; transform:translateX(-50%); font-size:.78rem; letter-spacing:.2em; color:#9fb0c4}
@@ -530,7 +530,7 @@
     color:#0a0e14; background:#7df3ff; border-radius:6px; padding:2px 10px}
   #gearGot .gName{font-size:1.6rem; font-weight:800; color:#eaf9ff; text-shadow:0 0 16px rgba(64,214,255,.6)}
   #gearGot .gDesc{max-width:420px; font-size:.9rem; line-height:1.6; color:#9fb0c4}
-  #gearGot .menuBtn{margin-top:6px; min-width:200px}
+  #gearGot .menuBtn{margin-top:6px; min-width:200px; text-align:center}
   @keyframes gearPop{0%{transform:scale(.4); opacity:0} 60%{transform:scale(1.12)} 100%{transform:scale(1); opacity:1}}
   .tpBtn{margin-top:10px; border-color:rgba(190,140,255,.7); box-shadow:0 0 14px rgba(170,120,255,.35), inset 0 0 12px rgba(170,120,255,.12)}
   .tpBtn span{color:#e6d5ff; text-shadow:0 0 10px rgba(180,130,255,.85)}
@@ -626,6 +626,12 @@
   #upgList button:disabled, #itemList button:disabled{opacity:.4; cursor:default}
   #itemList button{border-color:rgba(255,180,90,.5); box-shadow:0 0 10px rgba(255,170,80,.2), inset 0 0 8px rgba(255,170,80,.08)}
   #itemList button:hover:not(:disabled){border-color:#ffc078; background:rgba(255,170,80,.16); box-shadow:0 0 18px rgba(255,170,80,.45)}
+  .rankTabs{display:flex; gap:8px; justify-content:center; margin:2px 0 10px}
+  .rankTabs button{min-width:132px; padding:7px 12px; border-radius:9px; cursor:pointer; font-size:.8rem; font-weight:700;
+    color:#bfe9f7; background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
+  .rankTabs button:hover{border-color:#7df3ff; background:rgba(64,214,255,.16)}
+  .rankTabs button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.55)}
+  .rankCap{font-size:.72rem; letter-spacing:.2em; color:#9fb0c4; text-align:center; margin-bottom:6px}
   #rankList{margin-top:14px; text-align:left; min-width:250px}
   #rankList h3{font-size:.8rem; letter-spacing:.2em; color:#9fb0c4; margin-bottom:6px; text-align:center}
   .rankRow{display:flex; gap:8px; align-items:baseline; padding:3px 6px; border-radius:6px; font-variant-numeric:tabular-nums}
@@ -692,7 +698,7 @@
   <div id="stats">HP <span id="hpT">100</span><div class="hpbar"><div class="hpfill" id="hpF"></div></div></div>
   <div id="ammo"><span id="ammoN">20</span> <small>/ ∞ &nbsp;[R] 재장전</small></div>
   <div id="rSlot"><span class="gKey">1</span><span class="mIcon"><svg viewBox="0 0 40 24" width="42" height="26" aria-hidden="true"><rect x="3" y="9.5" width="30" height="3.4" rx="1" fill="#8a929c"/><rect x="30" y="8.4" width="7" height="2" rx="1" fill="#b9c2cc"/><rect x="12" y="12.5" width="6.5" height="7" rx="1.2" fill="#5c646e"/><path d="M3 9.5 L3 13 L9 15.5 L9 12.9 Z" fill="#6b7480"/><rect x="19" y="7" width="9" height="2.2" rx="1" fill="#5c646e"/></svg></span></div>
-  <div id="pSlot"><span class="gKey">2</span><span class="mIcon">🔫🛡</span></div>
+  <div id="pSlot"><span class="gKey">2</span><span class="mIcon">🔫🛡️</span></div>
   <div id="gSlot"><span class="gKey">3</span><img id="gImg" alt=""><span class="gCnt" id="gCnt">0</span></div>
   <div id="mSlot" class="empty"><span class="gKey">4</span><span class="mIcon">🧨</span><span class="gCnt" id="mCnt">0</span></div>
   <div id="wSlot" class="empty"><span class="gKey">휠</span><span class="mIcon">🎀</span><span class="gCnt" id="wCnt">3</span></div>
@@ -753,6 +759,7 @@
     <div class="optRow">
       <button id="dbgDeco" class="tog">방꾸미기 모드</button>
       <button id="dbgFps" class="tog">FPS 표시</button>
+      <button id="dbgPieces" class="tog">벽·바닥 조각 표시</button>
     </div>
   </div>
   <h3>데이터</h3>
@@ -764,7 +771,7 @@
 </div>
 <div id="optResetAsk">
   <span>정말 초기화할까요?</span>
-  <small>코인·헤드코인·업그레이드가 처음 상태로 돌아갑니다.<br>방 배치와 저장 슬롯, 랭킹은 그대로 남습니다.</small>
+  <small>코인·헤드코인·업그레이드, 획득한 장비(권총+방패·리본), 던전 최고 층 기록이 처음 상태로 돌아갑니다.<br>방 배치와 저장 슬롯, 랭킹은 그대로 남습니다.</small>
   <div class="askRow"><button id="optResetOk">🧨 초기화</button><button id="optResetNo">✕ 취소</button></div>
 </div>
 <div id="addRoom"><div id="addPanel">
@@ -928,23 +935,23 @@
     <div class="mapCol">
       <div class="mapCard">
         <div class="shot">
+          <img src="assets/prev_random.jpg" alt="">
+          <div class="chip floor">단계 <b>2</b> · 55s</div>
+        </div>
+        <div class="desc">포탈을 타고 층을 내려갈수록 강해지는 곳 — 장비도 여기서 얻습니다!</div>
+      </div>
+      <div class="menuBtn primary" data-startmap="random"><span>👹&nbsp; 악의 소굴</span></div>
+      <div class="menuBtn tpBtn" id="tpOpen"><span>🌀&nbsp; 던전 이동</span></div>
+    </div>
+    <div class="mapCol">
+      <div class="mapCard">
+        <div class="shot">
           <img src="assets/prev_plaza.jpg" alt="">
           <div class="chip">단계 <b>1</b> — 9마리 남음</div>
         </div>
         <div class="desc">광장형태의 맵에서 몰려오는 단계를 방어하며 언제든 성장!</div>
       </div>
-      <div class="menuBtn primary" data-startmap="plaza"><span>🏛&nbsp; 광장</span></div>
-    </div>
-    <div class="mapCol">
-      <div class="mapCard">
-        <div class="shot">
-          <img src="assets/prev_random.jpg" alt="">
-          <div class="chip floor">단계 <b>2</b> · 55s</div>
-        </div>
-        <div class="desc">랜덤맵에서 포탈을 타고 단계를 올라갈 때 성장!</div>
-      </div>
-      <div class="menuBtn" data-startmap="random"><span>🎲&nbsp; 랜덤 맵</span></div>
-      <div class="menuBtn tpBtn" id="tpOpen"><span>🌀&nbsp; 던전 이동</span></div>
+      <div class="menuBtn" data-startmap="plaza"><span>🏛&nbsp; 광장</span></div>
     </div>
   </div>
   <div class="menuBtn" id="mapBack"><span>◂&nbsp; 뒤로</span></div>
@@ -960,7 +967,7 @@
 <div id="gearGot">
   <div class="gBox">
     <div class="gHd">새 장비 획득</div>
-    <div class="gSlot"><i id="gearKey">2</i><span id="gearIcon">🔫🛡</span></div>
+    <div class="gSlot"><i id="gearKey">2</i><span id="gearIcon">🔫🛡️</span></div>
     <div class="gName" id="gearName">권총 + 방패</div>
     <div class="gDesc" id="gearDesc"></div>
     <div class="menuBtn primary" id="gearOk"><span>확인</span></div>
@@ -985,7 +992,7 @@
   </div>
 </div>
 <div id="rankMenu">
-  <h3>TOP 10</h3>
+  <h3>랭킹</h3>
   <div id="rankMenuList"></div>
 </div>
 <script type="importmap">
