@@ -5664,11 +5664,7 @@ function furnMesh(type, it) {
     top.position.y = f.h + 0.03;
     grp.add(top);
   }
-  if (f.glow) {
-    const lamp = new THREE.PointLight(f.color, LAMP_I * (f.litW ?? 1), 3);   // 세기는 가구별 litW에 비례 · 도달 3m
-    lamp.position.y = f.h * 0.9;
-    grp.add(lamp);
-  }
+  if (f.glow) grp.userData.lamp = { color: f.color, i: LAMP_I * (f.litW ?? 1), dist: 3, y: f.h * 0.9 };   // 빛은 고정 풀에서 (세기는 litW 비례 · 도달 3m)
   grp.userData.type = type;
   return grp;
 }
@@ -7672,6 +7668,7 @@ function buildWorld() {                  // 현재 방에서 문·계단으로 �
     if (!inAny) { live.x = homeRoom.cx; live.z = homeRoom.cz; live.y = homeRoom.cy || 0; live.vy = 0; live.active = homeRoom.slot; }
   }
   syncGuides();
+  srWarm();
   if (linkNotes.length) { toast('🚪 ' + linkNotes[0]); linkNotes.length = 0; }
   const home = curRoom();
   const wantDist = Math.max(4.2, Math.max(roomW(home), roomD(home)) * 0.85 + 1.8);
@@ -8475,6 +8472,33 @@ const SR_SPECIAL = [                      // 스페셜 포즈 — 아직 전부 
 ];
 let srSpecial = null;
 let srPose = 0;
+const SR_LIGHT_N = 10, srLightPool = [];
+const _srLampPos = new THREE.Vector3();
+function syncSrLights() {                 // 보이는 조명 가구에 풀 조명을 배정 (가까운 순) · 나머지는 끔
+  if (!srScene) return;
+  const want = [];
+  srScene.traverse(o => {
+    const L = o.userData.lamp; if (!L) return;
+    let p = o; while (p) { if (!p.visible) return; p = p.parent; }
+    o.getWorldPosition(_srLampPos);
+    want.push({ x: _srLampPos.x, y: _srLampPos.y + L.y, z: _srLampPos.z, L, d: Math.hypot(_srLampPos.x - live.x, _srLampPos.z - live.z) });
+  });
+  if (want.length > SR_LIGHT_N) want.sort((a, b) => a.d - b.d);
+  for (let i = 0; i < SR_LIGHT_N; i++) {
+    const l = srLightPool[i], w = want[i];
+    if (!w) { l.intensity = 0; continue; }
+    l.position.set(w.x, w.y, w.z); l.color.setHex(w.L.color); l.intensity = w.L.i; l.distance = w.L.dist;
+  }
+}
+function srWarm() {                       // 방을 세운 직후 모든 방을 잠깐 보이게 하고 셰이더를 미리 컴파일 — 걷다가 방이 나타날 때 멈추지 않게
+  if (!srScene) return;
+  const saved = [];
+  srScene.traverse(o => { if (!o.visible) { saved.push(o); o.visible = true; } });
+  syncSrLights();
+  try { renderer.compile(srScene, srCam); } catch { }
+  srScene.traverse(o => { const m = o.material; if (!m) return; for (const k of ['map', 'emissiveMap', 'alphaMap']) if (m[k]?.isTexture) { try { renderer.initTexture(m[k]); } catch { } } });
+  for (const o of saved) o.visible = false;
+}
 function srBuild() {
   if (srScene || !playerGltf) return;
   srScene = new THREE.Scene();
@@ -8486,6 +8510,8 @@ function srBuild() {
   const sunL = new THREE.DirectionalLight(0xffeedd, 2.2); sunL.position.set(2.6, 4, 2.4); srScene.add(sunL);
   srStageLights = [hemi, sunL];
   for (const l of srStageLights) l.userData.base = l.intensity;   // 캐릭터에 붙던 스포트는 사용하지 않는다
+  // 고정 점광원 풀 — 방이 보이고 숨을 때 조명 수가 바뀌면 모든 셰이더가 다시 컴파일돼(방 하나 나올 때 0.5초 정지) 수를 고정한다
+  for (let i = 0; i < SR_LIGHT_N; i++) { const l = new THREE.PointLight(0xffffff, 0, 1); srScene.add(l); srLightPool.push(l); }
   srRoot = skClone(playerGltf.scene);
   srRoot.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; } });
   srScene.add(srRoot);
@@ -8648,6 +8674,7 @@ function srUpdate(dt) {
     srMixer.update(dt);
     roomUpdate();
     liveStep(dt);
+    syncSrLights();
     renderer.render(srScene, srCam);
     return;
   }
@@ -8660,6 +8687,7 @@ function srUpdate(dt) {
   srView.dist += (srTarget.dist - srView.dist) * Math.min(1, dt * 6);
   srClampView();
   srApplyCam();
+  syncSrLights();
   renderer.render(srScene, srCam);
 }
 // 입력: 드래그 회전 · 휠 확대 · 버튼
@@ -9378,7 +9406,7 @@ window.__game = {
     for (let f = 0; f < n; f++) {
       Object.assign(keys, k);
       const p0 = renderer.info.programs.length, t0 = performance.now();
-      srMixer.update(1 / 60); roomUpdate(); liveStep(1 / 60);
+      srMixer.update(1 / 60); roomUpdate(); liveStep(1 / 60); syncSrLights();
       const t1 = performance.now(); renderer.render(srScene, srCam); const t2 = performance.now();
       const ms = t2 - t0; if (ms > worst) worst = ms;
       if (ms > thresh) out.push({ f, ms: +ms.toFixed(1), upd: +(t1 - t0).toFixed(1), render: +(t2 - t1).toFixed(1), newProgs: renderer.info.programs.length - p0, lights: visLights(), x: +live.x.toFixed(1), z: +live.z.toFixed(1) });
