@@ -2273,8 +2273,8 @@ function hideWeapon(sec) {
   hideWeapon._t = setTimeout(applyWeaponLook, sec * 1000);
 }
 const pendingThrows = []; // 릴리즈 예약 — 마우스 업 0.5초 뒤 실제 발사
-// 홀드 투척: 마우스 다운 → toss grenade를 1초 지점까지 정속 재생 후 정지 유지, 업 → 나머지를 3배속으로 빠르게 재생하며 투척
-const WIND_HOLD_T = 1.0;                 // 대기 지점 (클립 시간)
+// 홀드 투척: 마우스 다운 → toss grenade를 0.8초 지점까지 정속 재생 후 정지 유지, 업 → 나머지를 3배속으로 빠르게 재생하며 투척
+const WIND_HOLD_T = 0.8;                 // 대기 지점 (클립 시간) — 마우스 다운 0.8초면 자세가 잡힌다
 const WIND_SPEED = 1;                    // 대기 지점까지 재생 속도
 const REL_SPEED = 3;                     // 놓은 뒤 나머지 재생 속도
 const THROW_CLIP_T = 2.0;                // 클립에서 수류탄이 손을 떠나는 순간
