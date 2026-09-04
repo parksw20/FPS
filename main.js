@@ -3692,7 +3692,7 @@ function banner(text) {
 let camMode = localStorage.getItem('fps.view') || 'shoulder';  // 기본: 3인칭 숄더뷰
 if (camMode === 'tps') camMode = 'shoulder';                    // 구버전 저장값 호환
 let ctrlMode = localStorage.getItem('fps.ctrl') || 'pc';       // 'pc' | 'mobile'
-let fireMode = localStorage.getItem('fps.fire') || 'btn';      // 'btn' 버튼 | 'jog' 눌러서 발사+시점
+let fireMode = { btn: 'only', jog: 'look' }[localStorage.getItem('fps.fire')] || localStorage.getItem('fps.fire') || 'look';   // 사격 조그: 'only' 사격만 | 'look' 사격 + 시야 변경 (기본)
 const isMobileCtrl = () => ctrlMode === 'mobile';
 let started = false;                                            // 모바일 모드 게임 시작 여부
 const optMenu = document.getElementById('optMenu');
@@ -3904,7 +3904,7 @@ function applyView() {
 }
 function applyCtrl() {
   document.body.classList.toggle('mobile', isMobileCtrl());
-  document.body.classList.toggle('fireJog', fireMode === 'jog');
+  document.body.classList.toggle('fireJog', fireMode === 'look');
   if (isMobileCtrl() && document.pointerLockElement) document.exitPointerLock();
   refreshOverlay();
 }
@@ -4145,8 +4145,8 @@ mb('mbFire').addEventListener('pointerdown', e => {
   firing = true;
 });
 let fireJogId = null, fireJogLast = null;
-mb('mbFire').addEventListener('pointerdown', e => {
-  if (fireMode !== 'jog') return;
+mb('mbFire').addEventListener('pointerdown', e => {   // 사격 조그: 누른 채 끌면 시야도 돈다 ('사격만'이면 회전 없음)
+  if (fireMode !== 'look') return;
   fireJogId = e.pointerId; fireJogLast = [e.clientX, e.clientY];
   try { mb('mbFire').setPointerCapture(fireJogId); } catch { }
 });

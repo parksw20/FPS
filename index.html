@@ -662,8 +662,6 @@
   body.mobile #mobileUI{display:block}
   #joy{position:fixed; left:76px; bottom:76px; width:150px; height:150px; border-radius:50%; z-index:35; pointer-events:auto; touch-action:none;
     background:rgba(10,14,20,.4); border:1px solid rgba(126,224,163,.3)}
-  #joy.armed{border-color:#ffd76b; background:rgba(255,215,107,.16); box-shadow:0 0 22px rgba(255,215,107,.5)}
-  #joy.armed #joyStick{background:rgba(255,215,107,.4); border-color:#ffd76b}
   body.mobile.fireJog #mbFire{background:rgba(217,83,79,.28); border-style:dashed}
   #mobOpt{display:none}
   body.mobile #mobOpt{display:block}
@@ -738,8 +736,8 @@
   <div id="mobOpt">
     <h3>모바일 · 사격</h3>
     <div class="optRow">
-      <button data-fire="btn">현재 형태</button>
-      <button data-fire="jog">조그 형태</button>
+      <button data-fire="only">사격만</button>
+      <button data-fire="look">사격 및 시야 변경</button>
     </div>
   </div>
   <div id="dbgWrap">
