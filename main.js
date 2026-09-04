@@ -7969,11 +7969,11 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   }
   ceilGrp.userData.ceiling = true;
   grp.add(ceilGrp);
-  // 기본 천장등 2개 — 가구와 무관하게 방마다 달려 있어 처음 들어와도 캐릭터가 잘 보인다 (빛은 고정 조명 풀에서)
+  // 기본 천장등 4개 — 가구와 무관하게 방마다 달려 있어 처음 들어와도 캐릭터가 잘 보인다 (빛은 고정 조명 풀에서)
   const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2a8, emissiveIntensity: 1.2, roughness: 0.6 });
-  for (const lx of [-W / 4, W / 4]) {
+  for (const [lx, lz] of [[-W / 4, -D / 6], [W / 4, -D / 6], [-W / 4, D / 3], [W / 4, D / 3]]) {   // 뒤쪽 2개 + 앞쪽(카메라 쪽) 2개 — 캐릭터 앞면도 밝게
     const fix = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.06, 20), lampMat);
-    fix.position.set(lx, h - 0.03, 0);
+    fix.position.set(lx, h - 0.03, lz);
     fix.userData.lamp = { color: 0xfff1cc, i: LAMP_I * 0.45, dist: 5.5, y: -0.3 };
     fix.userData.builtin = true;
     grp.add(fix);
