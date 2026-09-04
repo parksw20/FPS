@@ -397,28 +397,22 @@ function buildPlaza() {
     const r = rnd(8, ARENA - 8);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const w = rnd(2.6, 4.2), d = rnd(2.6, 4.2);
-    const top = rnd(4.2, 9.5);             // 발판 윗면 높이 — 더 낮게 깔아 리본으로 옮겨 다니기 쉽게
-    const h = 1.1;                         // 발판 두께
+    const bottom = rnd(3.1, 8.4);          // 기둥 아랫면 높이 — 발판은 없다 (올라설 수 있다는 느낌을 주지 않게)
     const grp = new THREE.Group();
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), platMat);   // 올라설 수 있는 바닥
-    slab.position.y = h / 2;
-    slab.castShadow = true; slab.receiveShadow = true;
-    grp.add(slab);
-    const stemH = PLAZA_H - (top);         // 천장까지 이어지는 종유석 몸통
+    const stemH = PLAZA_H - bottom;        // 천장까지 이어지는 종유석 몸통
     const stem = new THREE.Mesh(new THREE.ConeGeometry(Math.min(w, d) * 0.46, stemH, 6), rockMat2);
-    stem.position.y = h + stemH / 2;
+    stem.position.y = stemH / 2;
     stem.rotation.y = rnd(0, Math.PI);
     stem.castShadow = true;
     grp.add(stem);
     const tip = new THREE.Mesh(new THREE.ConeGeometry(Math.min(w, d) * 0.3, 1.2, 6), rockMat2);   // 아래로 뾰족한 끝
     tip.position.y = -0.6; tip.rotation.x = Math.PI;
     grp.add(tip);
-    grp.position.set(x, top - h, z);       // 발판 아랫면 기준
+    grp.position.set(x, bottom, z);        // 기둥 아랫면 기준
     worldGroup.add(grp);
-    const stemW = Math.min(w, d) * 0.92;
-    obstacles.push({ grp, x, z, w, d, h, platform: true, ribbonOnly: true, yOff: top - h,   // 점프로는 못 오른다
-      stem: { w: stemW, d: stemW, y0: top, y1: PLAZA_H },   // 위로 뻗은 몸통 — 여기를 찍어도 발판으로 올라간다
-      raised: false, phase: 1e9, moving: false, from: 0, to: 0, t: 0 });    // 오르내리지 않는 고정 발판
+    const stemW = Math.min(w, d) * 0.8;
+    obstacles.push({ grp, x, z, w: stemW, d: stemW, h: stemH, yOff: bottom, noStand: true,   // 어떤 방법으로도 서지 못한다 · 리본은 찍히되 통과 불가
+      raised: false, phase: 1e9, moving: false, from: 0, to: 0, t: 0 });
   }
   buildSky();                            // 광장에서도 우주·오로라
   mapRadius = ARENA;
@@ -973,6 +967,7 @@ function supportHeight(pos) {
   for (const o of obstacles) {
     if (Math.abs(pos.x - o.x) < o.w / 2 + 0.2 && Math.abs(pos.z - o.z) < o.d / 2 + 0.2) {
       // 리본 전용 발판: 리본으로 올라온 중이거나, 지금 그 위에 서 있을 때만 발판이 된다
+      if (o.noStand) continue;                                  // 종유석 기둥: 절대 발판이 아니다
       if (o.ribbonOnly && !player.ribbonAir && o !== player.standObs) continue;
       const top = o.yOff + o.h;
       if (top <= pos.y + 0.45 && top > s) { s = top; supObs = o; }
@@ -4428,7 +4423,7 @@ function fireChain() {
   for (const o of obstacles) {
     const t = rayAABB(origin, dir, new THREE.Vector3(o.x - o.w / 2, o.yOff, o.z - o.d / 2),
       new THREE.Vector3(o.x + o.w / 2, o.yOff + o.h, o.z + o.d / 2));
-    if (t !== null && t < wallT) { wallT = t; hitObs = o; hitWall = false; }
+    if (t !== null && t < wallT) { wallT = t; hitObs = o.noStand ? null : o; hitWall = !!o.noStand; }   // 기둥은 벽처럼 다룬다
     if (!o.stem) continue;               // 종유석 몸통(위쪽 원뿔)도 같은 발판으로 친다
     const ts = rayAABB(origin, dir, new THREE.Vector3(o.x - o.stem.w / 2, o.stem.y0, o.z - o.stem.d / 2),
       new THREE.Vector3(o.x + o.stem.w / 2, o.stem.y1, o.z + o.stem.d / 2));
@@ -9490,7 +9485,7 @@ window.__game = {
     for (const o of obstacles) {
       const t = rayAABB(origin, dir, new THREE.Vector3(o.x - o.w / 2, o.yOff, o.z - o.d / 2),
         new THREE.Vector3(o.x + o.w / 2, o.yOff + o.h, o.z + o.d / 2));
-      if (t !== null && t < wallT) { wallT = t; hitObs = o; hitWall = false; }
+      if (t !== null && t < wallT) { wallT = t; hitObs = o.noStand ? null : o; hitWall = !!o.noStand; }
       if (!o.stem) continue;
       const ts = rayAABB(origin, dir, new THREE.Vector3(o.x - o.stem.w / 2, o.stem.y0, o.z - o.stem.d / 2),
         new THREE.Vector3(o.x + o.stem.w / 2, o.stem.y1, o.z + o.stem.d / 2));
@@ -9530,6 +9525,10 @@ window.__game = {
   upper() { const w = {}; for (const k in player.actions) { const a = player.actions[k]; if (a.isRunning() && a.getEffectiveWeight() > 0.001) w[k] = +a.getEffectiveWeight().toFixed(2); } return { upperShot: player.upperShot ?? null, loco: player.current?.getClip().name ?? null, weights: w, tracks: { runLower: player.actions['rifle run_lower']?.getClip().tracks.length, reloadUpper: player.actions['reloading_upper']?.getClip().tracks.length, reloadFull: player.actions['reloading']?.getClip().tracks.length } }; },
   sfx() { const st = {}; for (const k of Object.keys(SFX_FILES)) st[k] = sfxBuf[k] ? [+sfxBuf[k].duration.toFixed(2), +(sfxOff[k] ?? 0).toFixed(3)] : (sfxRaw[k] ? 'raw' : 'none'); return { ac: !!AC, latency: AC ? +(AC.baseLatency ?? 0).toFixed(3) : null, files: st }; },
   sfxPlay(name) { audioInit(); return playSample(name); },
+  obs() { return obstacles.map((o, i) => ({ i, x: +o.x.toFixed(1), z: +o.z.toFixed(1), w: o.w, d: o.d, h: +o.h.toFixed(2), top: +(o.yOff + o.h).toFixed(2), ribbonOnly: !!o.ribbonOnly, platform: !!o.platform, stem: !!o.stem, noStand: !!o.noStand })); },
+  air() { return { ribbonAir: !!player.ribbonAir, standObs: player.standObs ? obstacles.indexOf(player.standObs) : null, y: +player.pos.y.toFixed(2), vy: +player.vy.toFixed(2), onGround: player.onGround, x: +player.pos.x.toFixed(1), z: +player.pos.z.toFixed(1) }; },
+  fixCam(aspect = 1.6) { if (!isFinite(camera.aspect) || camera.aspect <= 0) { camera.aspect = aspect; camera.updateProjectionMatrix(); } camera.updateMatrixWorld(true); return { aspect: camera.aspect, pos: camera.position.toArray().map(v => +v.toFixed(2)) }; },
+  gear(p, r) { if (p !== undefined) pistolOwned = !!p; if (r !== undefined) ribbonOwned = !!r; chainUses = Math.max(chainUses, 1); updateRibbonSlot?.(); return { pistolOwned, ribbonOwned, chainUses }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
