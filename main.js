@@ -9,7 +9,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 2배 픽셀은 화면 픽셀 4배 — 1.5배까지만
 let shadowQ = localStorage.getItem('fps.shadowq') || 'mid';    // 'high' 부드러운 2048(매 프레임) · 'mid' 1024 정적 + 적은 그림자 원 · 'off' 끔
 let shadowOn = shadowQ !== 'off';
-let srEditUI = false;                    // 쇼룸 생활모드: '방 편집'을 눌러 우측 패널·저장 버튼을 연 상태
+let srEditUI = false, srRightFolded = false;   // 가구를 고르면 우측 패널을 접는다 · 탭으로 다시 편다
+let touchPick = null, placeDrag = false, placeAskKind = null, suppressClick = false;   // 터치로 잡아 옮기기 · 놓을 때 확인 팝업                    // 쇼룸 생활모드: '방 편집'을 눌러 우측 패널·저장 버튼을 연 상태
 let shopClosed = false;                  // 일시정지 중 상점을 ✕로 닫았나 (다음 일시정지에 초기화)
 let fsLock = localStorage.getItem('fps.fs') !== 'off';   // 전체화면 + 키 잠금 (기본 켬) — Ctrl 조합이 브라우저 단축키로 새지 않게
 renderer.shadowMap.enabled = shadowOn;
@@ -6234,6 +6235,7 @@ function makeWallCross() {                // 벽 위 시작점 표시 (격자 �
   return grp;
 }
 function startPlace(type) {
+  if (srMode === 'live') { srRightFolded = true; syncRightFold(); }   // 놓는 동안 패널을 접는다
   placeType = type; placeRot = 0; setSel(null);
   if (placeMark) { srScene.remove(placeMark); placeMark = null; }
   if (FURN[type].mount === 'ceiling') { placeMark = makePlaceMark(FURN[type]); srScene.add(placeMark); }
@@ -6370,6 +6372,7 @@ function pickFurniture(ev) {
 function setSel(it) {
   if (sizeMode && sizeMode !== it) endSizeEdit();   // 다른 것을 고르면 크기 수정 종료
   srPickSel = it; syncOutline(); roomRenderUI(); syncGuides();
+  if (it && srMode === 'live') { srRightFolded = true; syncRightFold(); }   // 고르면 패널을 접어 화면을 비운다
 }
 function startMove() {                    // 고른 가구를 커서로 옮긴다 (승인해야 저장)
   if (!srPickSel) { toast('옮길 가구를 먼저 고르세요'); return; }
@@ -7418,8 +7421,9 @@ function roomUpdate() {
 
 // ---------- 생활 모드: 문으로 이어진 두 방을 걸어서 오간다 ----------
 let srMode = 'pose';                     // 'pose' 포즈모드 | 'live' 생활모드
-const live = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, camYaw: 0, camPitch: 0.25, camDist: 4.2, active: 0, moving: false, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0 };
-const CAM_YAW_LIM = 0, CAM_PITCH_MIN = 0, CAM_PITCH_MAX = Math.PI / 2;   // 좌우 고정 · 위 90° · 아래 0°
+const live = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, camYaw: 0, camPitch: 15 * Math.PI / 180, camDist: 4.2, active: 0, moving: false, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0 };
+const CAM_FIXED_PITCH = 15 * Math.PI / 180;   // 생활모드 카메라: 15° 내려보는 각도로 고정
+const CAM_YAW_LIM = 0, CAM_PITCH_MIN = CAM_FIXED_PITCH, CAM_PITCH_MAX = CAM_FIXED_PITCH;
 let worldRooms = [];                     // [{slot, cx, cz, size, bg, grp, backdrop, doorAt}]
 let srYard = null;                       // 앞마당 땅
 let liveDoors = [];                      // [{item, room, other, x, z, side, panel, open, t, cooldown}]
@@ -8545,8 +8549,16 @@ function drawRoomMap() {
   }
   c.restore();
 }
+function syncRightFold() {
+  const liveNow = srMode === 'live';
+  const rp = document.getElementById('srRight');
+  const folded = liveNow && srEditUI && srRightFolded;
+  rp.classList.toggle('folded', folded);
+  document.getElementById('srRightTab').classList.toggle('on', folded);
+}
 function srRenderModeUI() {
   const liveNow = srMode === 'live';
+  syncRightFold();
   const mb = document.getElementById('srModeBtn');
   if (mb) { mb.textContent = liveNow ? '🚶 생활모드' : '🧍 포즈모드'; mb.classList.toggle('on', liveNow); mb.title = liveNow ? '포즈모드로 전환' : '생활모드로 전환'; }
   document.body.classList.toggle('srLive', srOn && liveNow);
@@ -8845,13 +8857,29 @@ function srUpdate(dt) {
   const sr = document.getElementById('showroom');
   sr.addEventListener('contextmenu', e => { if (srOn) e.preventDefault(); });
   sr.addEventListener('pointerdown', e => {
-    if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srModes, #srLiveBar, #srMap, #srMapZoom, #srMapLv, #srCtx')) return;
+    if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srModes, #srLiveBar, #srMap, #srMapZoom, #srMapLv, #srCtx, #srRightTab, #srPlaceAsk')) return;
     e.preventDefault();                  // 드래그 중 텍스트가 잡히지 않게
+    if (placeAskKind) return;            // 설치 확인 중에는 장면을 건드리지 않는다
     if (e.button === 2) { srPanDrag = [e.clientX, e.clientY]; return; }   // 우클릭: 카메라 이동
+    if (srMode === 'live' && srEditUI && e.button === 0) {
+      if (placeType && !FURN[placeType].sizable) { placeDrag = true; return; }   // 새 가구: 끌어서 자리를 잡고 떼면 확인
+      if (!placeType && !moveItem && !sizeDrag && isRoomTab(srTab)) {
+        const it = pickFurniture(e);
+        if (it) { touchPick = { it, x: e.clientX, y: e.clientY, moved: false }; return; }   // 놓인 가구: 잡아서 끈다
+      }
+    }
     srDrag = e.clientX; srDragY = e.clientY; srSpin = false;
   });
   addEventListener('pointermove', e => {
     if (!srOn) return;
+    if (touchPick) {                     // 잡은 가구를 손가락/커서 아래로
+      if (!touchPick.moved && Math.hypot(e.clientX - touchPick.x, e.clientY - touchPick.y) > 8) {
+        touchPick.moved = true;
+        hideCtx(); setSel(touchPick.it); startMove();
+      }
+      if (moveItem) { const hit = placePoint(e); if (hit) moveTo(hit.p.x, hit.p.z, hit.host); }
+      return;
+    }
     if (srPanDrag) {                     // 좌우 = 평행 이동, 상하 = 높이
       const k = 0.0022 * srView.dist;
       const y0 = srTarget.y, x0 = srPan.x;
@@ -8864,12 +8892,37 @@ function srUpdate(dt) {
     }
     if (srDrag === null) return;
     if (srMode === 'live') {              // 드래그 방향과 같은 쪽으로 돈다
-      live.camYaw -= (e.clientX - srDrag) * 0.008;
-      live.camPitch += ((srDragY ?? e.clientY) - e.clientY) * -0.004;
+      live.camYaw -= (e.clientX - srDrag) * 0.008;   // 상하는 15° 고정
     } else srYaw += (e.clientX - srDrag) * 0.01;
     srDrag = e.clientX; srDragY = e.clientY;
   });
-  addEventListener('pointerup', e => { srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null; });
+  addEventListener('pointerup', e => {
+    srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null;
+    if (!srOn) return;
+    if (touchPick) {
+      const tp = touchPick; touchPick = null; suppressClick = true;
+      if (tp.moved) openPlaceAsk('move');                           // 끌어다 놓음 → 설치할지 묻는다
+      else { setSel(tp.it); showCtx(e.clientX, e.clientY); }      // 그냥 탭 → 메뉴
+      return;
+    }
+    if (placeDrag) { placeDrag = false; suppressClick = true; if (placeType) openPlaceAsk('place'); }
+  });
+  function openPlaceAsk(kind) {
+    placeAskKind = kind;
+    document.getElementById('srPlaceAsk').classList.add('on');
+  }
+  function closePlaceAsk() { placeAskKind = null; document.getElementById('srPlaceAsk').classList.remove('on'); }
+  document.getElementById('srPlaceOk').addEventListener('click', e => {
+    e.stopPropagation();
+    const k = placeAskKind; closePlaceAsk();
+    if (k === 'move') endMove(true); else if (k === 'place') commitPlace();
+  });
+  document.getElementById('srPlaceNo').addEventListener('click', e => {
+    e.stopPropagation();
+    const k = placeAskKind; closePlaceAsk();
+    if (k === 'move') endMove(false); else if (k === 'place') cancelPlace();
+  });
+  document.getElementById('srRightTab').addEventListener('click', e => { e.stopPropagation(); srRightFolded = false; syncRightFold(); });
   sr.addEventListener('wheel', e => {
     if (!srOn) return;
     if (e.target.closest('#srMap, #srMapEdit, #srMapZoom, #srMapLv')) {      // 미니맵 위에서는 미니맵 배율
@@ -9018,7 +9071,9 @@ function srUpdate(dt) {
     placeGhost.traverse(o => { if (o.isMesh) o.material.color.setHex(bad ? 0xff5a4a : FURN[placeType].color); });
   });
   sr.addEventListener('click', e => {
-    if (!srOn || e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srCtx, #srModes')) return;
+    if (!srOn || e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srCtx, #srModes, #srRightTab, #srPlaceAsk, #srLiveBar')) return;
+    if (suppressClick) { suppressClick = false; return; }   // 터치 잡기/놓기 뒤에 따라오는 click은 무시
+    if (placeAskKind) return;
     if (sizeDrag) return;
     lastCursor = [e.clientX, e.clientY];
     if (moveItem) { endMove(true); return; }
@@ -9075,7 +9130,13 @@ function srUpdate(dt) {
   document.getElementById('srReset2')?.addEventListener('click', e => { e.stopPropagation(); resetRooms(); });
   document.getElementById('srCloseRoom')?.addEventListener('click', e => { e.stopPropagation(); closeRoom(); });
   document.getElementById('srMapEdit')?.addEventListener('click', e => { e.stopPropagation(); openLayoutEdit(standingSlot()); });
-  document.getElementById('srMapZoom')?.addEventListener('click', e => { e.stopPropagation(); mapZoom = 1; drawRoomMap(); toast('🔍 배율 1.0×'); });
+  document.getElementById('srMapZoom')?.addEventListener('click', e => {   // 1 → 1.2 → 1.5 → 2 → 1 순환
+    e.stopPropagation();
+    const steps = [1, 1.2, 1.5, 2];
+    const i = steps.findIndex(v => Math.abs(v - mapZoom) < 0.01);
+    mapZoom = steps[(i + 1) % steps.length];
+    drawRoomMap(); toast('🔍 배율 ' + mapZoom.toFixed(1) + '×');
+  });
   const addMap = document.getElementById('addMap');
   if (addMap) {
     let drag = false;

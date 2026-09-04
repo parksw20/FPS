@@ -201,8 +201,19 @@
   #srClose{position:absolute; right:18px; top:14px; width:150px; text-align:center}
   .srPanel{position:absolute; top:84px; bottom:92px; width:min(280px,26vw); overflow:auto;
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.3); border-radius:10px; padding:14px}
-  #srLeft{left:24px}
-  #srRight{right:24px}
+  #srLeft{left:24px; bottom:auto; max-height:calc(100vh - 190px)}   /* 내용만큼만 — 길게 늘어나지 않게 */
+  #srRight{right:24px; transition:transform .25s ease}
+  #srRight.folded{transform:translateX(calc(100% + 48px))}   /* 가구를 고르면 오른쪽으로 접힌다 */
+  #srRightTab{position:absolute; right:0; top:50%; transform:translateY(-50%); display:none; z-index:27; padding:14px 10px 14px 12px;
+    font-size:.85rem; font-weight:800; color:#04161c; background:#7df3ff; border-radius:10px 0 0 10px; cursor:pointer; pointer-events:auto;
+    box-shadow:0 0 14px rgba(64,214,255,.5)}
+  #srRightTab.on{display:block}
+  #srPlaceAsk{position:absolute; left:50%; bottom:110px; transform:translateX(-50%); display:none; z-index:42; flex-direction:column; gap:10px; align-items:center;
+    padding:14px 20px; border-radius:12px; background:rgba(4,20,28,.94); border:1.5px solid rgba(64,214,255,.55); color:#eaf9ff; font-weight:700; pointer-events:auto}
+  #srPlaceAsk.on{display:flex}
+  #srPlaceAsk .askRow{display:flex; gap:8px}
+  #srPlaceAsk button{padding:10px 18px; font-size:.95rem; font-weight:800; border-radius:8px; cursor:pointer; color:#bfe9f7; background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
+  #srPlaceAsk #srPlaceOk{color:#04161c; background:#7df3ff; border-color:#7df3ff}
   .srHead{font-size:.72rem; letter-spacing:.24em; color:#7aa8bd; margin:4px 0 8px}
   .srSlot{display:flex; align-items:center; gap:10px; padding:9px 10px; margin-bottom:7px; cursor:pointer;
     background:rgba(8,20,28,.8); border:1.5px solid rgba(64,214,255,.28); border-radius:8px}
@@ -309,7 +320,7 @@
   .ctxFits button.on{color:#04161c; background:#7df3ff; font-weight:700}
   #srSlots button.buy i{color:#ffd76b}
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
-  #srMap{position:absolute; left:24px; top:100px; bottom:auto; width:176px; height:176px; display:none; z-index:23; border-radius:10px;   /* 절반 크기 · 좌상단 */
+  #srMap{position:absolute; left:24px; top:84px; bottom:auto; width:194px; height:194px; display:none; z-index:23; border-radius:10px;   /* 좌상단 · 194px */
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
   #srMapEdit{margin-top:6px; color:#04161c; font-weight:700;   /* 패널 안 버튼 (방 이름 아래) */
     background:rgba(125,243,255,.92); border-color:#7df3ff}
@@ -394,15 +405,15 @@
   #srLeaveStay:hover{border-color:#7df3ff}
   #srRoomBtns2 button.dirty{border-color:#ffd76b; color:#ffe9a8}   /* 저장하지 않은 변경 */
   #srRoomBtns2 button[disabled]{opacity:.35; cursor:default}
-  #srMapZoom{position:absolute; left:24px; top:282px; bottom:auto; display:none; z-index:25; cursor:pointer;   /* 미니맵 아래 */
+  #srMapZoom{position:absolute; left:24px; top:284px; bottom:auto; display:none; z-index:25; cursor:pointer;   /* 미니맵 아래 */
     padding:4px 10px; font-size:.78rem; font-weight:700; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.4)}
   #srMapZoom:hover{color:#04161c; background:#7df3ff; border-color:#7df3ff}
-  #srMapLv{position:absolute; left:30px; top:106px; bottom:auto; display:none; z-index:24; pointer-events:none; transform:scale(.8); transform-origin:top left;   /* 미니맵 좌상단 */
+  #srMapLv{position:absolute; left:30px; top:90px; bottom:auto; display:none; z-index:24; pointer-events:none; transform:scale(.8); transform-origin:top left;   /* 미니맵 좌상단 */
     padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
   #srModes{position:absolute; left:24px; top:14px; display:flex; gap:16px; z-index:23}   /* 좌상단 토글 버튼 하나 */
-  #srModes button{padding:16px 32px; cursor:pointer; font-size:1.64rem; white-space:nowrap; color:#bfe9f7; border-radius:16px;
+  #srModes button{padding:0 26px; height:60px;   /* 닫기 버튼과 같은 높이 */ cursor:pointer; font-size:1.15rem; white-space:nowrap; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
   #srModes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srCtx{position:fixed; z-index:24; display:none; min-width:118px; padding:5px; border-radius:8px;
@@ -881,6 +892,11 @@
   </div>
   <div id="srModes">
     <button id="srModeBtn" class="on">🧍 포즈모드</button>
+  </div>
+  <div id="srRightTab" title="편집 패널 열기">◂ 패널</div>
+  <div id="srPlaceAsk">
+    <span>이 자리에 설치할까요?</span>
+    <div class="askRow"><button id="srPlaceOk">✔ 설치</button><button id="srPlaceNo">✕ 취소</button></div>
   </div>
   <div id="srLiveBar">
     <button data-act="save" class="ico" title="변경사항 저장">💾</button>
