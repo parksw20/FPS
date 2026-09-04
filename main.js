@@ -1455,6 +1455,15 @@ function upperStop(fade = 0.15) {
   if (player.upperAct) player.upperAct.fadeOut(fade);
   player.upperAct = null; player.upperShot = null;
 }
+function jumpAnim() {                    // 점프 모션을 체공 시간에 맞춘다 (점프력 업그레이드·점프대·리본으로 오래 떠 있어도 착지까지 이어진다)
+  if (camMode === 'fps') return;         // 1인칭에서는 점프 모션이 상체를 카메라 앞으로 들이밀어 화면을 가리므로 생략
+  const a = player.actions['rifle jump'];
+  if (!a) return;
+  const air = Math.max(0.4, 2 * player.vy / 13.5);          // 올라갔다 내려오는 시간
+  const d = a.getClip().duration;
+  a.timeScale = Math.max(0.35, Math.min(1.6, d / air));     // 너무 느려지지 않게 하한 — 남는 시간은 마지막 자세 유지
+  oneShot('rifle jump', air + 0.4);                         // 착지하면 바로 풀린다 (아래 착지 처리) · 타이머는 안전장치
+}
 function oneShot(name, lockSec) {
   const a = player.actions[name];
   if (!a) return;
@@ -2751,7 +2760,7 @@ function updateJumpPads(dt) {
     p.used = true;
     player.vy = Math.sqrt(2 * 13.5 * PAD_H);   // PAD_H만큼 도약
     player.onGround = false;
-    if (camMode !== 'fps') oneShot('rifle jump', 0.9);
+    jumpAnim();
     sfxTone(420, 0.28, 'sine', 0.18, 900);
     toast('⤴ 점프대!');
   }
@@ -4408,7 +4417,7 @@ function fireChain() {
       if (hitObs) { player.ribbonAir = true; player.standObs = hitObs; }   // 리본 전용 발판은 이때만 딛는다
       player.vy = Math.sqrt(2 * 13.5 * (up + (hitWall ? 0.15 : 0.5)));
       player.onGround = false;
-      if (camMode !== 'fps') oneShot('rifle jump', 0.9);
+      jumpAnim();
     }
     const move = d - stop;                                // 맞은 지점 앞까지만
     if (move > 0.4) {
@@ -4871,12 +4880,12 @@ function updatePlayer(dt) {
   // 점프/중력/플랫폼 지지
   if (keys['Space'] && player.onGround) {
     player.vy = jumpV(); player.onGround = false;
-    // 1인칭에서는 점프 모션이 상체를 카메라 앞으로 들이밀어 화면을 가리므로 생략
-    if (camMode !== 'fps') oneShot('rifle jump', 0.9);
+    jumpAnim();
   }
   const sup = supportHeight(player.pos);
   player.vy -= 13.5 * dt; player.pos.y += player.vy * dt;
   if (player.pos.y <= sup) {
+    if (!player.onGround && player.oneShot === 'rifle jump') { player.oneShot = null; if (player.current) player.current.timeScale = 1; }   // 착지: 점프 모션 종료 → 이동 모션으로
     player.pos.y = sup; player.vy = 0; player.onGround = true;
     player.standObs = supObs;            // 이 발판 위에 있는 동안은 계속 딛는다
     player.ribbonAir = false;
@@ -9460,6 +9469,8 @@ window.__game = {
   },
   playerShadow() { let cast = 0, n = 0; player.root?.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { n++; if (o.castShadow) cast++; } }); return { q: shadowQ, meshes: n, casting: cast, blob: !!playerBlob?.visible, blobAt: playerBlob ? playerBlob.position.toArray().map(v => +v.toFixed(2)) : null, autoUpdate: sun.shadow.autoUpdate }; },
   bones() { const n = []; player.root?.traverse(o => { if (o.isBone) n.push(o.name); }); return n; },
+  jumpInfo() { const a = player.actions['rifle jump']; return { oneShot: player.oneShot ?? null, timeScale: +(a?.timeScale ?? 0).toFixed(2), clipDur: +(a?.getClip().duration ?? 0).toFixed(2), vy: +player.vy.toFixed(2), onGround: player.onGround, y: +player.pos.y.toFixed(2), jumpUpg: upg.jump }; },
+  setUpg(k, v) { upg[k] = v; return { ...upg }; },
   upper() { const w = {}; for (const k in player.actions) { const a = player.actions[k]; if (a.isRunning() && a.getEffectiveWeight() > 0.001) w[k] = +a.getEffectiveWeight().toFixed(2); } return { upperShot: player.upperShot ?? null, loco: player.current?.getClip().name ?? null, weights: w, tracks: { runLower: player.actions['rifle run_lower']?.getClip().tracks.length, reloadUpper: player.actions['reloading_upper']?.getClip().tracks.length, reloadFull: player.actions['reloading']?.getClip().tracks.length } }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
