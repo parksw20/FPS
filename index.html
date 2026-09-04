@@ -22,7 +22,7 @@
   #crosshair::before{left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); clip-path:polygon(0 0,100% 0,100% 32%,0 32%,0 68%,100% 68%,100% 100%,0 100%)}
   #crosshair::after{top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); clip-path:polygon(0 0,32% 0,32% 100%,0 100%,68% 0,100% 0,100% 100%,68% 100%)}
   .panel{position:absolute; background:rgba(10,14,20,.55); border:1px solid rgba(126,224,163,.25); border-radius:10px; padding:10px 16px; backdrop-filter:blur(4px)}
-  #stats{position:absolute; left:50%; bottom:66px; margin-left:-640px; width:470px; display:flex; align-items:center; gap:10px; text-shadow:0 0 8px rgba(0,0,0,.9)}
+  #stats{position:absolute; left:50%; bottom:66px; margin-left:-480px; width:330px; display:flex; align-items:center; gap:10px; text-shadow:0 0 8px rgba(0,0,0,.9)}
   #stats .hpbar{flex:1; height:10px; background:rgba(28,36,49,.75); border-radius:5px; overflow:hidden}
   #stats .hpfill{height:100%; width:100%; background:linear-gradient(90deg,#d9534f,#e8a33d 60%,#7ee0a3); transition:width .15s}
   #topChips{position:absolute; right:18px; top:18px; display:flex; gap:10px}
@@ -68,7 +68,7 @@
     62%{opacity:1; color:#ff2d1f; transform:translate(-50%,-100%) translateY(-40px) scale(1)}
     100%{opacity:0; color:#ff2d1f; transform:translate(-50%,-100%) translateY(-130px) scale(.92)}}
   @keyframes comboPop{0%{opacity:0; transform:translateX(-50%) scale(.4)}15%{opacity:1; transform:translateX(-50%) scale(1.25)}30%{transform:translateX(-50%) scale(1)}75%{opacity:1}100%{opacity:0; transform:translateX(-50%) scale(1)}}
-  #ammo{position:absolute; left:50%; margin-left:-150px; bottom:118px; transform:translateX(-100%); text-align:left; background:rgba(4,8,14,.62); border-radius:10px; padding:10px 22px 8px 26px; min-width:220px; box-sizing:border-box; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
+  #ammo{position:absolute; left:50%; margin-left:-150px; bottom:103px; transform:translateX(-100%); text-align:left; padding:10px 22px 8px 26px; min-width:220px; box-sizing:border-box; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
   #ammo small{color:#9fb0c4; font-size:.75rem}
   /* 수류탄 단축 슬롯 (잔탄 오른쪽) */
   #rSlot{position:absolute; left:50%; margin-left:-130px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
