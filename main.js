@@ -8574,6 +8574,7 @@ function srRenderModeUI() {
   const lb = document.getElementById('srLiveBar');
   lb.style.display = liveNow ? 'flex' : 'none';   // 방 관리 버튼은 생활모드 전용
   lb.classList.toggle('editing', srEditUI);
+  if (mb) lb.style.right = (24 + mb.offsetWidth + 12) + 'px';   // 모드 버튼 바로 왼쪽에 붙인다
   lb.querySelector('[data-act="edit"]')?.classList.toggle('on', srEditUI);
   syncSaveBtn(); syncUndoBtn();
   document.getElementById('srHint').textContent = srMode === 'live'

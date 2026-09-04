@@ -321,7 +321,7 @@
   .ctxFits button.on{color:#04161c; background:#7df3ff; font-weight:700}
   #srSlots button.buy i{color:#ffd76b}
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
-  #srMap{position:absolute; left:24px; top:84px; bottom:auto; width:194px; height:194px; display:none; z-index:23; border-radius:10px;   /* 좌상단 · 194px */
+  #srMap{position:absolute; left:24px; top:24px; bottom:auto; width:194px; height:194px; display:none; z-index:23; border-radius:10px;   /* 좌상단 · 194px */
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
   #srMapEdit{margin-top:6px; color:#04161c; font-weight:700;   /* 패널 안 버튼 (방 이름 아래) */
     background:rgba(125,243,255,.92); border-color:#7df3ff}
@@ -406,14 +406,14 @@
   #srLeaveStay:hover{border-color:#7df3ff}
   #srRoomBtns2 button.dirty{border-color:#ffd76b; color:#ffe9a8}   /* 저장하지 않은 변경 */
   #srRoomBtns2 button[disabled]{opacity:.35; cursor:default}
-  #srMapZoom{position:absolute; left:24px; top:284px; bottom:auto; display:none; z-index:25; cursor:pointer;   /* 미니맵 아래 */
+  #srMapZoom{position:absolute; left:24px; top:224px; bottom:auto; display:none; z-index:25; cursor:pointer;   /* 미니맵 아래 */
     padding:4px 10px; font-size:.78rem; font-weight:700; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.4)}
   #srMapZoom:hover{color:#04161c; background:#7df3ff; border-color:#7df3ff}
-  #srMapLv{position:absolute; left:30px; top:90px; bottom:auto; display:none; z-index:24; pointer-events:none; transform:scale(.8); transform-origin:top left;   /* 미니맵 좌상단 */
+  #srMapLv{position:absolute; left:30px; top:30px; bottom:auto; display:none; z-index:24; pointer-events:none; transform:scale(.8); transform-origin:top left;   /* 미니맵 좌상단 */
     padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
-  #srModes{position:absolute; left:24px; top:14px; display:flex; gap:16px; z-index:23}   /* 좌상단 토글 버튼 하나 */
+  #srModes{position:absolute; right:24px; bottom:26px; display:flex; gap:16px; z-index:27}   /* 우하단 토글 버튼 하나 · 방 편집 버튼들은 그 왼쪽 */
   #srModes button{padding:0 26px; height:60px;   /* 닫기 버튼과 같은 높이 */ cursor:pointer; font-size:1.15rem; white-space:nowrap; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
   #srModes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
@@ -480,7 +480,7 @@
   .srItem b{position:absolute; right:2px; bottom:1px; font-size:.52rem; color:#ffd76b; font-weight:800}
   .srItem b.loot{color:#7df3ff}
   .srItem{position:relative}
-  #srLiveBar{position:absolute; right:24px; bottom:26px; display:none; gap:8px; align-items:center; z-index:26}   /* 우하단 */
+  #srLiveBar{position:absolute; right:220px; bottom:26px; height:60px; display:none; gap:8px; align-items:center; z-index:26}   /* 모드 버튼 왼쪽 (right는 JS가 버튼 폭에 맞춘다) */
   #srLiveBar .ico{display:none; width:44px; padding:8px 0; font-size:1.05rem; text-align:center}
   #srLiveBar.editing .ico{display:inline-block}
   #srLiveBar [data-act="edit"].on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
