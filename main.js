@@ -7421,8 +7421,8 @@ function roomUpdate() {
 
 // ---------- 생활 모드: 문으로 이어진 두 방을 걸어서 오간다 ----------
 let srMode = 'pose';                     // 'pose' 포즈모드 | 'live' 생활모드
-const live = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, camYaw: 0, camPitch: 15 * Math.PI / 180, camDist: 4.2, active: 0, moving: false, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0 };
-const CAM_FIXED_PITCH = 15 * Math.PI / 180;   // 생활모드 카메라: 15° 내려보는 각도로 고정
+const live = { x: 0, z: 0, y: 0, vy: 0, yaw: 0, camYaw: 0, camPitch: 10 * Math.PI / 180, camDist: 4.2, active: 0, moving: false, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0 };
+const CAM_FIXED_PITCH = 10 * Math.PI / 180;   // 생활모드 카메라: 10° 내려보는 각도로 고정
 const CAM_YAW_LIM = 0, CAM_PITCH_MIN = CAM_FIXED_PITCH, CAM_PITCH_MAX = CAM_FIXED_PITCH;
 let worldRooms = [];                     // [{slot, cx, cz, size, bg, grp, backdrop, doorAt}]
 let srYard = null;                       // 앞마당 땅
@@ -8856,9 +8856,20 @@ function srUpdate(dt) {
 (function srBindUI() {
   const sr = document.getElementById('showroom');
   sr.addEventListener('contextmenu', e => { if (srOn) e.preventDefault(); });
+  const pinch = new Map(); let pinchD0 = 0, pinchDist0 = 0;   // 두 손가락 핀치 줌
   sr.addEventListener('pointerdown', e => {
     if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srModes, #srLiveBar, #srMap, #srMapZoom, #srMapLv, #srCtx, #srRightTab, #srPlaceAsk')) return;
     e.preventDefault();                  // 드래그 중 텍스트가 잡히지 않게
+    if (e.pointerType === 'touch') {
+      pinch.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pinch.size === 2) {            // 두 번째 손가락: 핀치 시작 — 회전·잡기 드래그는 멈춘다
+        const [a, b] = [...pinch.values()];
+        pinchD0 = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        pinchDist0 = srMode === 'live' ? live.camDist : srTarget.dist;
+        srDrag = null; if (touchPick && !touchPick.moved) touchPick = null;
+        return;
+      }
+    }
     if (placeAskKind) return;            // 설치 확인 중에는 장면을 건드리지 않는다
     if (e.button === 2) { srPanDrag = [e.clientX, e.clientY]; return; }   // 우클릭: 카메라 이동
     if (srMode === 'live' && srEditUI && e.button === 0) {
@@ -8872,6 +8883,16 @@ function srUpdate(dt) {
   });
   addEventListener('pointermove', e => {
     if (!srOn) return;
+    if (pinch.has(e.pointerId)) {
+      pinch.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pinch.size >= 2 && pinchD0 > 0) {   // 손가락 사이가 벌어지면 가까이, 좁아지면 멀리
+        const [a, b] = [...pinch.values()];
+        const k = pinchD0 / Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1]));
+        if (srMode === 'live') live.camDist = Math.max(1.6, Math.min(7, pinchDist0 * k));
+        else { srTarget.dist = Math.max(0.7, Math.min(6, pinchDist0 * k)); srClampView?.(); }
+        return;
+      }
+    }
     if (touchPick) {                     // 잡은 가구를 손가락/커서 아래로
       if (!touchPick.moved && Math.hypot(e.clientX - touchPick.x, e.clientY - touchPick.y) > 8) {
         touchPick.moved = true;
@@ -8896,8 +8917,10 @@ function srUpdate(dt) {
     } else srYaw += (e.clientX - srDrag) * 0.01;
     srDrag = e.clientX; srDragY = e.clientY;
   });
+  addEventListener('pointercancel', e => { pinch.delete(e.pointerId); pinchD0 = 0; });
   addEventListener('pointerup', e => {
     srDrag = null; if (e.button === 2 || srPanDrag) srPanDrag = null;
+    if (pinch.has(e.pointerId)) { pinch.delete(e.pointerId); pinchD0 = 0; }
     if (!srOn) return;
     if (touchPick) {
       const tp = touchPick; touchPick = null; suppressClick = true;
@@ -8907,11 +8930,35 @@ function srUpdate(dt) {
     }
     if (placeDrag) { placeDrag = false; suppressClick = true; if (placeType) openPlaceAsk('place'); }
   });
+  let askMark = null;                    // 설치 위치 실루엣 (바닥 발자국 + 테두리)
   function openPlaceAsk(kind) {
     placeAskKind = kind;
     document.getElementById('srPlaceAsk').classList.add('on');
+    // 설치 자리에 실루엣을 남긴다 — 새 가구는 미리보기 자리, 옮기는 가구는 지금 놓인 자리
+    const rm = worldRooms.find(r => r.slot === roomStore.cur);
+    let type = null, x = 0, z = 0, y = 0, rot = 0;
+    if (kind === 'place' && placeType && placeGhost) { const q = placeGhost.userData.snap; if (q) { type = placeType; x = q.x; z = q.z; y = q.y || 0; rot = q.wall ? q.rot : placeRot; } }
+    else if (kind === 'move' && moveItem) { type = moveItem.type; x = moveItem.x; z = moveItem.z; y = moveItem.y || 0; rot = moveItem.rot || 0; }
+    if (type && rm) {
+      const fp = footprint(type, rot);
+      const g = new THREE.Group();
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(fp.w + 0.12, fp.d + 0.12).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x7df3ff, transparent: true, opacity: 0.32, depthWrite: false }));
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(fp.w + 0.12, FURN[type].h, fp.d + 0.12)),
+        new THREE.LineBasicMaterial({ color: 0x7df3ff, transparent: true, opacity: 0.9 }));
+      edge.position.y = FURN[type].h / 2;
+      g.add(pad); g.add(edge);
+      g.position.set(rm.cx + x, (rm.cy || 0) + y + 0.02, rm.cz + z);
+      g.rotation.y = rot * ROT_STEP;
+      srScene.add(g); askMark = g;
+    }
+    if (placeGhost) placeGhost.traverse(o => { if (o.isMesh && o.material) { o.material.opacity = 0.8; } });   // 미리보기도 또렷하게
   }
-  function closePlaceAsk() { placeAskKind = null; document.getElementById('srPlaceAsk').classList.remove('on'); }
+  function closePlaceAsk() {
+    placeAskKind = null; document.getElementById('srPlaceAsk').classList.remove('on');
+    if (askMark) { srScene.remove(askMark); askMark.traverse(o => { if (o.geometry) o.geometry.dispose(); }); askMark = null; }
+    if (placeGhost) placeGhost.traverse(o => { if (o.isMesh && o.material) { o.material.opacity = 0.55; } });
+  }
   document.getElementById('srPlaceOk').addEventListener('click', e => {
     e.stopPropagation();
     const k = placeAskKind; closePlaceAsk();
@@ -9646,6 +9693,8 @@ window.__game = {
   gear(p, r) { if (p !== undefined) pistolOwned = !!p; if (r !== undefined) ribbonOwned = !!r; chainUses = Math.max(chainUses, 1); updateRibbonSlot?.(); return { pistolOwned, ribbonOwned, chainUses }; },
   clips() { return playerGltf ? playerGltf.animations.map(c => [c.name, +c.duration.toFixed(2), c.tracks.length]) : null; },
   srLights() { return srLightPool.map(l => ({ i: +l.intensity.toFixed(2), p: l.position.toArray().map(v => +v.toFixed(1)) })).filter(x => x.i > 0); },
+  startPlace(type) { startPlace(type); return !!placeType; },
+  srDbg() { return { placeType, placeDrag, touchPick: !!touchPick, placeAskKind, srEditUI, srMode, suppressClick, moveItem: !!moveItem, sizeDrag: !!sizeDrag, tab: srTab }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
