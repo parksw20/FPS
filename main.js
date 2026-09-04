@@ -8608,6 +8608,16 @@ function syncRightFold() {
   rp.classList.toggle('folded', folded);
   document.getElementById('srRightTab').classList.toggle('on', folded);
 }
+function fitRightPanel() {                // 우측 패널 높이 = 지금 모드에서 가장 내용이 긴 탭 높이 (탭을 바꿔도 패널이 들쭉날쭉하지 않게)
+  const rp = document.getElementById('srRight'); if (!rp || !srOn) return;
+  const liveNow = srMode === 'live';
+  const tabs = [...document.querySelectorAll('#srTabs button')].map(t => t.dataset.tab).filter(t => liveNow ? isRoomTab(t) : !isRoomTab(t));
+  const cur = srTab; let maxH = 0;
+  rp.style.minHeight = '';
+  for (const t of tabs) { srTab = t; srRenderInv(); maxH = Math.max(maxH, rp.scrollHeight); }
+  srTab = cur; srRenderInv();
+  rp.style.minHeight = Math.min(maxH, innerHeight - 110) + 'px';
+}
 function srRenderModeUI() {
   const liveNow = srMode === 'live';
   syncRightFold();
@@ -8626,7 +8636,8 @@ function srRenderModeUI() {
   const lb = document.getElementById('srLiveBar');
   lb.style.display = liveNow ? 'flex' : 'none';   // 방 관리 버튼은 생활모드 전용
   lb.classList.toggle('editing', srEditUI);
-  if (mb) lb.style.right = (24 + mb.offsetWidth + 12) + 'px';   // 모드 버튼 바로 왼쪽에 붙인다
+  if (mb) lb.style.right = (186 + mb.offsetWidth + 12) + 'px';   // 모드 버튼 바로 왼쪽에 붙인다 (모드 버튼은 닫기 왼쪽)
+  fitRightPanel();
   lb.querySelector('[data-act="edit"]')?.classList.toggle('on', srEditUI);
   syncSaveBtn(); syncUndoBtn();
   document.getElementById('srHint').textContent = srMode === 'live'
