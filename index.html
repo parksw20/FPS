@@ -202,9 +202,10 @@
   #srClose{position:absolute; right:18px; top:14px; width:150px; text-align:center}
   .srPanel{position:absolute; top:84px; bottom:92px; width:min(280px,26vw); overflow:auto;
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.3); border-radius:10px; padding:14px}
-  #srLeft{left:24px; bottom:auto; max-height:calc(100vh - 190px)}   /* 내용만큼만 — 길게 늘어나지 않게 */
+  /* #showroom에 zoom이 걸려 있어 100vh는 배율만큼 짧게 잡힌다 → --uiz(UI 배율)로 나눠 실제 화면 높이 기준으로 */
+  #srLeft{left:24px; bottom:auto; max-height:calc(100vh / var(--uiz, 1) - 190px)}   /* 내용만큼만 — 길게 늘어나지 않게 */
   #showroom{touch-action:none}          /* 핀치는 브라우저 확대가 아니라 카메라 거리 조절로 */
-  #srRight{right:24px; bottom:auto; max-height:calc(100vh - 110px); transition:transform .25s ease}
+  #srRight{right:24px; bottom:auto; max-height:calc(100vh / var(--uiz, 1) - 110px); transition:transform .25s ease}
   #srRight.folded{transform:translateX(calc(100% + 48px))}   /* 가구를 고르면 오른쪽으로 접힌다 */
   #srRightTab{position:absolute; right:0; top:50%; transform:translateY(-50%); display:none; z-index:27; padding:14px 10px 14px 12px;
     font-size:.85rem; font-weight:800; color:#04161c; background:#7df3ff; border-radius:10px 0 0 10px; cursor:pointer; pointer-events:auto;
@@ -721,7 +722,7 @@
   /* 모바일 조작 UI */
   #mobileUI{display:none}
   body.mobile #mobileUI{display:block}
-  #joy{position:fixed; left:76px; bottom:76px; width:150px; height:150px; border-radius:50%; z-index:35; pointer-events:auto; touch-action:none;
+  #joy{position:fixed; left:68px; bottom:68px; width:165px; height:165px; border-radius:50%; z-index:35; pointer-events:auto; touch-action:none;
     background:rgba(10,14,20,.4); border:1px solid rgba(126,224,163,.3)}
   body.mobile.fireJog #mbFire{background:rgba(217,83,79,.28); border-style:dashed}
   #mobOpt{display:none}
@@ -732,7 +733,7 @@
   body.mobile #minimap{zoom:.5}
   body.mobile #wave.rnd{top:172px} body.mobile #seedTag{top:196px} body.mobile #fpsHud{top:220px}
   body.mobile #ammo, body.mobile #stats, body.mobile #rSlot, body.mobile #pSlot, body.mobile #gSlot, body.mobile #mSlot, body.mobile #wSlot, body.mobile #kSlot{zoom:.8}
-  #joyStick{position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%;
+  #joyStick{position:absolute; left:50%; top:50%; width:70px; height:70px; margin:-35px 0 0 -35px; border-radius:50%;
     background:rgba(126,224,163,.35); border:1px solid #7ee0a3; pointer-events:none}
   .mbtn{width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.8rem; color:#e8edf4;
     background:rgba(22,27,36,.75); border:1.5px solid #2a3444; pointer-events:auto; touch-action:none; user-select:none; -webkit-user-select:none; z-index:35}
