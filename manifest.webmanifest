@@ -1,6 +1,6 @@
 {
-  "name": "ARENA FPS",
-  "short_name": "ARENA FPS",
+  "name": "헤드샷",
+  "short_name": "헤드샷",
   "description": "3D 웨이브 서바이벌 슈터",
   "start_url": "./",
   "scope": "./",
