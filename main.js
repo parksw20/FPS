@@ -3701,14 +3701,27 @@ let started = false;                                            // 모바일 모
 const optMenu = document.getElementById('optMenu');
 document.getElementById('optBtn').addEventListener('click', e => {
   e.stopPropagation();
-  optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
-  if (optMenu.style.display === 'block') syncOptUI();
   if (document.pointerLockElement) document.exitPointerLock();
-  if (optMenu.style.display === 'block' && inRun && !paused && !player.dead) {   // 옵션을 열면 게임 일시정지 (모바일 포함)
-    paused = true; shopClosed = true;    // 옵션 위에 상점이 겹치지 않게 — '상점' 버튼으로 다시 연다
+  if (inRun && !player.dead) {           // 플레이 중: 바로 일시정지 화면 (상점·옵션·되돌아가기·게임 종료)
+    if (!paused) { paused = true; shopClosed = true; }
+    optMenu.style.display = 'none';
     refreshOverlay();
-  } else if (optMenu.style.display === 'block') shopMenu.style.display = 'none';
+    return;
+  }
+  optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';   // 메인 화면: 옵션 창 토글
+  if (optMenu.style.display === 'block') { syncOptUI(); shopMenu.style.display = 'none'; }
 });
+document.getElementById('btnPauseOpt').addEventListener('click', e => {   // 일시정지 화면의 옵션
+  e.stopPropagation();
+  shopClosed = true; refreshOverlay();
+  optMenu.style.display = 'block'; syncOptUI();
+});
+document.getElementById('quitOk').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('quitAsk').classList.remove('on');
+  shopMenu.style.display = 'none'; optMenu.style.display = 'none'; paused = false; restart(true);
+});
+document.getElementById('quitNo').addEventListener('click', e => { e.stopPropagation(); document.getElementById('quitAsk').classList.remove('on'); });
 // 수류탄 슬롯 클릭/탭으로도 토글
 document.getElementById('gSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(slot === 'grenade' ? (weapon === 'pistol' ? 'pistol' : 'rifle') : 'grenade'); });
 document.getElementById('pSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot('pistol'); });
@@ -3835,7 +3848,7 @@ document.getElementById('shopClose').addEventListener('click', e => {
   shopMenu.style.display = 'none';
   if (inRun) { shopClosed = true; refreshOverlay(); }
 });
-document.getElementById('btnShop')?.addEventListener('click', e => { e.stopPropagation(); shopClosed = false; refreshOverlay(); });
+document.getElementById('btnShop')?.addEventListener('click', e => { e.stopPropagation(); shopClosed = !shopClosed; optMenu.style.display = 'none'; refreshOverlay(); });
 // 시작 화면 패널: 화면 중앙에서 100px 아래 배치 (넘치면 스크롤)
 function placeStartPanel(el) {          // 시작 화면 패널: 가능하면 스크롤 없이 화면 안에 다 들어가게
   el.style.left = '50%';
@@ -3955,7 +3968,7 @@ function refreshOverlay() {
   const allowShop = !walkGrid || floorShopOpen;   // 랜덤맵은 층 이동 시에만 상점
   if (!pauseUI) shopClosed = false;      // 다음 일시정지에는 다시 열린 채로
   const bs = document.getElementById('btnShop');
-  if (bs) bs.style.display = pauseUI && allowShop && shopClosed ? '' : 'none';   // 닫았을 때만 '상점' 버튼
+  if (bs) { bs.style.display = pauseUI && allowShop ? '' : 'none'; bs.classList.toggle('on', pauseUI && !shopClosed); }   // 상점 열기/닫기
   if (pauseUI && sm && allowShop && !shopClosed) {
     renderUpg();
     sm.style.display = 'block';
@@ -4098,7 +4111,7 @@ document.getElementById('briefGo').addEventListener('click', e => {
   enterGame();
 });
 document.getElementById('btnResume').addEventListener('click', e => { e.stopPropagation(); enterGame(); });
-document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); shopMenu.style.display = 'none'; paused = false; restart(true); });
+document.getElementById('btnQuit').addEventListener('click', e => { e.stopPropagation(); document.getElementById('quitAsk').classList.add('on'); });   // 한 번 더 묻는다
 document.getElementById('optClose').addEventListener('click', e => { e.stopPropagation(); optMenu.style.display = 'none'; });
 optMenu.addEventListener('click', e => { if (e.target === optMenu) optMenu.style.display = 'none'; });  // 바깥 클릭으로 닫기
 document.getElementById('btnOptions').addEventListener('click', e => {

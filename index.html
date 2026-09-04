@@ -326,6 +326,14 @@
   #srMapEdit{margin-top:6px; color:#04161c; font-weight:700;   /* 패널 안 버튼 (방 이름 아래) */
     background:rgba(125,243,255,.92); border-color:#7df3ff}
   #srMapEdit:hover{background:#a8f8ff}
+  #quitAsk{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:61; flex-direction:column; gap:10px; align-items:center;
+    padding:18px 24px; border-radius:12px; background:rgba(4,16,24,.95); border:1.5px solid rgba(255,77,77,.6); color:#eaf9ff; font-weight:800; pointer-events:auto; text-align:center}
+  #quitAsk.on{display:flex}
+  #quitAsk small{font-weight:500; color:#9fb0c4}
+  #quitAsk .askRow{display:flex; gap:8px}
+  #quitAsk button{padding:10px 20px; font-size:.95rem; font-weight:800; border-radius:8px; cursor:pointer; color:#bfe9f7; background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
+  #quitAsk #quitOk{color:#fff; background:rgba(255,77,77,.85); border-color:#ff6b6b}
+  body.mobile #wave{top:56px}            /* 모바일: 우상단 재화와 겹치지 않게 아래로 */
   #optResetAsk{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); display:none; z-index:60;
     flex-direction:column; gap:10px; padding:20px 22px; border-radius:12px; color:#eaf9ff; text-align:center; max-width:340px;
     background:rgba(16,6,8,.97); border:1.5px solid rgba(255,120,100,.7); box-shadow:0 0 26px rgba(255,90,74,.35)}
@@ -610,8 +618,8 @@
   #rankMenu h3{font-size:.8rem; letter-spacing:.2em; color:#7df3ff; margin-bottom:8px; text-align:center; text-transform:uppercase; text-shadow:0 0 10px rgba(64,214,255,.7)}
   @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
   /* 옵션 */
-  #optBtn{position:fixed; right:18px; top:74px; z-index:40; pointer-events:auto; cursor:pointer;
-    background:rgba(10,14,20,.7); border:1px solid rgba(126,224,163,.35); border-radius:10px; padding:10px 16px; color:#9fb0c4; font-size:.95rem; user-select:none}
+  #optBtn{position:fixed; right:18px; top:74px; z-index:40; pointer-events:auto; cursor:pointer; width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+    background:rgba(10,14,20,.7); border:1px solid rgba(126,224,163,.35); border-radius:10px; color:#9fb0c4; font-size:1.35rem; user-select:none}   /* 아이콘만 */
   #optBtn:hover{color:#e8edf4; border-color:#7ee0a3}
   #optMenu{position:fixed; inset:0; z-index:41; pointer-events:auto; display:none;
     background:rgba(3,8,12,.72); backdrop-filter:blur(3px); color:#eaf9ff}
@@ -765,7 +773,7 @@
 <div id="dmgflash"></div>
 <div id="zoomVig"></div>
 <div id="aura"></div>
-<div id="optBtn">⚙ 옵션</div>
+<div id="optBtn" title="일시정지 · 옵션">⚙</div>
 <div id="optMenu">
   <div id="optPanel">
   <p class="optTitle">옵션</p>
@@ -820,6 +828,11 @@
   </div>
   <button id="optClose">닫기</button>
   </div>
+</div>
+<div id="quitAsk">
+  <span>정말 게임을 종료할까요?</span>
+  <small>지금 진행 중인 판이 끝나고 메인 화면으로 돌아갑니다.</small>
+  <div class="askRow"><button id="quitOk">⏻ 종료</button><button id="quitNo">✕ 취소</button></div>
 </div>
 <div id="optResetAsk">
   <span>정말 초기화할까요?</span>
@@ -1041,7 +1054,8 @@
 </div>
 <div id="pauseOv">
   <div id="pauseBtns">
-    <div class="menuBtn" id="btnShop" style="display:none"><span>🛒&nbsp; 상점</span></div>
+    <div class="menuBtn" id="btnShop"><span>🛒&nbsp; 상점</span></div>
+    <div class="menuBtn" id="btnPauseOpt"><span>⚙&nbsp; 옵션</span></div>
     <div class="menuBtn primary" id="btnResume"><span>▶&nbsp; 되돌아가기</span></div>
     <div class="menuBtn" id="btnQuit"><span>⏻&nbsp; 게임 종료</span></div>
   </div>
