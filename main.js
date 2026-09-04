@@ -7969,6 +7969,15 @@ function buildRoomMesh(r) {              // 바닥 · 벽(뒤=창, 옆=문 구�
   }
   ceilGrp.userData.ceiling = true;
   grp.add(ceilGrp);
+  // 기본 천장등 2개 — 가구와 무관하게 방마다 달려 있어 처음 들어와도 캐릭터가 잘 보인다 (빛은 고정 조명 풀에서)
+  const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff4dc, emissive: 0xffe2a8, emissiveIntensity: 1.2, roughness: 0.6 });
+  for (const lx of [-W / 4, W / 4]) {
+    const fix = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.06, 20), lampMat);
+    fix.position.set(lx, h - 0.03, 0);
+    fix.userData.lamp = { color: 0xfff1cc, i: LAMP_I * 0.45, dist: 5.5, y: -0.3 };
+    fix.userData.builtin = true;
+    grp.add(fix);
+  }
   const wallMats = {};                   // 벽마다 색을 따로 (좌·우·뒤)
   for (const k of ['x-', 'x+', 'z-']) {
     const hex = surfColor(sl0, k);
@@ -9544,6 +9553,7 @@ window.__game = {
   fixCam(aspect = 1.6) { if (!isFinite(camera.aspect) || camera.aspect <= 0) { camera.aspect = aspect; camera.updateProjectionMatrix(); } camera.updateMatrixWorld(true); return { aspect: camera.aspect, pos: camera.position.toArray().map(v => +v.toFixed(2)) }; },
   gear(p, r) { if (p !== undefined) pistolOwned = !!p; if (r !== undefined) ribbonOwned = !!r; chainUses = Math.max(chainUses, 1); updateRibbonSlot?.(); return { pistolOwned, ribbonOwned, chainUses }; },
   clips() { return playerGltf ? playerGltf.animations.map(c => [c.name, +c.duration.toFixed(2), c.tracks.length]) : null; },
+  srLights() { return srLightPool.map(l => ({ i: +l.intensity.toFixed(2), p: l.position.toArray().map(v => +v.toFixed(1)) })).filter(x => x.i > 0); },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
