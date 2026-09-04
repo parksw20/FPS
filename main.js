@@ -1403,6 +1403,19 @@ function setupPlayer() {
     const c = clipOf(playerGltf, n);
     if (c) player.actions[n] = player.mixer.clipAction(c);
   }
+  // 상·하체 분리 — 이동 클립은 하체 본만, 재장전·투척은 상체 본만 가진 클립을 따로 만들어 같은 믹서에 겹쳐 재생한다
+  // (다리는 달리고 팔은 탄창을 가는 식). 트랙이 서로 다른 본을 다루므로 충돌 없이 합쳐진다. 골반(Hips)은 하체 쪽.
+  const LOWER_RE = /hips|pelvis|leg|thigh|shin|calf|knee|foot|ankle|toe/i;
+  const maskClip = (clip, keepLower, suffix) => new THREE.AnimationClip(clip.name + suffix, clip.duration,
+    clip.tracks.filter(t => LOWER_RE.test(t.name.split('.')[0]) === keepLower));
+  for (const n of ['rifle aiming idle', 'rifle run', 'run backwards', 'walking', 'walking backwards', 'strafe', 'strafe (2)', 'strafe left']) {
+    const c = clipOf(playerGltf, n);
+    if (c) player.actions[n + '_lower'] = player.mixer.clipAction(maskClip(c, true, '_lower'));
+  }
+  for (const n of ['reloading', 'toss grenade']) {
+    const c = clipOf(playerGltf, n);
+    if (c) player.actions[n + '_upper'] = player.mixer.clipAction(maskClip(c, false, '_upper'));
+  }
   const fireClip = clipOf(playerGltf, 'firing rifle');
   if (fireClip) {
     const add = THREE.AnimationUtils.makeClipAdditive(fireClip.clone());
@@ -1427,6 +1440,20 @@ function play(name, fade = 0.18) {
   next.enabled = true; next.reset().play();
   if (player.current) player.current.crossFadeTo(next, fade, false);
   player.current = next;
+}
+// 상체 레이어: 이동(하체) 위에 재장전·투척(상체)을 얹는다. 이동 선택은 그대로 돌아가고 분리 중에는 하체 클립을 쓴다.
+function upperPlay(name, fade = 0.1) {
+  const a = player.actions[name + '_upper'];
+  if (!a) { oneShot(name, 1); return null; }          // 분리 클립이 없으면 예전처럼 전신
+  if (player.upperAct && player.upperAct !== a) player.upperAct.fadeOut(0.1);
+  a.reset(); a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.enabled = true;
+  a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.fadeIn(fade).play();
+  player.upperAct = a; player.upperShot = name;
+  return a;
+}
+function upperStop(fade = 0.15) {
+  if (player.upperAct) player.upperAct.fadeOut(fade);
+  player.upperAct = null; player.upperShot = null;
 }
 function oneShot(name, lockSec) {
   const a = player.actions[name];
@@ -2183,13 +2210,8 @@ let gWindup = false;
 function startGrenadeWindup() {
   if (grenades <= 0 || player.dead || gWindup || pendingThrows.length) return;
   gWindup = true;
-  const a = player.actions['toss grenade'];
-  if (a) {
-    a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.paused = false;
-    a.timeScale = 4;                    // 대기 자세까지 4배 빠르게 (약 0.37초)
-    play('toss grenade', 0.08);
-    player.oneShot = 'toss grenade';
-  }
+  const a = upperPlay('toss grenade', 0.08);        // 다리는 이동 그대로, 팔만 투척 자세
+  if (a) { a.paused = false; a.timeScale = 4; }     // 대기 자세까지 4배 빠르게 (약 0.37초)
   clearTimeout(hideWeapon._t);
   for (const m of weaponMeshes) m.visible = false; // 던지는 동안 총 숨김 (릴리즈 후 복원)
   if (pistolGrp) pistolGrp.visible = false;
@@ -2198,25 +2220,20 @@ function startGrenadeWindup() {
 function cancelGrenadeWindup() {         // 다른 슬롯으로 바꾸면 던지지 않고 취소 (수류탄 미소모)
   if (!gWindup) return;
   gWindup = false;
-  const a = player.actions['toss grenade'];
-  if (a) { a.timeScale = 1; a.stop(); }
-  player.oneShot = null;
-  player.current = null;
-  play('rifle aiming idle', 0.12);
+  const a = player.upperAct;
+  if (a) a.timeScale = 1;
+  upperStop(0.12);
   clearTimeout(hideWeapon._t);
   applyWeaponLook();
 }
 function releaseGrenadeWindup() {
   if (!gWindup) return;
   gWindup = false;
-  const a = player.actions['toss grenade'];
+  const a = player.upperShot === 'toss grenade' ? player.upperAct : null;
   if (a) a.timeScale = 1;
   // 준비자세 도달 전 릴리즈 → 투척 취소 (수류탄 미소모, 총 복원)
   if (a && a.time < WIND_HOLD_T - 0.02) {
-    a.stop();
-    player.oneShot = null;
-    player.current = null;
-    play('rifle aiming idle', 0.12);
+    upperStop(0.12);
     clearTimeout(hideWeapon._t);
     applyWeaponLook();
     return;
@@ -2229,7 +2246,7 @@ function releaseGrenadeWindup() {
   persistProgress();
   pendingThrows.push({ t: 0.5 });
   hideWeapon(1.3);
-  setTimeout(() => { if (player.oneShot === 'toss grenade') player.oneShot = null; }, 1300);
+  setTimeout(() => { if (player.upperShot === 'toss grenade' && !gWindup) upperStop(); }, 1300);
 }
 function throwGrenade() { // 디버그/즉시 투척 (홀드 없이)
   startGrenadeWindup();
@@ -4409,9 +4426,10 @@ function reload() {
   reloading = true;
   document.getElementById('ammoN').textContent = '···';
   sfxReload();
-  oneShot('reloading', reloadMs() / 1000);
+  const ua = upperPlay('reloading');                // 다리는 계속 이동, 팔만 탄창 교체
+  if (ua) ua.setEffectiveTimeScale(ua.getClip().duration / (reloadMs() / 1000));   // 모션 길이를 재장전 시간에 맞춘다
   clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(() => { ammo = magSize(); reloading = false; updateAmmo(); }, reloadMs());
+  reloadTimer = setTimeout(() => { ammo = magSize(); reloading = false; updateAmmo(); if (player.upperShot === 'reloading') upperStop(); }, reloadMs());
 }
 function refillWeapons() {               // 단계가 넘어가면 두 총 다 장전된 상태로 시작
   clearTimeout(reloadTimer);
@@ -4647,6 +4665,7 @@ function damagePlayer(n, fromX, fromZ, src) {
     if (da) {
       da.setLoop(THREE.LoopOnce); da.clampWhenFinished = true;
       play('humanoid:death_gun', 0.15);
+      upperStop(0.1);
       player.oneShot = 'humanoid:death_gun'; // 다른 애니로 덮이지 않게 고정
       deathDur = da.getClip().duration;
     }
@@ -4861,18 +4880,19 @@ function updatePlayer(dt) {
   // 로코모션
   if (!player.oneShot) {
     const moving = Math.abs(mx) + Math.abs(mz) > 0.12;
-    if (!moving) play('rifle aiming idle');
-    else if (mz < 0) play('rifle run');
-    else if (mz > 0) play('run backwards');
-    else if (mx > 0) play('strafe');
-    else play('strafe (2)'); // 왼쪽: strafe left는 바닥 싱크가 안 맞음
+    const L = player.upperShot && player.actions['rifle run_lower'] ? '_lower' : '';   // 상체가 따로 움직이는 중이면 하체 클립만
+    if (!moving) play('rifle aiming idle' + L);
+    else if (mz < 0) play('rifle run' + L);
+    else if (mz > 0) play('run backwards' + L);
+    else if (mx > 0) play('strafe' + L);
+    else play('strafe (2)' + L); // 왼쪽: strafe left는 바닥 싱크가 안 맞음
   }
   if (player.current && !player.oneShot) player.current.timeScale = player.dashT > 0 ? 1.6 : 1.15;
 
   player.mixer.update(dt);
   // 홀드 투척: 1.5초 지점에서 모션 정지 유지 (마우스 업까지)
   if (gWindup) {
-    const a = player.actions['toss grenade'];
+    const a = player.upperShot === 'toss grenade' ? player.upperAct : null;
     if (a && a.time >= WIND_HOLD_T) { a.time = WIND_HOLD_T; a.paused = true; }
   }
   if (camMode === 'fps') hideBones();
@@ -9115,7 +9135,7 @@ window.__game = {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(), reloadMs: Math.round(reloadMs()), fireMs: Math.round(weapon === 'pistol' ? PISTOL_DELAY : fireInterval()),
-      grenades, gMode, slot, weapon, pen: penPower(), recoil: +recoil.toFixed(4), shakeT: +shakeT.toFixed(2), blocking, parryReady: parryReady(), timeScale: timeScale(), mag: magSize(), markers: markers.length, projSpeed: projectiles[0] ? +projectiles[0].vel.length().toFixed(2) : null, gWindup, tossTime: +(player.actions['toss grenade']?.time ?? -1).toFixed(2), tossScale: player.actions['toss grenade']?.timeScale ?? -1, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
+      grenades, gMode, slot, weapon, pen: penPower(), recoil: +recoil.toFixed(4), shakeT: +shakeT.toFixed(2), blocking, parryReady: parryReady(), timeScale: timeScale(), mag: magSize(), markers: markers.length, projSpeed: projectiles[0] ? +projectiles[0].vel.length().toFixed(2) : null, gWindup, tossTime: +((player.upperShot === 'toss grenade' ? player.upperAct : player.actions['toss grenade'])?.time ?? -1).toFixed(2), tossScale: (player.upperShot === 'toss grenade' ? player.upperAct : player.actions['toss grenade'])?.timeScale ?? -1, upperShot: player.upperShot ?? null, loco: player.current ? player.current.getClip().name : null, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
       safeRoom: safeRoom ? { until: +Math.max(0, safeUntil - gameTime).toFixed(1) } : null,
@@ -9184,6 +9204,8 @@ window.__game = {
       particles: particles.length, decals: decals.length, tracers: tracers.length, obstacles: obstacles.length };
   },
   refill() { ammo = magSize(); reloading = false; updateAmmo(); },
+  reload() { ammo = 0; reload(); return { reloading, upperShot: player.upperShot }; },
+  release() { releaseGrenadeWindup(); return { gWindup, grenades, pending: pendingThrows.length }; },
   spawnAt(x, z, variant = 'walker') { spawnEnemy(wave || 1, variant); const e = enemies[enemies.length - 1]; e.root.position.set(x, 0, z); e.state = 'chase'; return e; },
   dropAt(type, x, z) { type === 'coin' ? dropCoins(x, z) : dropItem(type, x, z); },
   hurt(n, src, x, z) { damagePlayer(n, x, z, src); },
@@ -9429,6 +9451,8 @@ window.__game = {
     return { worst: +worst.toFixed(1), spikes: out.length, list: out.slice(0, 20), lights: visLights(), programs: renderer.info.programs.length, pos: { x: +live.x.toFixed(1), z: +live.z.toFixed(1) } };
   },
   playerShadow() { let cast = 0, n = 0; player.root?.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { n++; if (o.castShadow) cast++; } }); return { q: shadowQ, meshes: n, casting: cast, blob: !!playerBlob?.visible, blobAt: playerBlob ? playerBlob.position.toArray().map(v => +v.toFixed(2)) : null, autoUpdate: sun.shadow.autoUpdate }; },
+  bones() { const n = []; player.root?.traverse(o => { if (o.isBone) n.push(o.name); }); return n; },
+  upper() { const w = {}; for (const k in player.actions) { const a = player.actions[k]; if (a.isRunning() && a.getEffectiveWeight() > 0.001) w[k] = +a.getEffectiveWeight().toFixed(2); } return { upperShot: player.upperShot ?? null, loco: player.current?.getClip().name ?? null, weights: w, tracks: { runLower: player.actions['rifle run_lower']?.getClip().tracks.length, reloadUpper: player.actions['reloading_upper']?.getClip().tracks.length, reloadFull: player.actions['reloading']?.getClip().tracks.length } }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
