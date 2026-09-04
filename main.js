@@ -3963,7 +3963,7 @@ function enterGame() {
   optMenu.style.display = 'none';
   inRun = true;
   paused = false;
-  if (isMobileCtrl()) started = true;
+  if (isMobileCtrl()) { started = true; mobileFullscreen(); }
   else lockPointer();                    // 잠금 실패해도 게임은 시작 — 클릭 시 재시도
   refreshOverlay();
 }
@@ -4176,6 +4176,12 @@ document.addEventListener('mousemove', e => {
 const LOCK_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'KeyC', 'KeyF', 'KeyG', 'KeyT', 'KeyN', 'KeyP', 'KeyH', 'KeyJ', 'KeyL', 'KeyU', 'KeyO', 'KeyE', 'KeyQ', 'KeyB', 'KeyM', 'KeyI', 'KeyK',
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Tab', 'Space', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'F1', 'F3', 'F5', 'F11', 'F12'];
 function keyboardLock() { try { navigator.keyboard?.lock?.(LOCK_KEYS); } catch { } }
+function mobileFullscreen() {            // 모바일 시작: 전체화면 + 가로 고정 (브라우저가 허용하는 범위에서)
+  if (!fsLock) return;
+  const lockLand = () => { try { screen.orientation?.lock?.('landscape').catch?.(() => { }); } catch { } };
+  if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(lockLand).catch(lockLand);
+  else lockLand();
+}
 function lockPointer() {                 // 조준 잠금 — 옵션이 켜져 있으면 전체화면으로 들어가며 키까지 잠근다
   if (fsLock && !document.fullscreenElement && document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen({ navigationUI: 'hide' })
@@ -4213,7 +4219,7 @@ document.addEventListener('keydown', e => {
     if (paused) {
       if (!escArmed) return;       // 잠금 해제를 유발한 그 누름의 잔여 keydown만 무시
       paused = false;              // 즉시 게임 재개 — 조준 잠금은 시도만, 실패 시 클릭으로 복구
-      if (isMobileCtrl()) started = true;
+      if (isMobileCtrl()) { started = true; mobileFullscreen(); }
       else lockPointer();
       shopMenu.style.display = 'none';
       refreshOverlay();
@@ -4787,7 +4793,7 @@ function restart(toMenu = false) {
   updateAmmo();
   msgEl.style.display = 'none';
   if (toMenu) { started = false; inRun = false; paused = false; document.getElementById('mapPick').style.display = 'none'; document.getElementById('brief').style.display = 'none'; refreshOverlay(); } // 확인 → 메인 화면
-  else if (isMobileCtrl()) { started = true; refreshOverlay(); }
+  else if (isMobileCtrl()) { started = true; mobileFullscreen(); refreshOverlay(); }
   else lockPointer();
   nextWave();
 }
