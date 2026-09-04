@@ -5267,7 +5267,7 @@ const FURN = {
     mount: 'floor', place: ['top'], provides: null, rotate: 'free', blocking: false,
   },
   banner: {
-    name: '배너', icon: '🎌', w: 0.9, d: 0.06, h: 1.4, color: 0x2b6f8f,
+    name: '배너', icon: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2" fill="#e8edf4" stroke="#8a929c" stroke-width="1.4"/><rect x="4.5" y="6" width="15" height="12" fill="#6fc3ff"/><path d="M4.5 18 L10 11.5 L13.5 15 L15.5 13 L19.5 18 Z" fill="#3a9a5c"/><circle cx="15.5" cy="9" r="1.8" fill="#ffd76b"/></svg>', w: 0.9, d: 0.06, h: 1.4, color: 0x2b6f8f,
     mount: 'wall', place: ['wall'], provides: null, rotate: 'wall', blocking: false, wallY: 1.9,
     sizable: true, image: true,
   },
