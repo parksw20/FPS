@@ -15,6 +15,7 @@ const MIME = {
   '.png': 'image/png',
   '.wav': 'audio/wav',
   '.mp3': 'audio/mpeg',
+  '.webmanifest': 'application/manifest+json',
   '.jpg': 'image/jpeg',
 };
 
