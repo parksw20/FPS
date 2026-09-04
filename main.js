@@ -4387,8 +4387,7 @@ function updateChain(dt) {
     chainRe -= dt;
     if (chainRe <= 0) {
       chainUses++;
-      chainRe = chainUses < max ? chainRecharge() : 0;
-      sfxTone(880, 0.12, 'sine', 0.18, 220);
+      chainRe = chainUses < max ? chainRecharge() : 0;   // 충전 알림음은 뺐다 (플레이 중 계속 '뛰옹' 하고 울려서)
       if (chainUses >= max) toast('🎀 리본 충전 완료');
     }
   } else chainRe = 0;
