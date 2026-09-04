@@ -13,6 +13,9 @@ const MIME = {
   '.glb': 'model/gltf-binary',
   '.json': 'application/json',
   '.png': 'image/png',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.jpg': 'image/jpeg',
 };
 
 await mkdir(join(ROOT, 'shots'), { recursive: true });
