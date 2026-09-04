@@ -14,7 +14,8 @@
 <style>
   *{box-sizing:border-box; margin:0; padding:0}
   html,body{width:100%; height:100%; overflow:hidden; background:#0a0c10; font-family:system-ui,"Segoe UI","Malgun Gothic",sans-serif}
-  #c{display:block; width:100%; height:100%}
+  #c{display:block; width:100%; height:100%; touch-action:none}   /* 터치 드래그를 브라우저 스크롤에 뺏기지 않는다 */
+  html, body{overscroll-behavior:none; touch-action:none}
   #hud{position:fixed; inset:0; pointer-events:none; color:#e8edf4}
   #crosshair{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:22px; height:22px; transition:transform .08s}
   #crosshair.zoom{transform:translate(-50%,-50%) scale(.55)}
@@ -542,7 +543,8 @@
   #briefCard li::before{content:'▸'; position:absolute; left:2px; color:#7df3ff}
   #briefCard li b{color:#ffd76b}
   #briefBtns{display:flex; gap:16px}
-  #briefBtns .menuBtn{width:210px; text-align:center}
+  #briefBtns .menuBtn{width:210px; text-align:center; white-space:nowrap}
+  #briefBtns .menuBtn span{font-size:1.05rem}
   @media (max-height:640px){                    /* 세로가 짧은 화면: 글자·버튼도 줄인다 */
     #mapPick h3{font-size:.95rem}
     #mapPick .menuBtn{padding:8px 16px}
@@ -985,9 +987,9 @@
 <div id="mobileUI">
   <div id="joy"><div id="joyStick"></div></div>
   <div id="mBtnRow">
-    <div class="mbtn" id="mbDash">대쉬</div>
     <div class="mbtn tog" id="mbZoom">줌</div>
     <div class="mbtn" id="mbJump">점프</div>
+    <div class="mbtn" id="mbDash">대쉬</div>
   </div>
   <div class="mbtn" id="mbFire">사격</div>
   <div class="mbtn" id="mbReload">재장전</div>
