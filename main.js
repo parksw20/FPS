@@ -2148,6 +2148,22 @@ function makeBlueCircle() {
   return m;
 }
 const aimCircle = makeBlueCircle(); // 조준(F) 중 표시
+// 투척 준비 표시: 사격 버튼을 누르고 있으면 원 안쪽부터 차오르고, 경계선에 닿으면(던질 수 있는 순간) 색이 바뀐다 — 1인칭에서도 타이밍을 알 수 있게
+const aimFill = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x3ba7ff, transparent: true, opacity: 0.5, depthWrite: false, fog: false, toneMapped: false }));
+aimFill.position.y = 0.003; aimFill.scale.setScalar(0.001); aimCircle.add(aimFill);
+const aimRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 64).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.85, depthWrite: false, fog: false, toneMapped: false }));
+aimRing.position.y = 0.004; aimCircle.add(aimRing);
+function updateAimFill() {
+  const a = player.upperShot === 'toss grenade' ? player.upperAct : null;
+  const p = (gWindup && a) ? Math.min(1, a.time / WIND_HOLD_T) : 0;
+  aimFill.scale.setScalar(Math.max(0.001, p));
+  const ready = p >= 1;
+  aimFill.material.color.setHex(ready ? 0xffb347 : 0x3ba7ff);
+  aimFill.material.opacity = ready ? 0.6 : 0.5;
+  aimRing.material.color.setHex(ready ? 0xffc86b : 0x8fd3ff);
+}
 function grenadeLaunch() {
   const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
   const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
@@ -2171,6 +2187,7 @@ function updateTrajectory() {
   const end = pts[pts.length - 1];
   aimCircle.position.set(end.x, 0.045, end.z);
   aimCircle.visible = true;
+  updateAimFill();
 }
 let weapon = 'rifle';                    // 'rifle' 소총 | 'pistol' 권총(리볼버)+방패
 const PISTOL_DELAY = 300;                // 리볼버: 한 발 0.3초 고정
@@ -9757,6 +9774,7 @@ window.__game = {
   clips() { return playerGltf ? playerGltf.animations.map(c => [c.name, +c.duration.toFixed(2), c.tracks.length]) : null; },
   srLights() { return srLightPool.map(l => ({ i: +l.intensity.toFixed(2), p: l.position.toArray().map(v => +v.toFixed(1)) })).filter(x => x.i > 0); },
   startPlace(type) { startPlace(type); return !!placeType; },
+  aimFill() { return { visible: aimCircle.visible, scale: +aimFill.scale.x.toFixed(2), color: aimFill.material.color.getHexString(), ring: aimRing.material.color.getHexString() }; },
   srDbg() { return { snap: placeGhost?.userData.snap ? { x: placeGhost.userData.snap.x, z: placeGhost.userData.snap.z } : null, lastItem: (() => { const it = curRoom().items[curRoom().items.length - 1]; return it ? { t: it.type, x: it.x, z: it.z } : null; })(), ghostVisible: placeGhost ? placeGhost.visible : null, placeType, placeDrag, touchPick: !!touchPick, placeAskKind, srEditUI, srMode, suppressClick, moveItem: !!moveItem, sizeDrag: !!sizeDrag, tab: srTab }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
