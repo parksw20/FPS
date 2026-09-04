@@ -11,6 +11,9 @@ let shadowQ = localStorage.getItem('fps.shadowq') || 'mid';    // 'high' 부드�
 let shadowOn = shadowQ !== 'off';
 let srEditUI = false, srRightFolded = false;   // 가구를 고르면 우측 패널을 접는다 · 탭으로 다시 편다
 let touchPick = null, placeDrag = false, placeAskKind = null, suppressClick = false;   // 터치로 잡아 옮기기 · 놓을 때 확인 팝업                    // 쇼룸 생활모드: '방 편집'을 눌러 우측 패널·저장 버튼을 연 상태
+const SENS_DEF = { pc: 1, mobile: 2 };  // 시야 감도 기본값 — 모바일은 2배
+const lookSens = { pc: +localStorage.getItem('fps.sens.pc') || SENS_DEF.pc, mobile: +localStorage.getItem('fps.sens.mobile') || SENS_DEF.mobile };
+const sensNow = () => isMobileCtrl() ? lookSens.mobile : lookSens.pc;
 let shopClosed = false;                  // 일시정지 중 상점을 ✕로 닫았나 (다음 일시정지에 초기화)
 let fsLock = localStorage.getItem('fps.fs') !== 'off';   // 전체화면 + 키 잠금 (기본 켬) — Ctrl 조합이 브라우저 단축키로 새지 않게
 renderer.shadowMap.enabled = shadowOn;
@@ -3918,6 +3921,8 @@ function syncOptUI() {
   if (ob) ob.classList.toggle('on', outlineOn);
   const sb = document.getElementById('optShadow');
   if (sb) { sb.textContent = SHADOW_LABEL[shadowQ]; sb.classList.toggle('on', shadowQ === 'high'); }
+  const sl = document.getElementById('optSens'), sv = document.getElementById('sensVal');
+  if (sl) { sl.value = sensNow(); if (sv) sv.textContent = sensNow().toFixed(1) + '× (' + (isMobileCtrl() ? '모바일' : 'PC') + ')'; }
   const fb = document.getElementById('optFs');
   if (fb) { fb.textContent = '전체화면 + 키 잠금: ' + (fsLock ? '켬' : '끔'); fb.classList.toggle('on', fsLock); }
   const dw = document.getElementById('dbgWave');
@@ -4164,7 +4169,7 @@ canvas.addEventListener('pointerdown', e => {
 });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerId !== lookId || lastLook === null) return;
-  const s = 0.005 * (player.zooming ? 0.45 : 1);
+  const s = 0.005 * sensNow() * (player.zooming ? 0.45 : 1);
   player.yaw -= (e.clientX - lastLook[0]) * s;
   player.pitch -= (e.clientY - lastLook[1]) * s;
   player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch));
@@ -4189,7 +4194,7 @@ mb('mbFire').addEventListener('pointerdown', e => {   // 사격 조그: 누른 �
 });
 mb('mbFire').addEventListener('pointermove', e => {
   if (e.pointerId !== fireJogId || !fireJogLast) return;
-  const s = 0.005 * (player.zooming ? 0.45 : 1);
+  const s = 0.005 * sensNow() * (player.zooming ? 0.45 : 1);
   player.yaw -= (e.clientX - fireJogLast[0]) * s;
   player.pitch -= (e.clientY - fireJogLast[1]) * s;
   player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch));
@@ -4204,7 +4209,7 @@ mb('mbZoom').addEventListener('pointerdown', e => { e.preventDefault(); zoomTog 
 mb('mbDash').addEventListener('pointerdown', e => { e.preventDefault(); dash(); });
 document.addEventListener('mousemove', e => {
   if (!locked) return;
-  const sens = 0.0022 * (player.zooming ? 0.45 : 1);
+  const sens = 0.0022 * sensNow() * (player.zooming ? 0.45 : 1);
   player.yaw -= e.movementX * sens;
   player.pitch -= e.movementY * sens;
   player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch));
@@ -4231,6 +4236,19 @@ function lockPointer() {                 // 조준 잠금 — 옵션이 켜져 �
   if (pr && pr.catch) pr.catch(() => { });
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { try { navigator.keyboard?.unlock?.(); } catch { } } });
+document.getElementById('optSens')?.addEventListener('input', e => {
+  e.stopPropagation();
+  const v = Math.max(0.3, Math.min(3, +e.target.value || 1));
+  if (isMobileCtrl()) lookSens.mobile = v; else lookSens.pc = v;
+  localStorage.setItem(isMobileCtrl() ? 'fps.sens.mobile' : 'fps.sens.pc', v);
+  syncOptUI();
+});
+document.getElementById('optSensReset')?.addEventListener('click', e => {
+  e.stopPropagation();
+  if (isMobileCtrl()) lookSens.mobile = SENS_DEF.mobile; else lookSens.pc = SENS_DEF.pc;
+  localStorage.removeItem(isMobileCtrl() ? 'fps.sens.mobile' : 'fps.sens.pc');
+  syncOptUI(); toast('시야 감도 기본값 ' + sensNow().toFixed(1) + '×');
+});
 document.getElementById('optFs')?.addEventListener('click', e => {
   e.stopPropagation();
   fsLock = !fsLock;
