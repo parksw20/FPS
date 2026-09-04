@@ -9,6 +9,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 2배 픽셀은 화면 픽셀 4배 — 1.5배까지만
 let shadowQ = localStorage.getItem('fps.shadowq') || 'mid';    // 'high' 부드러운 2048(매 프레임) · 'mid' 1024 정적 + 적은 그림자 원 · 'off' 끔
 let shadowOn = shadowQ !== 'off';
+let shopClosed = false;                  // 일시정지 중 상점을 ✕로 닫았나 (다음 일시정지에 초기화)
 let fsLock = localStorage.getItem('fps.fs') !== 'off';   // 전체화면 + 키 잠금 (기본 켬) — Ctrl 조합이 브라우저 단축키로 새지 않게
 renderer.shadowMap.enabled = shadowOn;
 renderer.shadowMap.type = shadowQ === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
@@ -3700,8 +3701,11 @@ document.getElementById('optBtn').addEventListener('click', e => {
   e.stopPropagation();
   optMenu.style.display = optMenu.style.display === 'block' ? 'none' : 'block';
   if (optMenu.style.display === 'block') syncOptUI();
-  if (optMenu.style.display === 'block') shopMenu.style.display = 'none';
   if (document.pointerLockElement) document.exitPointerLock();
+  if (optMenu.style.display === 'block' && inRun && !paused && !player.dead) {   // 옵션을 열면 게임 일시정지 (모바일 포함)
+    paused = true; shopClosed = true;    // 옵션 위에 상점이 겹치지 않게 — '상점' 버튼으로 다시 연다
+    refreshOverlay();
+  } else if (optMenu.style.display === 'block') shopMenu.style.display = 'none';
 });
 // 수류탄 슬롯 클릭/탭으로도 토글
 document.getElementById('gSlot').addEventListener('pointerdown', e => { e.stopPropagation(); selectSlot(slot === 'grenade' ? (weapon === 'pistol' ? 'pistol' : 'rifle') : 'grenade'); });
@@ -3823,6 +3827,13 @@ dbgTog('dbgAmmo', () => dbgAmmo, v => {
 });
 
 const shopMenu = document.getElementById('shopMenu');
+
+document.getElementById('shopClose').addEventListener('click', e => {
+  e.stopPropagation();
+  shopMenu.style.display = 'none';
+  if (inRun) { shopClosed = true; refreshOverlay(); }
+});
+document.getElementById('btnShop')?.addEventListener('click', e => { e.stopPropagation(); shopClosed = false; refreshOverlay(); });
 // 시작 화면 패널: 화면 중앙에서 100px 아래 배치 (넘치면 스크롤)
 function placeStartPanel(el) {
   el.style.left = '50%';
@@ -3937,17 +3948,22 @@ function refreshOverlay() {
   // 일시정지 화면: 되돌아가기 버튼 100px 아래에 상점 패널 상시 표시
   const sm = document.getElementById('shopMenu');
   const allowShop = !walkGrid || floorShopOpen;   // 랜덤맵은 층 이동 시에만 상점
-  if (pauseUI && sm && allowShop) {
+  if (!pauseUI) shopClosed = false;      // 다음 일시정지에는 다시 열린 채로
+  const bs = document.getElementById('btnShop');
+  if (bs) bs.style.display = pauseUI && allowShop && shopClosed ? '' : 'none';   // 닫았을 때만 '상점' 버튼
+  if (pauseUI && sm && allowShop && !shopClosed) {
     renderUpg();
     sm.style.display = 'block';
     sm.style.left = '50%';
-    sm.style.top = 'calc(13vh + 100px)';  // 탭을 바꿔도 위치가 흔들리지 않게 고정
+    sm.style.top = '50%';                  // 화면 세로 중앙 — 높이를 고정해 탭을 바꿔도 위치가 흔들리지 않는다
     sm.style.bottom = 'auto';
-    sm.style.transform = 'translateX(-50%)';
-    sm.style.maxHeight = Math.max(200, Math.round(innerHeight * 0.87 - 100)) + 'px';
+    sm.style.transform = 'translate(-50%,-50%)';
+    const hgt = Math.max(240, Math.round(innerHeight * 0.84));
+    sm.style.height = hgt + 'px';
+    sm.style.maxHeight = hgt + 'px';
     sm.style.overflowY = 'auto';
   } else if (inRun && sm) {
-    sm.style.display = 'none'; // 일시정지 해제·랜덤맵 일반 정지에서는 닫기
+    sm.style.display = 'none'; // 일시정지 해제·랜덤맵 일반 정지·닫기에서는 감춘다
   }
 }
 syncOptUI();
