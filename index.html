@@ -309,7 +309,7 @@
   .ctxFits button.on{color:#04161c; background:#7df3ff; font-weight:700}
   #srSlots button.buy i{color:#ffd76b}
   #srBg{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
-  #srMap{position:absolute; left:24px; bottom:18px; display:none; z-index:23; border-radius:10px;
+  #srMap{position:absolute; left:24px; top:100px; bottom:auto; width:176px; height:176px; display:none; z-index:23; border-radius:10px;   /* 절반 크기 · 좌상단 */
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.35)}
   #srMapEdit{margin-top:6px; color:#04161c; font-weight:700;   /* 패널 안 버튼 (방 이름 아래) */
     background:rgba(125,243,255,.92); border-color:#7df3ff}
@@ -394,14 +394,14 @@
   #srLeaveStay:hover{border-color:#7df3ff}
   #srRoomBtns2 button.dirty{border-color:#ffd76b; color:#ffe9a8}   /* 저장하지 않은 변경 */
   #srRoomBtns2 button[disabled]{opacity:.35; cursor:default}
-  #srMapZoom{position:absolute; left:284px; bottom:30px; display:none; z-index:25; cursor:pointer;   /* 미니맵 우하단 */
+  #srMapZoom{position:absolute; left:24px; top:282px; bottom:auto; display:none; z-index:25; cursor:pointer;   /* 미니맵 아래 */
     padding:4px 10px; font-size:.78rem; font-weight:700; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.9); border:1px solid rgba(64,214,255,.4)}
   #srMapZoom:hover{color:#04161c; background:#7df3ff; border-color:#7df3ff}
-  #srMapLv{position:absolute; left:36px; top:auto; bottom:330px; display:none; z-index:24; pointer-events:none;   /* 미니맵 좌상단 */
+  #srMapLv{position:absolute; left:30px; top:106px; bottom:auto; display:none; z-index:24; pointer-events:none; transform:scale(.8); transform-origin:top left;   /* 미니맵 좌상단 */
     padding:5px 12px; font-size:.9rem; font-weight:700; letter-spacing:.1em; color:#7df3ff; border-radius:8px;
     background:rgba(4,20,28,.92); border:1px solid rgba(64,214,255,.5)}
-  #srModes{position:absolute; left:50%; top:74px; transform:translateX(-50%); display:flex; gap:16px; z-index:23}
+  #srModes{position:absolute; left:24px; top:14px; display:flex; gap:16px; z-index:23}   /* 좌상단 토글 버튼 하나 */
   #srModes button{padding:16px 32px; cursor:pointer; font-size:1.64rem; white-space:nowrap; color:#bfe9f7; border-radius:16px;
     background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.35)}
   #srModes button.on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
@@ -468,7 +468,10 @@
   .srItem b{position:absolute; right:2px; bottom:1px; font-size:.52rem; color:#ffd76b; font-weight:800}
   .srItem b.loot{color:#7df3ff}
   .srItem{position:relative}
-  #srLiveBar{position:absolute; left:50%; bottom:26px; transform:translateX(-50%); display:none; gap:8px; align-items:center; z-index:26}
+  #srLiveBar{position:absolute; right:24px; bottom:26px; display:none; gap:8px; align-items:center; z-index:26}   /* 우하단 */
+  #srLiveBar .ico{display:none; width:44px; padding:8px 0; font-size:1.05rem; text-align:center}
+  #srLiveBar.editing .ico{display:inline-block}
+  #srLiveBar [data-act="edit"].on{color:#04161c; background:#7df3ff; border-color:#7df3ff; font-weight:800}
   #srLiveBar button{padding:8px 14px; font-size:.8rem; cursor:pointer; color:#bfe9f7; border-radius:8px;
     background:rgba(4,20,28,.9); border:1.5px solid rgba(64,214,255,.4)}
   #srLiveBar button:hover:not([disabled]){border-color:#7df3ff; background:rgba(64,214,255,.16)}
@@ -543,7 +546,7 @@
   .tpBtn{margin-top:10px; border-color:rgba(190,140,255,.7); box-shadow:0 0 14px rgba(170,120,255,.35), inset 0 0 12px rgba(170,120,255,.12)}
   .tpBtn span{color:#e6d5ff; text-shadow:0 0 10px rgba(180,130,255,.85)}
   .tpBtn:hover{background:rgba(170,120,255,.2); border-color:#c39bff; box-shadow:0 0 26px rgba(170,120,255,.7)}
-  #curTop{position:fixed; left:18px; top:18px; z-index:60; display:none; gap:8px; pointer-events:none}
+  #curTop{position:fixed; right:190px; top:18px; z-index:60; display:none; gap:8px; pointer-events:none}   /* 우상단 · 닫기 버튼 왼쪽 */
   #curTop.on{display:flex}
   #curTop .cur{display:flex; align-items:center; gap:6px; padding:7px 13px; border-radius:9px; font-size:.9rem; font-weight:800;
     background:rgba(4,16,24,.88); border:1.5px solid rgba(64,214,255,.45); color:#eaf9ff; font-variant-numeric:tabular-nums;
@@ -677,6 +680,8 @@
   body.mobile.fireJog #mbFire{background:rgba(217,83,79,.28); border-style:dashed}
   #mobOpt{display:none}
   body.mobile #mobOpt{display:block}
+  body.mobile.srLive #mobileUI{display:block !important}        /* 쇼룸 생활모드: 이동 조그 */
+  body.mobile.srLive #mBtnRow, body.mobile.srLive #mbFire{display:none !important}
   /* 모바일: 미니맵 절반 · 하단 HUD 80% (zoom은 위치 오프셋까지 같이 줄여 화면 중앙 기준 배치가 유지된다) */
   body.mobile #minimap{zoom:.5}
   body.mobile #wave.rnd{top:172px} body.mobile #seedTag{top:196px} body.mobile #fpsHud{top:220px}
@@ -798,7 +803,7 @@
     <button data-size="w-">가로 −2m</button><button data-size="w+">가로 +2m</button>
     <button data-size="d-">세로 −2m</button><button data-size="d+">세로 +2m</button>
   </div>
-  <div class="addRow"><button id="addOk">배치</button><button id="addClose">🚫 폐쇄</button><button id="addNew">＋ 새 방</button><button id="addCancel">닫기</button></div>
+  <div class="addRow"><button id="addOk">배치</button><button id="addClose">🚫 폐쇄</button><button id="addClear">🧹 방 비우기</button><button id="addReset">🧨 전체 초기화</button><button id="addNew">＋ 새 방</button><button id="addCancel">닫기</button></div>
   <p class="srTip" style="text-align:center">칸을 끌거나 방향키로 옮기세요 · 1m 격자 · 벽이 2m 이상 맞닿아야 연결됩니다</p>
 </div></div>
 <div id="showroom">
@@ -875,16 +880,13 @@
     <button id="srLeaveStay">↩ 계속 편집</button>
   </div>
   <div id="srModes">
-    <button data-mode="pose" class="on">🧍 포즈모드</button>
-    <button data-mode="live">🚶 생활모드</button>
+    <button id="srModeBtn" class="on">🧍 포즈모드</button>
   </div>
   <div id="srLiveBar">
-    <button data-act="save">💾 변경사항 저장</button>
-    <button data-act="undo" disabled>↩ 실행 취소</button>
-    <button data-act="load">📂 불러오기</button>
-    <button data-act="clear">🧹 방 비우기</button>
-    <button data-act="reset">🧨 전체 초기화</button>
-    <button data-act="close">🚫 방 폐쇄</button>
+    <button data-act="save" class="ico" title="변경사항 저장">💾</button>
+    <button data-act="undo" class="ico" disabled title="실행 취소">↩</button>
+    <button data-act="load" class="ico" title="불러오기">📂</button>
+    <button data-act="edit" title="우측 편집 패널 열기/닫기">✎ 방 편집</button>
   </div>
   <div id="srBottom">
     <div class="srBtn" id="srSpin">회전 ⟳</div>
