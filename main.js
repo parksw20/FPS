@@ -3692,7 +3692,6 @@ function banner(text) {
 let camMode = localStorage.getItem('fps.view') || 'shoulder';  // 기본: 3인칭 숄더뷰
 if (camMode === 'tps') camMode = 'shoulder';                    // 구버전 저장값 호환
 let ctrlMode = localStorage.getItem('fps.ctrl') || 'pc';       // 'pc' | 'mobile'
-let moveMode = localStorage.getItem('fps.move') || 'pad';      // 'pad' 고정 조그 | 'dash' 재터치 대쉬
 let fireMode = localStorage.getItem('fps.fire') || 'btn';      // 'btn' 버튼 | 'jog' 눌러서 발사+시점
 const isMobileCtrl = () => ctrlMode === 'mobile';
 let started = false;                                            // 모바일 모드 게임 시작 여부
@@ -3850,9 +3849,6 @@ optMenu.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click',
 optMenu.querySelectorAll('[data-ctrl]').forEach(b => b.addEventListener('click', () => {
   ctrlMode = b.dataset.ctrl; localStorage.setItem('fps.ctrl', ctrlMode); syncOptUI(); applyCtrl();
 }));
-optMenu.querySelectorAll('[data-move]').forEach(b => b.addEventListener('click', () => {
-  moveMode = b.dataset.move; localStorage.setItem('fps.move', moveMode); syncOptUI(); applyCtrl();
-}));
 optMenu.querySelectorAll('[data-fire]').forEach(b => b.addEventListener('click', () => {
   fireMode = b.dataset.fire; localStorage.setItem('fps.fire', fireMode); syncOptUI(); applyCtrl();
 }));
@@ -3900,7 +3896,6 @@ function syncOptUI() {
   optMenu.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === camMode));
   optMenu.querySelectorAll('[data-ctrl]').forEach(b => b.classList.toggle('on', b.dataset.ctrl === ctrlMode));
   optMenu.querySelectorAll('[data-map]').forEach(b => b.classList.toggle('on', b.dataset.map === mapMode));
-  optMenu.querySelectorAll('[data-move]').forEach(b => b.classList.toggle('on', b.dataset.move === moveMode));
   optMenu.querySelectorAll('[data-fire]').forEach(b => b.classList.toggle('on', b.dataset.fire === fireMode));
 }
 function applyView() {
@@ -3909,9 +3904,7 @@ function applyView() {
 }
 function applyCtrl() {
   document.body.classList.toggle('mobile', isMobileCtrl());
-  document.body.classList.toggle('moveDash', moveMode === 'dash');
   document.body.classList.toggle('fireJog', fireMode === 'jog');
-  if (moveMode !== 'dash') joyHome();      // 고정 조그로 되돌린다
   if (isMobileCtrl() && document.pointerLockElement) document.exitPointerLock();
   refreshOverlay();
 }
@@ -4110,20 +4103,6 @@ function joyUpdate(e) {
   touchMove.x = dx / m * (cl / 55); touchMove.z = dy / m * (cl / 55);
   joyStick.style.transform = `translate(${dx / m * cl}px,${dy / m * cl}px)`;
 }
-const DASH_WINDOW = 0.5;                 // 손을 뗀 자리에 조그가 머무는 시간(초)
-let joyArmT = 0, joyArmDir = null, joyArmTimer = null;
-function joyHome() {                     // 조그를 원래 자리(좌하단 고정)로
-  joy.style.left = ''; joy.style.top = ''; joy.style.bottom = '';
-  joy.classList.remove('armed');
-  joyArmT = 0; joyArmDir = null;
-  if (joyArmTimer) { clearTimeout(joyArmTimer); joyArmTimer = null; }
-}
-function joyMoveTo(cx, cy) {             // 조그 중심을 화면 좌표로 옮긴다
-  const r = joy.getBoundingClientRect();
-  joy.style.left = (cx - r.width / 2) + 'px';
-  joy.style.top = (cy - r.height / 2) + 'px';
-  joy.style.bottom = 'auto';
-}
 function joyStart(e) {
   joyId = e.pointerId;
   try { joy.setPointerCapture(joyId); } catch { }
@@ -4131,43 +4110,15 @@ function joyStart(e) {
   joyCenter = [r.x + r.width / 2, r.y + r.height / 2];
   joyUpdate(e);
 }
-joy.addEventListener('pointerdown', e => {
-  const armed = joyArmT > 0 && gameTime - joyArmT < DASH_WINDOW && joyArmDir;
-  if (armed) {                           // 머문 조그를 다시 누르면 그 방향으로 대쉬
-    touchMove.x = joyArmDir.x; touchMove.z = joyArmDir.z;
-    dashPending = true;                  // 이번 프레임 입력 방향이 정해지면 대쉬
-  }
-  joy.classList.remove('armed');
-  joyArmT = 0; joyArmDir = null;
-  joyStart(e);
-});
+joy.addEventListener('pointerdown', e => joyStart(e));
 joy.addEventListener('pointermove', e => { if (e.pointerId === joyId) joyUpdate(e); });
 const joyEnd = e => {
   if (e.pointerId !== joyId) return;
   joyId = null;
-  const moving = Math.abs(touchMove.x) + Math.abs(touchMove.z) > 0.2;
-  if (moveMode === 'dash' && moving) {    // 뗀 자리에 0.5초간 머문다
-    joyMoveTo(e.clientX, e.clientY);
-    const m = Math.hypot(touchMove.x, touchMove.z) || 1;
-    joyArmDir = { x: touchMove.x / m, z: touchMove.z / m };
-    joyArmT = gameTime;
-    joy.classList.add('armed');
-    if (joyArmTimer) clearTimeout(joyArmTimer);
-    joyArmTimer = setTimeout(joyHome, DASH_WINDOW * 1000);
-  }
   touchMove.x = touchMove.z = 0;
   joyStick.style.transform = '';
 };
 joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
-// 재터치 대쉬 모드: 좌측 아무 곳이나 눌러도 그 자리에서 조그가 시작된다 (대쉬는 하지 않음)
-document.getElementById('joyZone').addEventListener('pointerdown', e => {
-  if (moveMode !== 'dash' || !isMobileCtrl() || !started || player.dead) return;
-  e.preventDefault();
-  joyHome();
-  joyMoveTo(e.clientX, e.clientY);
-  joyStart(e);
-  joy.setPointerCapture?.(e.pointerId);
-});
 // 화면 우측 드래그로 시점 회전
 let lookId = null, lastLook = null;
 canvas.addEventListener('pointerdown', e => {
@@ -4301,7 +4252,6 @@ document.addEventListener('mouseup', e => {
 document.addEventListener('contextmenu', e => e.preventDefault());
 
 const sfxDash = () => sfxTone(500, 0.18, 'sawtooth', 0.12, 700);
-let dashPending = false;                 // 조그 재터치 대쉬 — 방향 계산 후 발동
 function dash() {
   if (player.dead || player.dashCd > 0 || player.crouch) return;   // 앉은 자세에서는 대쉬 불가
   player.dashDir = { ...player.lastDir };
@@ -4945,7 +4895,6 @@ function updatePlayer(dt) {
   // 대쉬 방향 후보: 입력 중이면 입력 방향, 아니면 전방
   if (Math.abs(mx) + Math.abs(mz) > 0.12) player.lastDir = { x: dx, z: dz };
   else player.lastDir = { x: fx, z: fz };
-  if (dashPending) { dashPending = false; dash(); }   // 조그 재터치 — 방향이 정해진 뒤 발동
   // 대쉬(순간 가속)
   player.dashCd = Math.max(0, player.dashCd - dt);
   if (player.dashT > 0) {

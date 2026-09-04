@@ -657,8 +657,6 @@
     background:rgba(10,14,20,.4); border:1px solid rgba(126,224,163,.3)}
   #joy.armed{border-color:#ffd76b; background:rgba(255,215,107,.16); box-shadow:0 0 22px rgba(255,215,107,.5)}
   #joy.armed #joyStick{background:rgba(255,215,107,.4); border-color:#ffd76b}
-  #joyZone{position:fixed; left:0; bottom:0; width:46vw; height:62vh; z-index:34; pointer-events:none; touch-action:none}
-  body.mobile.moveDash #joyZone{pointer-events:auto}
   body.mobile.fireJog #mbFire{background:rgba(217,83,79,.28); border-style:dashed}
   #mobOpt{display:none}
   body.mobile #mobOpt{display:block}
@@ -731,11 +729,6 @@
     <button data-ctrl="mobile">모바일</button>
   </div>
   <div id="mobOpt">
-    <h3>모바일 · 이동</h3>
-    <div class="optRow">
-      <button data-move="pad">현재 형태</button>
-      <button data-move="dash">재터치 대쉬</button>
-    </div>
     <h3>모바일 · 사격</h3>
     <div class="optRow">
       <button data-fire="btn">현재 형태</button>
@@ -897,7 +890,6 @@
   <p class="shopHint">탭마다 강화 항목이 다릅니다 · 적을 잡으면 코인 획득</p>
 </div>
 <div id="mobileUI">
-  <div id="joyZone"></div>
   <div id="joy"><div id="joyStick"></div></div>
   <div id="mBtnRow">
     <div class="mbtn" id="mbDash">대쉬</div>
