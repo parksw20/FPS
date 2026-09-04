@@ -8177,7 +8177,7 @@ function syncGuides() {                   // 활성 방에만 가이드라인 ·
     r.grp.visible = onLvl && !inFront;    // 다른 층·앞을 가리는 방은 숨긴다
 
     if (r.front) r.front.visible = outdoors || (r.slot !== standingSlot() && !doorNear.has(r.slot));   // 안에 있거나 문을 지날 때만 앞이 열린다
-    const editing = !!(placeType || moveItem || srPickSel);   // 실제로 놓거나 고르는 중에만 격자를 띄운다
+    const editing = (srMode !== 'live' || srEditUI) && !!(placeType || moveItem || srPickSel);   // 실제로 놓거나 고르는 중에만 격자 · 생활모드는 '방 편집'이 켜져 있을 때만
     const active = onLvl && !inFront && r.slot === roomStore.cur;
     const kind = placeType ? FURN[placeType].mount : moveItem ? FURN[moveItem.type].mount : srPickSel ? FURN[srPickSel.type].mount : null;
     const onWall = kind === 'wall' || kind === 'opening';
@@ -9033,7 +9033,7 @@ function srUpdate(dt) {
     if (placeType) { commitPlace(); return; }
     if (!isRoomTab(srTab)) return;
     if (moveItem) return;
-    const picked = pickFurniture(e);      // 놓인 가구 고르기
+    const picked = (srMode === 'live' && !srEditUI) ? null : pickFurniture(e);      // 놓인 가구 고르기 (생활모드는 '방 편집'이 켜져 있을 때만)
     if (picked) { setSel(picked); showCtx(e.clientX, e.clientY); return; }   // 빈 곳을 눌러도 메뉴는 닫기 전까지 유지
     const face = pickSurface(e);          // 가구가 아니면 벽·바닥·천장을 고른다 (색 바꾸기)
     if (face && srTab === 'paint') {
@@ -9058,7 +9058,15 @@ function srUpdate(dt) {
       if (a2 === 'save') saveToActiveSlot();
       else if (a2 === 'load') openLoadMenu();
       else if (a2 === 'undo') undoRoom();
-      else if (a2 === 'edit') { srEditUI = !srEditUI; srRenderModeUI(); }
+      else if (a2 === 'edit') {
+        srEditUI = !srEditUI;
+        if (!srEditUI) {                 // 편집을 끄면 놓기·이동·선택을 모두 정리해 가이드 라인이 남지 않게
+          if (placeType) cancelPlace();
+          if (moveItem) endMove(false);
+          closeCtx();
+        }
+        srRenderModeUI();
+      }
     });
   }
   document.getElementById('srClear')?.addEventListener('click', e => { e.stopPropagation(); clearRoom(); });
