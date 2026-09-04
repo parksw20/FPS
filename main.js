@@ -9,6 +9,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 2배 픽셀은 화면 픽셀 4배 — 1.5배까지만
 let shadowQ = localStorage.getItem('fps.shadowq') || 'mid';    // 'high' 부드러운 2048(매 프레임) · 'mid' 1024 정적 + 적은 그림자 원 · 'off' 끔
 let shadowOn = shadowQ !== 'off';
+let srEditUI = false;                    // 쇼룸 생활모드: '방 편집'을 눌러 우측 패널·저장 버튼을 연 상태
 let shopClosed = false;                  // 일시정지 중 상점을 ✕로 닫았나 (다음 일시정지에 초기화)
 let fsLock = localStorage.getItem('fps.fs') !== 'off';   // 전체화면 + 키 잠금 (기본 켬) — Ctrl 조합이 브라우저 단축키로 새지 않게
 renderer.shadowMap.enabled = shadowOn;
@@ -5402,7 +5403,8 @@ function undoRoom() {
 function syncUndoBtn() {
   for (const b of document.querySelectorAll('#srUndo, #srLiveBar [data-act="undo"]')) {
     b.disabled = !undoStack.length;
-    b.textContent = '↩ 실행 취소' + (undoStack.length ? ' (' + undoStack.length + ')' : '');
+    b.textContent = '↩' + (undoStack.length ? ' ' + undoStack.length : '');
+    b.title = '실행 취소';
   }
 }
 function fixMountY() {                    // 설치면 높이를 한 번 더 맞춘다
@@ -5437,7 +5439,8 @@ function roomRevert() {                   // 마지막으로 저장한 상태로
 }
 function syncSaveBtn() {
   for (const b of document.querySelectorAll('#srSave, #srLiveBar [data-act="save"]')) {
-    b.textContent = roomDirty ? '💾 변경사항 저장 •' : '💾 변경사항 저장';
+    b.textContent = roomDirty ? '💾•' : '💾';
+    b.title = roomDirty ? '변경사항 저장 (저장 안 된 변경 있음)' : '변경사항 저장';
     b.classList.toggle('dirty', roomDirty);
   }
 }
@@ -8345,7 +8348,8 @@ function liveStep(dt) {
   let mx = 0, mz = 0;
   if (keys['KeyW']) mz -= 1; if (keys['KeyS']) mz += 1;
   if (keys['KeyA']) mx -= 1; if (keys['KeyD']) mx += 1;
-  const len = Math.hypot(mx, mz) || 1;
+  if (isMobileCtrl()) { mx += touchMove.x; mz += touchMove.z; }   // 모바일: 좌하단 이동 조그
+  const len = Math.max(1, Math.hypot(mx, mz));
   const cy = Math.cos(live.camYaw), sy = Math.sin(live.camYaw);
   const dx = (-sy * -mz + cy * mx) / len, dz = (-cy * -mz - sy * mx) / len;
   live.moving = Math.abs(mx) + Math.abs(mz) > 0;
@@ -8542,9 +8546,10 @@ function drawRoomMap() {
   c.restore();
 }
 function srRenderModeUI() {
-  for (const b of document.querySelectorAll('#srModes button'))
-    b.classList.toggle('on', b.dataset.mode === srMode);
   const liveNow = srMode === 'live';
+  const mb = document.getElementById('srModeBtn');
+  if (mb) { mb.textContent = liveNow ? '🚶 생활모드' : '🧍 포즈모드'; mb.classList.toggle('on', liveNow); mb.title = liveNow ? '포즈모드로 전환' : '생활모드로 전환'; }
+  document.body.classList.toggle('srLive', srOn && liveNow);
   for (const t of document.querySelectorAll('#srTabs button')) {   // 포즈=장비·의상 · 생활=방 설정·벽·풍경·가구
     const roomTab = isRoomTab(t.dataset.tab);
     t.style.display = (liveNow ? roomTab : !roomTab) ? '' : 'none';
@@ -8552,8 +8557,12 @@ function srRenderModeUI() {
   if (liveNow && !isRoomTab(srTab)) { srTab = 'room'; srRenderInv(); }
   if (!liveNow && isRoomTab(srTab)) { srTab = 'gear'; srRenderInv(); }
   document.getElementById('srLeft').style.display = liveNow ? 'none' : '';
+  document.getElementById('srRight').style.display = liveNow && !srEditUI ? 'none' : '';   // 생활모드에서는 '방 편집'을 눌러야 우측 패널
   document.getElementById('srBottom').style.display = liveNow ? 'none' : '';   // 회전·포즈·전신 보기는 포즈모드 전용
-  document.getElementById('srLiveBar').style.display = liveNow ? 'flex' : 'none';   // 방 관리 버튼은 생활모드 전용
+  const lb = document.getElementById('srLiveBar');
+  lb.style.display = liveNow ? 'flex' : 'none';   // 방 관리 버튼은 생활모드 전용
+  lb.classList.toggle('editing', srEditUI);
+  lb.querySelector('[data-act="edit"]')?.classList.toggle('on', srEditUI);
   syncSaveBtn(); syncUndoBtn();
   document.getElementById('srHint').textContent = srMode === 'live'
     ? 'WASD 이동 · Shift 대쉬 · Space 점프 · 좌드래그 카메라 · 휠 거리 · 문 앞에서 자동으로 열립니다'
@@ -8778,7 +8787,7 @@ function closeShowroom(force = false) {
   hideLeaveAsk();
   srOn = false;
   document.getElementById('showroom').classList.remove('on');
-  document.body.classList.remove('showroom');
+  document.body.classList.remove('showroom'); document.body.classList.remove('srLive');
   showCurTop(false);
   refreshOverlay();
 }
@@ -8836,7 +8845,7 @@ function srUpdate(dt) {
   const sr = document.getElementById('showroom');
   sr.addEventListener('contextmenu', e => { if (srOn) e.preventDefault(); });
   sr.addEventListener('pointerdown', e => {
-    if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop')) return;
+    if (e.target.closest('.srPanel, #srBottom, #srClose, #srTop, #srModes, #srLiveBar, #srMap, #srMapZoom, #srMapLv, #srCtx')) return;
     e.preventDefault();                  // 드래그 중 텍스트가 잡히지 않게
     if (e.button === 2) { srPanDrag = [e.clientX, e.clientY]; return; }   // 우클릭: 카메라 이동
     srDrag = e.clientX; srDragY = e.clientY; srSpin = false;
@@ -9049,12 +9058,12 @@ function srUpdate(dt) {
       if (a2 === 'save') saveToActiveSlot();
       else if (a2 === 'load') openLoadMenu();
       else if (a2 === 'undo') undoRoom();
-      else if (a2 === 'clear') clearRoom();
-      else if (a2 === 'reset') resetRooms();
-      else if (a2 === 'close') closeRoom();
+      else if (a2 === 'edit') { srEditUI = !srEditUI; srRenderModeUI(); }
     });
   }
   document.getElementById('srClear')?.addEventListener('click', e => { e.stopPropagation(); clearRoom(); });
+  document.getElementById('addClear')?.addEventListener('click', e => { e.stopPropagation(); clearRoom(); });     // 배치 편집 창 안
+  document.getElementById('addReset')?.addEventListener('click', e => { e.stopPropagation(); resetRooms(); });
   document.getElementById('srReset2')?.addEventListener('click', e => { e.stopPropagation(); resetRooms(); });
   document.getElementById('srCloseRoom')?.addEventListener('click', e => { e.stopPropagation(); closeRoom(); });
   document.getElementById('srMapEdit')?.addEventListener('click', e => { e.stopPropagation(); openLayoutEdit(standingSlot()); });
@@ -9137,12 +9146,10 @@ function srUpdate(dt) {
     if (e.key === 'Enter') renameRoom();
     if (e.key === 'Escape') closeRenameAsk();
   });
-  for (const b of document.querySelectorAll('#srModes button')) {
-    b.addEventListener('click', e => {
-      e.stopPropagation();
-      if (b.dataset.mode === 'live') liveEnter(); else liveExit();
-    });
-  }
+  document.getElementById('srModeBtn').addEventListener('click', e => {   // 포즈 ↔ 생활 토글
+    e.stopPropagation();
+    if (srMode === 'live') liveExit(); else liveEnter();
+  });
   document.getElementById('srClose').addEventListener('click', e => { e.stopPropagation(); closeShowroom(); });
   document.getElementById('srSpin').addEventListener('click', e => { e.stopPropagation(); srSpin = !srSpin; });
   document.getElementById('srReset').addEventListener('click', e => { e.stopPropagation(); srReset(); });
