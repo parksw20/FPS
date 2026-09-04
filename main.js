@@ -4193,7 +4193,9 @@ let lookId = null, lastLook = null;
 canvas.addEventListener('pointerdown', e => {
   if (!isMobileCtrl() || !started || player.dead) return;
   if (e.clientX < innerWidth * 0.4) return;
+  e.preventDefault();
   lookId = e.pointerId; lastLook = [e.clientX, e.clientY];
+  try { canvas.setPointerCapture(e.pointerId); } catch { }   // 손가락이 어디로 가든 계속 받는다
 });
 canvas.addEventListener('pointermove', e => {
   if (e.pointerId !== lookId || lastLook === null) return;
@@ -7350,8 +7352,9 @@ function showCtx(x, y) {
       });
     }
   }
-  el.style.left = Math.min(x, innerWidth - 130) + 'px';
-  el.style.top = Math.min(y, innerHeight - 100) + 'px';
+  const z = uiScale || 1;                 // UI 배율(zoom) 환산
+  el.style.left = Math.min(x / z, innerWidth / z - 130) + 'px';
+  el.style.top = Math.min(y / z, innerHeight / z - 100) + 'px';
   el.classList.add('on');
 }
 function hideCtx() { document.getElementById('srCtx')?.classList.remove('on'); }
@@ -9054,11 +9057,13 @@ function srUpdate(dt) {
     const [bx, by] = toScreen(pos.clone());
     const [, ty] = toScreen(pos.clone().add(new THREE.Vector3(0, hgt, 0)));
     el.style.display = 'flex';            // 크기를 재려면 먼저 그려야 한다
+    const z = uiScale || 1;               // #showroom에 zoom이 걸려 있어 그 안의 px는 배율로 나눠야 화면 좌표와 맞는다
+    const W = innerWidth / z, H = innerHeight / z, sx = bx / z, sy = by / z, syTop = ty / z;
     const w = el.offsetWidth || 220, hh = el.offsetHeight || 90;
-    let top = by + 14;                    // 기본: 실루엣 아래
-    if (top + hh > innerHeight - 8) top = ty - hh - 14;   // 안 들어가면 위
-    top = Math.max(8, Math.min(innerHeight - hh - 8, top));
-    const left = Math.max(w / 2 + 8, Math.min(innerWidth - w / 2 - 8, bx));
+    let top = sy + 14;                    // 기본: 실루엣 아래
+    if (top + hh > H - 8) top = syTop - hh - 14;   // 안 들어가면 위
+    top = Math.max(8, Math.min(H - hh - 8, top));
+    const left = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, sx));
     el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.bottom = 'auto'; el.style.transform = 'translateX(-50%)';
     el.style.display = '';
   }
