@@ -8953,6 +8953,7 @@ function srUpdate(dt) {
       g.position.set(rm.cx + x, (rm.cy || 0) + y + 0.02, rm.cz + z);
       g.rotation.y = rot * ROT_STEP;
       srScene.add(g); askMark = g;
+      positionPlaceAsk(g.position, FURN[type].h);   // 팝업은 실루엣 바로 아래(안 들어가면 위)에
     }
     // 확인하는 동안에는 실루엣만 — 커서를 따라다니던 미리보기·옮기던 가구 본체는 감춘다
     if (placeGhost) placeGhost.visible = false;
@@ -8960,6 +8961,22 @@ function srUpdate(dt) {
     if (kind === 'move' && moveItem) { const m = srFurnGrp?.children.find(o => o.userData.item === moveItem); if (m) { m.visible = false; askHidden = m; } }
   }
   let askHidden = null;
+  function positionPlaceAsk(pos, hgt) {   // 실루엣의 바닥/꼭대기를 화면에 투영해 그 근처에 팝업을 놓는다
+    const el = document.getElementById('srPlaceAsk');
+    try { srApplyCam(); } catch { }
+    const r = renderer.domElement.getBoundingClientRect();
+    const toScreen = (p) => { const v = p.clone().project(srCam); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; };
+    const [bx, by] = toScreen(pos.clone());
+    const [, ty] = toScreen(pos.clone().add(new THREE.Vector3(0, hgt, 0)));
+    el.style.display = 'flex';            // 크기를 재려면 먼저 그려야 한다
+    const w = el.offsetWidth || 220, hh = el.offsetHeight || 90;
+    let top = by + 14;                    // 기본: 실루엣 아래
+    if (top + hh > innerHeight - 8) top = ty - hh - 14;   // 안 들어가면 위
+    top = Math.max(8, Math.min(innerHeight - hh - 8, top));
+    const left = Math.max(w / 2 + 8, Math.min(innerWidth - w / 2 - 8, bx));
+    el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.bottom = 'auto'; el.style.transform = 'translateX(-50%)';
+    el.style.display = '';
+  }
   function closePlaceAsk() {
     placeAskKind = null; document.getElementById('srPlaceAsk').classList.remove('on');
     if (askMark) { srScene.remove(askMark); askMark.traverse(o => { if (o.geometry) o.geometry.dispose(); }); askMark = null; }
