@@ -2273,22 +2273,25 @@ function hideWeapon(sec) {
   hideWeapon._t = setTimeout(applyWeaponLook, sec * 1000);
 }
 const pendingThrows = []; // 릴리즈 예약 — 마우스 업 0.5초 뒤 실제 발사
-// 홀드 투척: 다운 → toss grenade 1.5초까지 재생 후 정지 유지, 업 → 나머지 재생 + 0.5초 뒤 투척
-const WIND_HOLD_T = 1.5;
-let gWindup = false;
+// 홀드 투척: 마우스 다운 → toss grenade를 1초 지점까지 정속 재생 후 정지 유지, 업 → 나머지를 3배속으로 빠르게 재생하며 투척
+const WIND_HOLD_T = 1.0;                 // 대기 지점 (클립 시간)
+const WIND_SPEED = 1;                    // 대기 지점까지 재생 속도
+const REL_SPEED = 3;                     // 놓은 뒤 나머지 재생 속도
+const THROW_CLIP_T = 2.0;                // 클립에서 수류탄이 손을 떠나는 순간
+let gWindup = false, gReleasePending = false;   // 대기 지점 전에 놓았으면 도달하는 순간 자동으로 던진다
 function startGrenadeWindup() {
-  if (grenades <= 0 || player.dead || gWindup || pendingThrows.length) return;
+  if (grenades <= 0 || player.dead || gWindup || gReleasePending || pendingThrows.length) return;
   gWindup = true;
   const a = upperPlay('toss grenade', 0.08);        // 다리는 이동 그대로, 팔만 투척 자세
-  if (a) { a.paused = false; a.timeScale = 4; }     // 대기 자세까지 4배 빠르게 (약 0.37초)
+  if (a) { a.paused = false; a.timeScale = WIND_SPEED; }
   clearTimeout(hideWeapon._t);
   for (const m of weaponMeshes) m.visible = false; // 던지는 동안 총 숨김 (릴리즈 후 복원)
   if (pistolGrp) pistolGrp.visible = false;
   if (shieldGrp) shieldGrp.visible = false;
 }
 function cancelGrenadeWindup() {         // 다른 슬롯으로 바꾸면 던지지 않고 취소 (수류탄 미소모)
-  if (!gWindup) return;
-  gWindup = false;
+  if (!gWindup && !gReleasePending) return;
+  gWindup = false; gReleasePending = false;
   const a = player.upperAct;
   if (a) a.timeScale = 1;
   upperStop(0.12);
@@ -2299,24 +2302,23 @@ function releaseGrenadeWindup() {
   if (!gWindup) return;
   gWindup = false;
   const a = player.upperShot === 'toss grenade' ? player.upperAct : null;
-  if (a) a.timeScale = 1;
-  // 준비자세 도달 전 릴리즈 → 투척 취소 (수류탄 미소모, 총 복원)
-  if (a && a.time < WIND_HOLD_T - 0.02) {
-    upperStop(0.12);
-    clearTimeout(hideWeapon._t);
-    applyWeaponLook();
-    return;
-  }
-  if (a) a.paused = false; // 나머지 모션 재생
+  if (a && a.time < WIND_HOLD_T - 0.02) { gReleasePending = true; return; }   // 대기 지점 전에 놓음 → 도달하면 자동 투척
+  commitThrow(a);
+}
+function commitThrow(a) {                // 나머지 모션을 빠르게 돌리며 손을 떠나는 순간에 발사
+  gReleasePending = false;
+  const restDur = a ? Math.max(0.05, (a.getClip().duration - WIND_HOLD_T) / REL_SPEED) : 0.5;
+  const throwDelay = a ? Math.max(0, (THROW_CLIP_T - WIND_HOLD_T) / REL_SPEED) : 0.3;
+  if (a) { a.paused = false; a.timeScale = REL_SPEED; }
   grenades--;
   // 수류탄 모드는 F를 다시 누를 때까지 유지 (남은 수류탄이 없으면 총으로 복귀)
   if (grenades <= 0) { gMode = false; slot = 'gun'; trajLine.visible = false; aimCircle.visible = false; }
   updateGSlot();
   persistProgress();
-  pendingThrows.push({ t: 0.5 });
-  playSample('gnhit', { vol: 0.7, verb: 0.2 });    // 손을 떠나는 소리
-  hideWeapon(1.3);
-  setTimeout(() => { if (player.upperShot === 'toss grenade' && !gWindup) upperStop(); }, 1300);
+  pendingThrows.push({ t: throwDelay });
+  playSample('gnhit', { vol: 0.7, verb: 0.2, at: throwDelay });    // 손을 떠나는 소리
+  hideWeapon(restDur + 0.1);
+  setTimeout(() => { if (player.upperShot === 'toss grenade' && !gWindup) upperStop(); }, restDur * 1000 + 100);
 }
 function throwGrenade() { // 디버그/즉시 투척 (홀드 없이)
   startGrenadeWindup();
@@ -5004,9 +5006,12 @@ function updatePlayer(dt) {
 
   player.mixer.update(dt);
   // 홀드 투척: 1.5초 지점에서 모션 정지 유지 (마우스 업까지)
-  if (gWindup) {
+  if (gWindup || gReleasePending) {
     const a = player.upperShot === 'toss grenade' ? player.upperAct : null;
-    if (a && a.time >= WIND_HOLD_T) { a.time = WIND_HOLD_T; a.paused = true; }
+    if (a && a.time >= WIND_HOLD_T) {
+      if (gWindup) { a.time = WIND_HOLD_T; a.paused = true; }   // 누르고 있는 동안 대기
+      else commitThrow(a);                                      // 미리 놓았으면 도달 즉시 던진다
+    }
   }
   if (camMode === 'fps') hideBones();
   recoil = Math.max(0, recoil - dt * 0.25);
@@ -9249,7 +9254,7 @@ window.__game = {
       loaded: !!(playerGltf && enemyGltf && potionGltf && chestGltf && coinGltf),
       wave, score, kills, headshots, shotsFired, shotsHit, acc: accuracy(), ammo, coins, combo, camMode, ctrlMode, mapMode, rooms: mapRects.filter(r => r.room).length, corridors: mapRects.filter(r => !r.room).length, rects: mapRects.map(r => ({ w: r.x1 - r.x0, d: r.z1 - r.z0, room: r.room })), gameTime: +gameTime.toFixed(2), buffT: +buffT.toFixed(2),
       upg: { ...upg }, maxHp: maxHp(), mag: magSize(), reloadMs: Math.round(reloadMs()), fireMs: Math.round(weapon === 'pistol' ? PISTOL_DELAY : fireInterval()),
-      grenades, gMode, slot, weapon, pen: penPower(), recoil: +recoil.toFixed(4), shakeT: +shakeT.toFixed(2), blocking, parryReady: parryReady(), timeScale: timeScale(), mag: magSize(), markers: markers.length, projSpeed: projectiles[0] ? +projectiles[0].vel.length().toFixed(2) : null, gWindup, tossTime: +((player.upperShot === 'toss grenade' ? player.upperAct : player.actions['toss grenade'])?.time ?? -1).toFixed(2), tossScale: (player.upperShot === 'toss grenade' ? player.upperAct : player.actions['toss grenade'])?.timeScale ?? -1, upperShot: player.upperShot ?? null, loco: player.current ? player.current.getClip().name : null, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
+      grenades, gMode, slot, weapon, pen: penPower(), recoil: +recoil.toFixed(4), shakeT: +shakeT.toFixed(2), blocking, parryReady: parryReady(), timeScale: timeScale(), mag: magSize(), markers: markers.length, projSpeed: projectiles[0] ? +projectiles[0].vel.length().toFixed(2) : null, gWindup, gReleasePending, tossTime: +((player.upperShot === 'toss grenade' ? player.upperAct : player.actions['toss grenade'])?.time ?? -1).toFixed(2), tossScale: (player.upperShot === 'toss grenade' ? player.upperAct : player.actions['toss grenade'])?.timeScale ?? -1, upperShot: player.upperShot ?? null, loco: player.current ? player.current.getClip().name : null, liveGrenades: liveGrenades.length, mines, liveMines: liveMines.length, multiN,
       beacon: beacon ? { x: +beacon.x.toFixed(1), z: +beacon.z.toFixed(1), left: +(beacon.limit - beacon.t).toFixed(1) } : null,
       seenRects: seenRects.size, hitArrows: hitArrows.length, mapSeed, roomThemes: [...roomThemes],
       safeRoom: safeRoom ? { until: +Math.max(0, safeUntil - gameTime).toFixed(1) } : null,
