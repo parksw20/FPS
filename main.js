@@ -1000,6 +1000,39 @@ function audioInit() {
   noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  decodeSfx();
+}
+// ---------- 샘플 효과음 (assets/sound/*.wav — 카운터 스트라이크 무기음) ----------
+const SFX_FILES = {
+  m4: 'm4a1_unsil-1', m4out: 'm4a1_clipout', m4in: 'm4a1_clipin', m4bolt: 'm4a1_boltpull', m4deploy: 'm4a1_deploy',
+  de: 'deagle-1', deout: 'de_clipout', dein: 'de_clipin', deslide: 'de_slideback', dedeploy: 'de_deploy',
+  fbex1: 'flashbang_explode1', fbex2: 'flashbang_explode2', gnhit: 'grenade_hit1', zoom: 'zoom',
+  c4plant: 'c4_plant', c4beep: 'c4_beep1', c4ex: 'c4_explode1',
+  head: 'headshot.mp3',
+};
+const sfxRaw = {}, sfxBuf = {};
+for (const [k, f] of Object.entries(SFX_FILES))       // 바이트는 처음부터 받아 두고, 디코드는 오디오 컨텍스트가 생기면
+  fetch('assets/sound/' + (f.includes('.') ? f : f + '.wav')).then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b) sfxRaw[k] = b; }).catch(() => { });
+function decodeSfx() {
+  if (!AC) return;
+  for (const k of Object.keys(sfxRaw)) {
+    if (sfxBuf[k] || sfxBuf[k] === false) continue;
+    sfxBuf[k] = false;                                  // 디코드 중 표시
+    AC.decodeAudioData(sfxRaw[k].slice(0)).then(b => { sfxBuf[k] = b; }).catch(() => { delete sfxBuf[k]; });
+  }
+}
+function playSample(name, { vol = 1, rate = 1, at = 0, verb = 0.35, jitter = 0.04 } = {}) {   // 샘플이 없으면 false → 호출부가 절차음으로
+  if (!AC) return false;
+  if (Object.keys(sfxRaw).length && Object.keys(sfxBuf).length < Object.keys(sfxRaw).length) decodeSfx();
+  const b = sfxBuf[name]; if (!b) return false;
+  const t = AC.currentTime + at;
+  const src = AC.createBufferSource(); src.buffer = b;
+  src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * jitter);   // 살짝 다른 높이로 반복감 줄이기
+  const g = AC.createGain(); g.gain.value = vol;
+  src.connect(g); g.connect(masterGain);
+  if (verb > 0 && sfxVerb) { const vg = AC.createGain(); vg.gain.value = verb; g.connect(vg); vg.connect(sfxVerb); }
+  src.start(t);
+  return true;
 }
 // 노이즈 한 조각: 필터 스윕 + 감쇠 (총성·폭발·타격의 뼈대)
 function noiseHit({ dur = 0.1, lp0 = 3000, lp1 = 400, hp = 60, vol = 0.8, curve = 2, at = 0, verb = 0.6 } = {}) {
@@ -1027,8 +1060,9 @@ function thump(f0 = 120, f1 = 40, dur = 0.12, vol = 0.9, at = 0) {   // 저음 �
 function click(at = 0, vol = 0.5, lp = 6000) {                        // 아주 짧은 기계음
   noiseHit({ dur: 0.018, lp0: lp, lp1: lp * 0.6, hp: 900, vol, curve: 1.2, at, verb: 0.15 });
 }
-function sfxShot() {                     // 소총: 날카로운 크랙 + 몸통 + 짧은 꼬리
+function sfxShot() {                     // 소총: M4A1 샘플 (없으면 절차음)
   if (!AC) return;
+  if (playSample('m4', { vol: 1.0, verb: 0.3 })) return;
   click(0, 1.1, 9000);                                                   // 크랙 (초고역 트랜지언트)
   noiseHit({ dur: 0.075, lp0: 5200, lp1: 900, hp: 180, vol: 1.0, curve: 2.2 });   // 몸통
   thump(150, 55, 0.07, 0.7);                                             // 저음 펀치
@@ -1042,23 +1076,26 @@ function sfxTone(freq, dur, type = 'square', vol = 0.15, slide = 0) {
   const g = AC.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g); g.connect(masterGain); o.start(); o.stop(t + dur);
 }
-function sfxRevolver() {                 // 리볼버: 크랙 + 묵직한 저음 + 긴 울림
+function sfxRevolver() {                 // 권총: 데저트 이글 샘플 (없으면 절차음)
   if (!AC) return;
+  if (playSample('de', { vol: 1.0, verb: 0.4 })) return;
   click(0, 1.3, 7000);
   noiseHit({ dur: 0.12, lp0: 3600, lp1: 500, hp: 120, vol: 1.4, curve: 1.9 });
   thump(95, 32, 0.22, 1.5);
   noiseHit({ dur: 0.55, lp0: 900, lp1: 140, hp: 60, vol: 0.4, curve: 1.0, verb: 1.2 });
 }
-function sfxExplosion(big = 1) {         // 수류탄·지뢰: 서브 붐 + 파열 + 긴 잔향
+function sfxExplosion(big = 1, kind = 'grenade') {   // 수류탄: 플래시뱅 폭발 샘플 · 지뢰: C4 폭발 샘플 (없으면 절차음)
   if (!AC) return;
+  if (kind === 'mine' ? playSample('c4ex', { vol: 1.1, verb: 0.5 }) : playSample(Math.random() < 0.5 ? 'fbex1' : 'fbex2', { vol: 1.1, verb: 0.5 })) { thump(70 * big, 22, 0.5, 0.9); return; }
   thump(70 * big, 22, 0.7, 1.6);
   noiseHit({ dur: 0.09, lp0: 6000, lp1: 1500, hp: 200, vol: 1.2, curve: 2.0 });      // 파열
   noiseHit({ dur: 0.9, lp0: 2200, lp1: 120, hp: 40, vol: 0.9, curve: 1.0, verb: 1.4 });   // 몸통·잔향
   for (let i = 0; i < 6; i++) click(0.05 + i * 0.045 + Math.random() * 0.03, 0.35, 3000);   // 파편
 }
 const sfxHit = () => { noiseHit({ dur: 0.05, lp0: 2400, lp1: 600, hp: 200, vol: 0.55, curve: 2.4, verb: 0.2 }); thump(260, 110, 0.05, 0.35); };   // 살 타격
-const sfxHead = () => {                  // 헤드샷: 금속 '띵'
+const sfxHead = () => {                  // 헤드샷: 샘플 (없으면 금속 '띵')
   if (!AC) return;
+  if (playSample('head', { vol: 0.9, verb: 0.2, jitter: 0 })) return;
   const t = AC.currentTime;
   for (const [f, v, d] of [[2420, 0.34, 0.22], [3620, 0.2, 0.16], [5100, 0.1, 0.1]]) {
     const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f;
@@ -1067,11 +1104,18 @@ const sfxHead = () => {                  // 헤드샷: 금속 '띵'
   }
   click(0, 0.6, 8000);
 };
-const sfxReload = () => {                // 탄창 뺌 → 꽂음 → 노리쇠
+const sfxReload = () => {                // 탄창 뺌 → 꽂음 → 노리쇠 (소총 M4A1 · 권총 데저트 이글 샘플)
+  if (weapon === 'pistol' ? playSample('deout', { vol: 0.9, verb: 0.2 }) : playSample('m4out', { vol: 0.9, verb: 0.2 })) {
+    if (weapon === 'pistol') { playSample('dein', { vol: 0.9, verb: 0.2, at: 0.35 }); playSample('deslide', { vol: 0.9, verb: 0.2, at: 0.75 }); }
+    else { playSample('m4in', { vol: 0.9, verb: 0.2, at: 0.35 }); playSample('m4bolt', { vol: 0.9, verb: 0.2, at: 0.78 }); }
+    return;
+  }
   click(0, 0.5, 5000); thump(220, 140, 0.04, 0.25, 0);                                   // 해제
   click(0.32, 0.7, 3500); thump(170, 90, 0.06, 0.45, 0.32);                              // 탄창 삽입
   click(0.62, 0.55, 6000); click(0.70, 0.8, 4500); thump(200, 120, 0.05, 0.3, 0.70);    // 노리쇠 당김·복귀
 };
+const sfxZoom = () => { if (!playSample('zoom', { vol: 0.8, verb: 0.1, jitter: 0 })) sfxTone(900, 0.05, 'sine', 0.08, 300); };
+const sfxDeploy = () => { if (!(weapon === 'pistol' ? playSample('dedeploy', { vol: 0.8, verb: 0.15 }) : playSample('m4deploy', { vol: 0.8, verb: 0.15 }))) click(0, 0.5, 5000); };
 const sfxHurt = () => { noiseHit({ dur: 0.12, lp0: 1600, lp1: 300, hp: 120, vol: 0.5, curve: 1.6 }); thump(180, 60, 0.18, 0.7); };
 const sfxDie = () => { thump(140, 38, 0.35, 0.9); noiseHit({ dur: 0.3, lp0: 1200, lp1: 200, hp: 80, vol: 0.45, curve: 1.2, verb: 0.8 }); };
 const sfxRoar = () => sfxTone(90, 0.7, 'sawtooth', 0.18, 55);
@@ -2177,6 +2221,7 @@ function applyWeaponLook() {             // 무장에 맞춰 총·권총·방패
 let slot = 'gun';                        // 'gun' | 'grenade' | 'mine'
 function selectSlot(name) {
   if (name === 'pistol' && !pistolOwned) { toast('🔫🛡️ 권총+방패는 악의 소굴 5층 보스를 잡으면 얻습니다'); return; }
+  const prevWeapon = weapon;
   if (name === 'rifle' || name === 'pistol') {   // 1·2번: 주무장 교체
     if (name !== weapon) {
       ammoStash[weapon] = ammo;
@@ -2186,6 +2231,7 @@ function selectSlot(name) {
     }
     weapon = name;
     name = 'gun';
+    if (slot !== 'gun' || weapon !== prevWeapon) sfxDeploy();
     toast(weapon === 'pistol' ? '🔫 권총 + 방패 — 연사 빠름 · 피해 절반' : '🔫 소총');
   }
   if (name === 'grenade' && grenades <= 0) { toast('수류탄이 없습니다'); return; }
@@ -2254,6 +2300,7 @@ function releaseGrenadeWindup() {
   updateGSlot();
   persistProgress();
   pendingThrows.push({ t: 0.5 });
+  playSample('gnhit', { vol: 0.7, verb: 0.2 });    // 손을 떠나는 소리
   hideWeapon(1.3);
   setTimeout(() => { if (player.upperShot === 'toss grenade' && !gWindup) upperStop(); }, 1300);
 }
@@ -3053,15 +3100,15 @@ function placeMine() {
   grp.add(ring);
   grp.position.set(player.pos.x, 0.02, player.pos.z);
   scene.add(grp);
-  liveMines.push({ grp, ring, t: 0, armed: 0.7 });
-  sfxTone(420, 0.08, 'square', 0.12);
+  liveMines.push({ grp, ring, t: 0, armed: 0.7, beeped: false });
+  if (!playSample('c4plant', { vol: 0.9, verb: 0.2 })) sfxTone(420, 0.08, 'square', 0.12);
   toast('🧨 지뢰 설치');
 }
-function explodeAt(pos, radius, dmg, color) {
+function explodeAt(pos, radius, dmg, color, kind = 'grenade') {
   burst(pos, color, 26);
   flashLight.position.copy(pos); flashLight.intensity = 50; flashT = 0.1;
   shake(0.25, 0.35);
-  sfxExplosion(0.9);
+  sfxExplosion(0.9, kind);
   for (const en of enemies) {
     if (en.state === 'dead') continue;
     const d = Math.hypot(en.root.position.x - pos.x, en.root.position.z - pos.z);
@@ -3074,6 +3121,7 @@ function updateMines(dt) {
   for (let i = liveMines.length - 1; i >= 0; i--) {
     const m = liveMines[i];
     m.t += dt; m.armed -= dt;
+    if (!m.beeped && m.armed <= 0) { m.beeped = true; playSample('c4beep', { vol: 0.7, verb: 0.1, jitter: 0 }); }   // 무장 완료 삐
     const k = 1 + Math.sin(m.t * 5) * 0.08;
     m.ring.scale.set(k, k, k);
     m.ring.material.opacity = 0.5 + Math.sin(m.t * 5) * 0.3;
@@ -3086,7 +3134,7 @@ function updateMines(dt) {
     if (trig) {
       const p = m.grp.position.clone(); p.y = 0.4;
       scene.remove(m.grp); liveMines.splice(i, 1);
-      explodeAt(p, MINE_R * blastRad(), Math.round(MINE_DMG * blastMul()), 0xff7733);
+      explodeAt(p, MINE_R * blastRad(), Math.round(MINE_DMG * blastMul()), 0xff7733, 'mine');
     }
   }
 }
@@ -4197,7 +4245,7 @@ document.addEventListener('mousedown', e => {
   if (e.button === 1) { e.preventDefault(); fireChain(); }   // 휠 클릭: 사슬
   if (e.button === 2) {
     if (canBlock()) { blocking = true; blockAt = performance.now(); shieldPose(true); sfxTone(260, 0.08, 'square', 0.16); }
-    else player.zooming = true;
+    else { player.zooming = true; sfxZoom(); }
   }
 });
 document.addEventListener('mouseup', e => {
@@ -4833,7 +4881,7 @@ function updatePlayer(dt) {
   gameTime += dt;
   if (walkGrid) { flowTimer -= dt; if (flowTimer <= 0) { rebuildFlow(); flowTimer = 0.3; } }
   const mobile = isMobileCtrl();
-  if (mobile) player.zooming = zoomTog;
+  if (mobile) { if (zoomTog && !player.zooming) sfxZoom(); player.zooming = zoomTog; }
   const sp = moveSpeed() * (dbgFast ? 3 : 1); // 기본 이동 = 달리기 (디버그 3배속)
   let mx = 0, mz = 0;
   if (mobile) { mx = touchMove.x; mz = touchMove.z; }
@@ -9472,6 +9520,8 @@ window.__game = {
   jumpInfo() { const a = player.actions['rifle jump']; return { oneShot: player.oneShot ?? null, timeScale: +(a?.timeScale ?? 0).toFixed(2), clipDur: +(a?.getClip().duration ?? 0).toFixed(2), vy: +player.vy.toFixed(2), onGround: player.onGround, y: +player.pos.y.toFixed(2), jumpUpg: upg.jump }; },
   setUpg(k, v) { upg[k] = v; return { ...upg }; },
   upper() { const w = {}; for (const k in player.actions) { const a = player.actions[k]; if (a.isRunning() && a.getEffectiveWeight() > 0.001) w[k] = +a.getEffectiveWeight().toFixed(2); } return { upperShot: player.upperShot ?? null, loco: player.current?.getClip().name ?? null, weights: w, tracks: { runLower: player.actions['rifle run_lower']?.getClip().tracks.length, reloadUpper: player.actions['reloading_upper']?.getClip().tracks.length, reloadFull: player.actions['reloading']?.getClip().tracks.length } }; },
+  sfx() { const st = {}; for (const k of Object.keys(SFX_FILES)) st[k] = sfxBuf[k] ? +sfxBuf[k].duration.toFixed(2) : (sfxRaw[k] ? 'raw' : 'none'); return { ac: !!AC, files: st }; },
+  sfxPlay(name) { audioInit(); return playSample(name); },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
