@@ -8893,6 +8893,7 @@ function srUpdate(dt) {
         return;
       }
     }
+    if (placeAskKind) return;            // 설치 확인 중에는 아무것도 움직이지 않는다
     if (touchPick) {                     // 잡은 가구를 손가락/커서 아래로
       if (!touchPick.moved && Math.hypot(e.clientX - touchPick.x, e.clientY - touchPick.y) > 8) {
         touchPick.moved = true;
@@ -8930,14 +8931,14 @@ function srUpdate(dt) {
     }
     if (placeDrag) { placeDrag = false; suppressClick = true; if (placeType) openPlaceAsk('place'); }
   });
-  let askMark = null;                    // 설치 위치 실루엣 (바닥 발자국 + 테두리)
+  let askMark = null, askSnap = null;    // 설치 위치 실루엣 (바닥 발자국 + 테두리) · 실루엣을 만든 자리
   function openPlaceAsk(kind) {
     placeAskKind = kind;
     document.getElementById('srPlaceAsk').classList.add('on');
     // 설치 자리에 실루엣을 남긴다 — 새 가구는 미리보기 자리, 옮기는 가구는 지금 놓인 자리
     const rm = worldRooms.find(r => r.slot === roomStore.cur);
     let type = null, x = 0, z = 0, y = 0, rot = 0;
-    if (kind === 'place' && placeType && placeGhost) { const q = placeGhost.userData.snap; if (q) { type = placeType; x = q.x; z = q.z; y = q.y || 0; rot = q.wall ? q.rot : placeRot; } }
+    if (kind === 'place' && placeType && placeGhost) { const q = placeGhost.userData.snap; if (q) { askSnap = { ...q }; type = placeType; x = q.x; z = q.z; y = q.y || 0; rot = q.wall ? q.rot : placeRot; } }
     else if (kind === 'move' && moveItem) { type = moveItem.type; x = moveItem.x; z = moveItem.z; y = moveItem.y || 0; rot = moveItem.rot || 0; }
     if (type && rm) {
       const fp = footprint(type, rot);
@@ -8952,17 +8953,25 @@ function srUpdate(dt) {
       g.rotation.y = rot * ROT_STEP;
       srScene.add(g); askMark = g;
     }
-    if (placeGhost) placeGhost.traverse(o => { if (o.isMesh && o.material) { o.material.opacity = 0.8; } });   // 미리보기도 또렷하게
+    // 확인하는 동안에는 실루엣만 — 커서를 따라다니던 미리보기·옮기던 가구 본체는 감춘다
+    if (placeGhost) placeGhost.visible = false;
+    if (placeMark) placeMark.visible = false;
+    if (kind === 'move' && moveItem) { const m = srFurnGrp?.children.find(o => o.userData.item === moveItem); if (m) { m.visible = false; askHidden = m; } }
   }
+  let askHidden = null;
   function closePlaceAsk() {
     placeAskKind = null; document.getElementById('srPlaceAsk').classList.remove('on');
     if (askMark) { srScene.remove(askMark); askMark.traverse(o => { if (o.geometry) o.geometry.dispose(); }); askMark = null; }
-    if (placeGhost) placeGhost.traverse(o => { if (o.isMesh && o.material) { o.material.opacity = 0.55; } });
+    askSnap = null;
+    if (placeGhost) placeGhost.visible = true;
+    if (placeMark) placeMark.visible = true;
+    if (askHidden) { askHidden.visible = true; askHidden = null; }
   }
   document.getElementById('srPlaceOk').addEventListener('click', e => {
     e.stopPropagation();
-    const k = placeAskKind; closePlaceAsk();
-    if (k === 'move') endMove(true); else if (k === 'place') commitPlace();
+    const k = placeAskKind, snap = askSnap; closePlaceAsk();
+    if (k === 'move') endMove(true);
+    else if (k === 'place') { if (placeGhost && snap) placeGhost.userData.snap = snap; commitPlace(); }   // 실루엣 자리에 설치
   });
   document.getElementById('srPlaceNo').addEventListener('click', e => {
     e.stopPropagation();
@@ -9037,6 +9046,7 @@ function srUpdate(dt) {
     if (applyWallSize(sizeDrag.it, a.u, a.y, wp.u, wp.y)) { refreshRoom(sizeDrag.it.type); syncGizmo(); }
   }, true);
   sr.addEventListener('pointermove', e => {                 // 배치·이동 중이면 커서를 따라다닌다
+    if (placeAskKind) return;                                 // 설치 확인 중에는 자리를 바꾸지 않는다
     if (!srOn || (!placeType && !moveItem)) return;
     lastCursor = [e.clientX, e.clientY];
     if (moveItem) {                                        // 설치면(바닥·벽·천장) 위에서 움직인다
@@ -9694,7 +9704,7 @@ window.__game = {
   clips() { return playerGltf ? playerGltf.animations.map(c => [c.name, +c.duration.toFixed(2), c.tracks.length]) : null; },
   srLights() { return srLightPool.map(l => ({ i: +l.intensity.toFixed(2), p: l.position.toArray().map(v => +v.toFixed(1)) })).filter(x => x.i > 0); },
   startPlace(type) { startPlace(type); return !!placeType; },
-  srDbg() { return { placeType, placeDrag, touchPick: !!touchPick, placeAskKind, srEditUI, srMode, suppressClick, moveItem: !!moveItem, sizeDrag: !!sizeDrag, tab: srTab }; },
+  srDbg() { return { snap: placeGhost?.userData.snap ? { x: placeGhost.userData.snap.x, z: placeGhost.userData.snap.z } : null, lastItem: (() => { const it = curRoom().items[curRoom().items.length - 1]; return it ? { t: it.type, x: it.x, z: it.z } : null; })(), ghostVisible: placeGhost ? placeGhost.visible : null, placeType, placeDrag, touchPick: !!touchPick, placeAskKind, srEditUI, srMode, suppressClick, moveItem: !!moveItem, sizeDrag: !!sizeDrag, tab: srTab }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
