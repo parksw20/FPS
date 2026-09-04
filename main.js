@@ -1394,6 +1394,7 @@ function setupPlayer() {
   prepShadows(root);
   scene.add(root);
   player.root = root;
+  syncPlayerShadow();
   player.mixer = new THREE.AnimationMixer(root);
   const names = ['rifle aiming idle', 'rifle run', 'run backwards', 'walking', 'walking backwards',
     'strafe', 'strafe (2)', 'strafe left', 'reloading', 'rifle jump', 'firing rifle', 'toss grenade',
@@ -3461,6 +3462,18 @@ function ensureBlob(en, on) {            // 진짜 그림자가 없는 적은 �
 function dropBlob(en) { if (en.blob) { scene.remove(en.blob); en.blob = null; } }
 function syncBlobs() {
   for (const en of enemies) if (en.blob) en.blob.position.set(en.root.position.x, en.root.position.y + 0.03, en.root.position.z);
+  if (playerBlob?.visible) playerBlob.position.set(player.pos.x, player.pos.y + 0.03, player.pos.z);
+}
+let playerBlob = null;
+function syncPlayerShadow() {             // 보통/끔: 정적 그림자 맵은 6프레임마다만 굽기 때문에 캐릭터를 넣으면 3인칭에서 그림자가 10Hz로 끊겨 보인다 → 캐릭터는 원 그림자
+  if (!player.root) return;
+  const real = shadowOn && shadowQ === 'high';
+  player.root.traverse(o => { if (o.isMesh || o.isSkinnedMesh) o.castShadow = real; });
+  if (!real && shadowOn) {
+    if (!playerBlob) { playerBlob = new THREE.Mesh(BLOB_GEO, BLOB_MAT); playerBlob.renderOrder = 1; scene.add(playerBlob); }
+    playerBlob.visible = true;
+    playerBlob.position.set(player.pos.x, player.pos.y + 0.03, player.pos.z);
+  } else if (playerBlob) playerBlob.visible = false;
 }
 let shadowTick = 0;
 function updateShadowLod(dt) {
@@ -3670,6 +3683,7 @@ function applyShadowQ(say) {
   });
   sun.shadow.autoUpdate = shadowQ === 'high';
   sun.shadow.needsUpdate = true;
+  syncPlayerShadow();
   localStorage.setItem('fps.shadowq', shadowQ);
   syncOptUI();
   if (say) toast(SHADOW_LABEL[shadowQ] + (shadowQ === 'high' ? ' (매 프레임 · 무거움)' : shadowQ === 'mid' ? ' (지형만 · 적은 그림자 원)' : ' (가장 가벼움)'));
@@ -9414,6 +9428,7 @@ window.__game = {
     for (const kk of Object.keys(k)) keys[kk] = false;
     return { worst: +worst.toFixed(1), spikes: out.length, list: out.slice(0, 20), lights: visLights(), programs: renderer.info.programs.length, pos: { x: +live.x.toFixed(1), z: +live.z.toFixed(1) } };
   },
+  playerShadow() { let cast = 0, n = 0; player.root?.traverse(o => { if (o.isMesh || o.isSkinnedMesh) { n++; if (o.castShadow) cast++; } }); return { q: shadowQ, meshes: n, casting: cast, blob: !!playerBlob?.visible, blobAt: playerBlob ? playerBlob.position.toArray().map(v => +v.toFixed(2)) : null, autoUpdate: sun.shadow.autoUpdate }; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
