@@ -3479,7 +3479,15 @@ function ensureBlob(en, on) {            // 진짜 그림자가 없는 적은 �
 function dropBlob(en) { if (en.blob) { scene.remove(en.blob); en.blob = null; } }
 function syncBlobs() {
   for (const en of enemies) if (en.blob) en.blob.position.set(en.root.position.x, en.root.position.y + 0.03, en.root.position.z);
-  if (playerBlob?.visible) playerBlob.position.set(player.pos.x, player.pos.y + 0.03, player.pos.z);
+  if (playerBlob?.visible) placePlayerBlob();
+}
+function placePlayerBlob() {             // 원 그림자는 발밑 지면(또는 아래 발판)에 남고, 점프하면 높이에 따라 작아진다
+  const keep = supObs;
+  const ground = supportHeight(player.pos);
+  supObs = keep;
+  const h = Math.max(0, player.pos.y - ground);
+  playerBlob.position.set(player.pos.x, ground + 0.03, player.pos.z);
+  playerBlob.scale.setScalar(Math.max(0.45, 1 - h * 0.07));
 }
 let playerBlob = null;
 function syncPlayerShadow() {             // 보통/끔: 정적 그림자 맵은 6프레임마다만 굽기 때문에 캐릭터를 넣으면 3인칭에서 그림자가 10Hz로 끊겨 보인다 → 캐릭터는 원 그림자
@@ -3489,7 +3497,7 @@ function syncPlayerShadow() {             // 보통/끔: 정적 그림자 맵은
   if (!real && shadowOn) {
     if (!playerBlob) { playerBlob = new THREE.Mesh(BLOB_GEO, BLOB_MAT); playerBlob.renderOrder = 1; scene.add(playerBlob); }
     playerBlob.visible = true;
-    playerBlob.position.set(player.pos.x, player.pos.y + 0.03, player.pos.z);
+    placePlayerBlob();
   } else if (playerBlob) playerBlob.visible = false;
 }
 let shadowTick = 0;
