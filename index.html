@@ -15,7 +15,7 @@
   #crosshair::before{left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); clip-path:polygon(0 0,100% 0,100% 32%,0 32%,0 68%,100% 68%,100% 100%,0 100%)}
   #crosshair::after{top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); clip-path:polygon(0 0,32% 0,32% 100%,0 100%,68% 0,100% 0,100% 100%,68% 100%)}
   .panel{position:absolute; background:rgba(10,14,20,.55); border:1px solid rgba(126,224,163,.25); border-radius:10px; padding:10px 16px; backdrop-filter:blur(4px)}
-  #stats{position:absolute; left:50%; bottom:18px; transform:translateX(-50%); width:300px; display:flex; align-items:center; gap:10px; text-shadow:0 0 8px rgba(0,0,0,.9)}
+  #stats{position:absolute; left:50%; bottom:66px; margin-left:-640px; width:470px; display:flex; align-items:center; gap:10px; text-shadow:0 0 8px rgba(0,0,0,.9)}
   #stats .hpbar{flex:1; height:10px; background:rgba(28,36,49,.75); border-radius:5px; overflow:hidden}
   #stats .hpfill{height:100%; width:100%; background:linear-gradient(90deg,#d9534f,#e8a33d 60%,#7ee0a3); transition:width .15s}
   #topChips{position:absolute; right:18px; top:18px; display:flex; gap:10px}
@@ -61,36 +61,36 @@
     62%{opacity:1; color:#ff2d1f; transform:translate(-50%,-100%) translateY(-40px) scale(1)}
     100%{opacity:0; color:#ff2d1f; transform:translate(-50%,-100%) translateY(-130px) scale(.92)}}
   @keyframes comboPop{0%{opacity:0; transform:translateX(-50%) scale(.4)}15%{opacity:1; transform:translateX(-50%) scale(1.25)}30%{transform:translateX(-50%) scale(1)}75%{opacity:1}100%{opacity:0; transform:translateX(-50%) scale(1)}}
-  #ammo{position:absolute; left:50%; margin-left:-90px; bottom:70px; transform:translateX(-100%); text-align:center; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
+  #ammo{position:absolute; left:50%; margin-left:-150px; bottom:118px; transform:translateX(-100%); text-align:left; background:rgba(4,8,14,.62); border-radius:10px; padding:10px 22px 8px 26px; min-width:220px; box-sizing:border-box; font-variant-numeric:tabular-nums; font-size:3.9rem; font-weight:800; font-style:italic; line-height:1; text-shadow:0 0 12px rgba(0,0,0,.9)}
   #ammo small{color:#9fb0c4; font-size:.75rem}
   /* 수류탄 단축 슬롯 (잔탄 오른쪽) */
-  #rSlot{position:absolute; left:50%; margin-left:68px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #rSlot{position:absolute; left:50%; margin-left:-130px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
   #rSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); line-height:0}
   #rSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7df3ff; border-radius:4px; padding:1px 5px}
   #rSlot.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.5)}
-  #pSlot{position:absolute; left:50%; margin-left:160px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #pSlot{position:absolute; left:50%; margin-left:-38px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
   #pSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:1.5rem; white-space:nowrap}
   #pSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7df3ff; border-radius:4px; padding:1px 5px}
   #pSlot.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.5)}
   #pSlot.empty{opacity:.3; filter:grayscale(.85); cursor:default}
   #ammo.active{border-color:#7df3ff; box-shadow:0 0 16px rgba(64,214,255,.45)}
-  #gSlot{position:absolute; left:50%; margin-left:252px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #gSlot{position:absolute; left:50%; margin-left:54px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(126,224,163,.3); border-radius:12px}
   #gSlot img{width:100%; height:100%; object-fit:contain; padding:6px; box-sizing:border-box}
   #gSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#7ee0a3; border-radius:4px; padding:1px 5px}
   #gSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffd76b; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
   #gSlot.empty{opacity:.35; filter:grayscale(.8)}
   #gSlot.active{border-color:#7ee0a3; box-shadow:0 0 16px rgba(126,224,163,.5)}
-  #mSlot{position:absolute; left:50%; margin-left:344px; bottom:66px; width:76px; height:76px;
+  #mSlot{position:absolute; left:50%; margin-left:146px; bottom:66px; width:76px; height:76px;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(255,90,60,.35); border-radius:12px}
   #mSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
   #mSlot.empty{opacity:.35; filter:grayscale(.8)}
   #mSlot.active{border-color:#ff7a4d; box-shadow:0 0 16px rgba(255,110,60,.55)}
   #mSlot .gKey{position:absolute; left:4px; top:3px; font-size:.7rem; font-weight:800; color:#0a0e14; background:#ff8a5c; border-radius:4px; padding:1px 5px}
   #mSlot .gCnt{position:absolute; right:5px; bottom:3px; font-size:.95rem; font-weight:800; color:#ffb08a; text-shadow:0 0 6px rgba(0,0,0,.9); font-variant-numeric:tabular-nums}
-  #wSlot{position:absolute; left:50%; margin-left:436px; bottom:66px; width:76px; height:76px; pointer-events:none;
+  #wSlot{position:absolute; left:50%; margin-left:238px; bottom:66px; width:76px; height:76px; pointer-events:none;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(255,120,190,.45); border-radius:12px}
   #wSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem}
   #wSlot .gKey{position:absolute; left:4px; top:3px; font-size:.66rem; font-weight:800; color:#2a0812; background:#ff5fa8; border-radius:4px; padding:1px 5px}
@@ -101,7 +101,7 @@
   .cdOv i{font-style:normal; font-size:1.5rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums;
     text-shadow:0 0 8px #000, 0 2px 5px #000}
   #wSlot.empty{opacity:.32; filter:grayscale(.8)}
-  #kSlot{position:absolute; left:50%; margin-left:528px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
+  #kSlot{position:absolute; left:50%; margin-left:330px; bottom:66px; width:76px; height:76px; pointer-events:auto; cursor:pointer;
     background:rgba(10,14,20,.6); border:1.5px solid rgba(57,246,255,.35); border-radius:12px}
   #kSlot .mIcon{position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:2rem; line-height:0}
   #kSlot .mIcon img{width:46px; height:46px; display:block}
