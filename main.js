@@ -2302,7 +2302,12 @@ function releaseGrenadeWindup() {
   if (!gWindup) return;
   gWindup = false;
   const a = player.upperShot === 'toss grenade' ? player.upperAct : null;
-  if (a && a.time < WIND_HOLD_T - 0.02) { gReleasePending = true; return; }   // 대기 지점 전에 놓음 → 도달하면 자동 투척
+  if (a && a.time < WIND_HOLD_T - 0.02) {   // 자세(1초 지점)가 잡히기 전에 놓음 → 던지지 않고 취소 (수류탄 미소모)
+    upperStop(0.12);
+    clearTimeout(hideWeapon._t);
+    applyWeaponLook();
+    return;
+  }
   commitThrow(a);
 }
 function commitThrow(a) {                // 나머지 모션을 빠르게 돌리며 손을 떠나는 순간에 발사
@@ -4298,7 +4303,7 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 const sfxDash = () => sfxTone(500, 0.18, 'sawtooth', 0.12, 700);
 let dashPending = false;                 // 조그 재터치 대쉬 — 방향 계산 후 발동
 function dash() {
-  if (player.dead || player.dashCd > 0) return;
+  if (player.dead || player.dashCd > 0 || player.crouch) return;   // 앉은 자세에서는 대쉬 불가
   player.dashDir = { ...player.lastDir };
   player.dashT = 0.18; player.dashSpd = 40; player.dashCd = dashCool();
   sfxDash();
