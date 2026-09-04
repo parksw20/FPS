@@ -735,6 +735,11 @@
   .mbtn.tog.on{background:rgba(126,224,163,.45); border-color:#7ee0a3; color:#0a0e14; font-weight:700}
   /* 사격: 조이스틱 맞은편(우하단) 동일 위치·중심 미러 */
   #mbFire{position:fixed; right:88px; bottom:88px; width:126px; height:126px; font-size:1.2rem; background:rgba(217,83,79,.4); border-color:#d9534f}
+  #mbReload{position:fixed; right:22px; bottom:26px; width:60px; height:60px; font-size:.78rem}   /* 사격 조그 우하단 */
+  body.mobile.srLive #mbReload{display:none !important}
+  /* 모바일: 하단 HUD를 슬롯 절반쯤 아래로 */
+  body.mobile #rSlot, body.mobile #pSlot, body.mobile #gSlot, body.mobile #mSlot, body.mobile #wSlot, body.mobile #kSlot, body.mobile #stats{bottom:28px}
+  body.mobile #ammo{bottom:65px}
   /* 사격 위 일렬: 달리기 · 줌 · 점프 (사격 버튼과 간격 +10px) */
   #mBtnRow{position:fixed; right:76px; bottom:243px; z-index:35; display:flex; gap:12px; pointer-events:none}
 </style>
@@ -972,6 +977,7 @@
     <div class="mbtn" id="mbJump">점프</div>
   </div>
   <div class="mbtn" id="mbFire">사격</div>
+  <div class="mbtn" id="mbReload">재장전</div>
 </div>
 <div id="loading">LOADING MODELS<div class="bar"><div class="fill" id="loadF"></div></div></div>
 <div id="start">

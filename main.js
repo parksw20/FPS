@@ -4174,6 +4174,7 @@ const lookEnd = e => { if (e.pointerId === lookId) { lookId = null; lastLook = n
 canvas.addEventListener('pointerup', lookEnd); canvas.addEventListener('pointercancel', lookEnd);
 // 버튼
 const mb = id => document.getElementById(id);
+mb('mbReload').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if (!reloading && ammo < magSize()) reload(); });
 mb('mbFire').addEventListener('pointerdown', e => {
   e.preventDefault(); audioInit();
   if (slot === 'mine') { placeMine(); return; }
