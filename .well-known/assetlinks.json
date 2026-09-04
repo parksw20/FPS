@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.parksw20.headshot",
+    "sha256_cert_fingerprints": ["C9:73:23:69:78:CB:07:CC:48:5E:C6:59:1D:FE:51:4F:F6:44:0B:23:9F:86:A0:58:09:B7:B0:82:C7:F7:DD:38"]
+  }
+}]
