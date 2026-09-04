@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0a0e14">
   <meta name="mobile-web-app-capable" content="yes">
@@ -202,6 +202,7 @@
   .srPanel{position:absolute; top:84px; bottom:92px; width:min(280px,26vw); overflow:auto;
     background:rgba(5,12,18,.86); border:1px solid rgba(64,214,255,.3); border-radius:10px; padding:14px}
   #srLeft{left:24px; bottom:auto; max-height:calc(100vh - 190px)}   /* 내용만큼만 — 길게 늘어나지 않게 */
+  #showroom{touch-action:none}          /* 핀치는 브라우저 확대가 아니라 카메라 거리 조절로 */
   #srRight{right:24px; transition:transform .25s ease}
   #srRight.folded{transform:translateX(calc(100% + 48px))}   /* 가구를 고르면 오른쪽으로 접힌다 */
   #srRightTab{position:absolute; right:0; top:50%; transform:translateY(-50%); display:none; z-index:27; padding:14px 10px 14px 12px;
