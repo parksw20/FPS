@@ -613,6 +613,9 @@
   #shopCoins{font-size:1.05em; color:#9fb0c4; margin-bottom:12px}
   #shopCoins b{color:#ffd76b; font-variant-numeric:tabular-nums}
   #shopTabs{display:flex; gap:8px; justify-content:center; margin:0 0 14px; flex-wrap:wrap}
+  #shopClose{position:absolute; right:12px; top:10px; width:38px; height:38px; border-radius:9px; border:1px solid rgba(64,214,255,.5);
+    background:rgba(4,16,24,.85); color:#7df3ff; font-size:1.1rem; cursor:pointer; pointer-events:auto}
+  #shopClose:hover{background:rgba(64,214,255,.2)}
   #shopTabs button{min-width:118px; padding:8px 14px; border-radius:9px; cursor:pointer; font-size:.82em; font-weight:700;
     color:#bfe9f7; background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.4)}
   #shopTabs button:hover:not(:disabled){border-color:#7df3ff; background:rgba(64,214,255,.16)}
@@ -900,6 +903,7 @@
   <div id="srHint">좌드래그 회전 · 우드래그 카메라 이동 · 휠 확대(쇄골 기준) · 좌측 슬롯을 누르면 해당 부위를 비춥니다</div>
 </div>
 <div id="shopMenu">
+  <button id="shopClose" aria-label="닫기">✕</button>
   <h3>업그레이드 상점</h3>
   <div id="shopCoins">보유 코인: <b id="shopCoinN">0</b> 🪙</div>
   <div id="shopTabs"></div>
@@ -998,6 +1002,7 @@
 </div>
 <div id="pauseOv">
   <div id="pauseBtns">
+    <div class="menuBtn" id="btnShop" style="display:none"><span>🛒&nbsp; 상점</span></div>
     <div class="menuBtn primary" id="btnResume"><span>▶&nbsp; 되돌아가기</span></div>
     <div class="menuBtn" id="btnQuit"><span>⏻&nbsp; 게임 종료</span></div>
   </div>
