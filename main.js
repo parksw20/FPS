@@ -3837,13 +3837,16 @@ document.getElementById('shopClose').addEventListener('click', e => {
 });
 document.getElementById('btnShop')?.addEventListener('click', e => { e.stopPropagation(); shopClosed = false; refreshOverlay(); });
 // 시작 화면 패널: 화면 중앙에서 100px 아래 배치 (넘치면 스크롤)
-function placeStartPanel(el) {
+function placeStartPanel(el) {          // 시작 화면 패널: 가능하면 스크롤 없이 화면 안에 다 들어가게
   el.style.left = '50%';
-  el.style.top = 'calc(50% - 75px)';     // 상단 고정 — 내용이 늘면 아래로만 커진다
   el.style.bottom = 'auto';
   el.style.transform = 'translateX(-50%)';
-  el.style.maxHeight = '60vh';
+  el.style.maxHeight = (innerHeight - 24) + 'px';
   el.style.overflowY = 'auto';
+  el.style.top = '12px';
+  const hgt = el.offsetHeight;           // 내용 높이를 잰 뒤, 들어가면 원래 자리(중앙 조금 위)에, 아니면 위로 붙인다
+  const want = Math.round(innerHeight * 0.5 - 75);
+  el.style.top = Math.max(12, Math.min(want, innerHeight - hgt - 12)) + 'px';
 }
 document.getElementById('startShop').addEventListener('click', e => {
   e.stopPropagation(); // 시작 오버레이의 포인터록 진입 차단
