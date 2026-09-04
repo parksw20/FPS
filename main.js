@@ -12,11 +12,12 @@ let shadowOn = shadowQ !== 'off';
 let srEditUI = false, srRightFolded = false;   // 가구를 고르면 우측 패널을 접는다 · 탭으로 다시 편다
 let touchPick = null, placeDrag = false, placeAskKind = null, suppressClick = false;   // 터치로 잡아 옮기기 · 놓을 때 확인 팝업                    // 쇼룸 생활모드: '방 편집'을 눌러 우측 패널·저장 버튼을 연 상태
 const IN_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());   // 오프라인 APK 안에서 실행 중
-const UI_DEF = IN_APP ? 0.55 : 1;        // UI 배율 기본값 — 앱은 아주 작게
+const UI_DEF = IN_APP ? 0.65 : 1;        // UI 배율 기본값 — 앱은 작게
 let uiScale = +localStorage.getItem('fps.ui') || UI_DEF;
 const UI_ROOTS = ['hud', 'optBtn', 'optMenu', 'quitAsk', 'optResetAsk', 'addRoom', 'showroom', 'shopMenu', 'mobileUI', 'loading', 'start', 'mapPick', 'brief', 'gearGot', 'curTop', 'tpMenu', 'pauseOv', 'rankMenu'];
 function applyUiScale() {                // 화면 위 UI 전체를 같은 배율로 (3D 캔버스는 그대로)
   for (const id of UI_ROOTS) { const el = document.getElementById(id); if (el) el.style.zoom = uiScale; }
+  document.documentElement.style.setProperty('--uiz', uiScale);   // CSS에서 100vh를 배율로 나눌 때 쓴다 (zoom 안에서는 vh가 배율만큼 짧게 잡힌다)
   const sl = document.getElementById('optUi'), sv = document.getElementById('uiVal');
   if (sl) sl.value = uiScale; if (sv) sv.textContent = Math.round(uiScale * 100) + '%';
 }
@@ -3722,7 +3723,7 @@ function banner(text) {
 }
 
 // ---------- 옵션 (시점 · 조작) ----------
-let camMode = localStorage.getItem('fps.view') || 'shoulder';  // 기본: 3인칭 숄더뷰
+let camMode = localStorage.getItem('fps.view') || 'fps';       // 기본: 1인칭
 if (camMode === 'tps') camMode = 'shoulder';                    // 구버전 저장값 호환
 let ctrlMode = localStorage.getItem('fps.ctrl') || (IN_APP ? 'mobile' : 'pc');       // 'pc' | 'mobile' — 앱(APK)은 기본 모바일
 let fireMode = { btn: 'only', jog: 'look' }[localStorage.getItem('fps.fire')] || localStorage.getItem('fps.fire') || 'look';   // 사격 조그: 'only' 사격만 | 'look' 사격 + 시야 변경 (기본)
@@ -4168,8 +4169,8 @@ const joy = document.getElementById('joy'), joyStick = document.getElementById('
 let joyId = null, joyCenter = null;
 function joyUpdate(e) {
   const dx = e.clientX - joyCenter[0], dy = e.clientY - joyCenter[1];
-  const m = Math.hypot(dx, dy) || 1, cl = Math.min(m, 55);
-  touchMove.x = dx / m * (cl / 55); touchMove.z = dy / m * (cl / 55);
+  const m = Math.hypot(dx, dy) || 1, cl = Math.min(m, 60);
+  touchMove.x = dx / m * (cl / 60); touchMove.z = dy / m * (cl / 60);
   joyStick.style.transform = `translate(${dx / m * cl}px,${dy / m * cl}px)`;
 }
 function joyStart(e) {
@@ -4746,9 +4747,10 @@ function popupHitText(kind, en) {
   el.className = 'hitPop ' + kind;
   el.textContent = kind === 'hs' ? 'HEADSHOT!' : 'CRITICAL!';
   const v = en.root.position.clone().add(new THREE.Vector3(0, 2.5 * en.scale, 0)).project(camera);
+  const z = uiScale || 1;                // #hud에 zoom이 걸려 있어 화면 px를 배율로 나눠야 제자리에 뜬다
   const jx = (Math.random() - 0.5) * 36; // 연타 시 겹치지 않게 좌우 흔들림
-  el.style.left = ((v.x * 0.5 + 0.5) * innerWidth + jx) + 'px';
-  el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
+  el.style.left = ((v.x * 0.5 + 0.5) * innerWidth / z + jx) + 'px';
+  el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight / z) + 'px';
   document.getElementById('hud').appendChild(el);
   el.addEventListener('animationend', () => el.remove());
 }
@@ -4757,10 +4759,11 @@ function popupAt(px, py, text, cls, dx = 0) {   // 화면 좌표에 떠오르는
   const el = document.createElement('div');
   el.className = 'dmgPop' + (cls ? ' ' + cls : '');
   el.textContent = text;
+  const z = uiScale || 1;                                       // #hud에 zoom이 걸려 있어 화면 px를 배율로 나눠야 제자리에 뜬다
   const jitter = dx ? 0 : (Math.random() - 0.5) * 30;         // 밀어둔 표시는 흔들지 않는다
-  const x = Math.max(30, Math.min(innerWidth - 30, px + dx + jitter));
+  const x = Math.max(30, Math.min(innerWidth / z - 30, px / z + dx + jitter));
   el.style.left = x + 'px';
-  el.style.top = Math.max(56, Math.min(innerHeight - 40, py)) + 'px';   // 화면 밖으로 나가지 않게
+  el.style.top = Math.max(56, Math.min(innerHeight / z - 40, py / z)) + 'px';   // 화면 밖으로 나가지 않게
   document.getElementById('hud').appendChild(el);
   el.addEventListener('animationend', () => el.remove());
 }
@@ -8641,7 +8644,7 @@ function fitRightPanel() {                // 우측 패널 높이 = 지금 모�
   rp.style.minHeight = '';
   for (const t of tabs) { srTab = t; srRenderInv(); maxH = Math.max(maxH, rp.scrollHeight); }
   srTab = cur; srRenderInv();
-  rp.style.minHeight = Math.min(maxH, innerHeight - 110) + 'px';
+  rp.style.minHeight = Math.min(maxH, innerHeight / (uiScale || 1) - 110) + 'px';   // 패널 안 px는 zoom 배율로 나눠야 화면 높이와 맞는다
 }
 function srRenderModeUI() {
   const liveNow = srMode === 'live';
