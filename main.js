@@ -4986,13 +4986,14 @@ function updatePlayer(dt) {
     }
     const base = new THREE.Vector3(player.pos.x + cy * sh, player.pos.y + player.eyeH, player.pos.z - sy * sh);
     let camDist = 2.7;
-    if (walkGrid) {                     // 벽에 막히면 카메라를 앞으로 당긴다
-      for (let t = 0.4; t <= camDist; t += 0.2) {
-        if (base.y - look.y * t < WALL_H && cellSolid(base.x - look.x * t, base.z - look.z * t)) { camDist = Math.max(0.5, t - 0.3); break; }
+    if (walkGrid) {                     // 벽에 막히면 카메라를 앞으로 당긴다 (촘촘히 검사 · 여유 45cm)
+      for (let t = 0.3; t <= camDist; t += 0.1) {
+        if (base.y - look.y * t < WALL_H && cellSolid(base.x - look.x * t, base.z - look.z * t)) { camDist = Math.max(0.5, t - 0.45); break; }
       }
     }
     const camPos = base.clone().addScaledVector(look, -camDist);
     camPos.y = Math.max(0.3, camPos.y);
+    collideCircle(camPos, 0.35, 0.3, camPos.y - 0.15);   // 옆 벽·구조물에서도 35cm 띄운다 — 카메라가 벽 속에 들어가 뒷면이 보이지 않게
     camera.position.copy(camPos); // 지연 없이 플레이어와 함께 이동
   }
   camTarget.copy(camera.position).addScaledVector(look, 10);
