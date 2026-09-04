@@ -9,6 +9,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 2배 픽셀은 화면 픽셀 4배 — 1.5배까지만
 let shadowQ = localStorage.getItem('fps.shadowq') || 'mid';    // 'high' 부드러운 2048(매 프레임) · 'mid' 1024 정적 + 적은 그림자 원 · 'off' 끔
 let shadowOn = shadowQ !== 'off';
+let fsLock = localStorage.getItem('fps.fs') !== 'off';   // 전체화면 + 키 잠금 (기본 켬) — Ctrl 조합이 브라우저 단축키로 새지 않게
 renderer.shadowMap.enabled = shadowOn;
 renderer.shadowMap.type = shadowQ === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -3885,6 +3886,8 @@ function syncOptUI() {
   if (ob) ob.classList.toggle('on', outlineOn);
   const sb = document.getElementById('optShadow');
   if (sb) { sb.textContent = SHADOW_LABEL[shadowQ]; sb.classList.toggle('on', shadowQ === 'high'); }
+  const fb = document.getElementById('optFs');
+  if (fb) { fb.textContent = '전체화면 + 키 잠금: ' + (fsLock ? '켬' : '끔'); fb.classList.toggle('on', fsLock); }
   const dw = document.getElementById('dbgWave');
   if (dw) dw.textContent = '단계 넘기기';
   optMenu.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === camMode));
@@ -3961,10 +3964,7 @@ function enterGame() {
   inRun = true;
   paused = false;
   if (isMobileCtrl()) started = true;
-  else {
-    const pr = canvas.requestPointerLock();
-    if (pr && pr.catch) pr.catch(() => { }); // 잠금 실패해도 게임은 시작 — 클릭 시 재시도
-  }
+  else lockPointer();                    // 잠금 실패해도 게임은 시작 — 클릭 시 재시도
   refreshOverlay();
 }
 const mapPick = document.getElementById('mapPick');
@@ -4084,7 +4084,7 @@ document.getElementById('btnOptions').addEventListener('click', e => {
   if (optMenu.style.display === 'block') syncOptUI();
   if (optMenu.style.display === 'block') { shopMenu.style.display = 'none'; rankMenu.style.display = 'none'; }
 });
-canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) canvas.requestPointerLock(); }); // 사망 화면에선 커서 유지
+canvas.addEventListener('click', () => { if (!locked && !isMobileCtrl() && !player.dead) lockPointer(); }); // 사망 화면에선 커서 유지
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   if (locked) { paused = false; shopMenu.style.display = 'none'; } // 잠금 성공 = 플레이 중
@@ -4214,7 +4214,32 @@ document.addEventListener('mousemove', e => {
   player.pitch -= e.movementY * sens;
   player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch));
 });
+
+const LOCK_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'KeyC', 'KeyF', 'KeyG', 'KeyT', 'KeyN', 'KeyP', 'KeyH', 'KeyJ', 'KeyL', 'KeyU', 'KeyO', 'KeyE', 'KeyQ', 'KeyB', 'KeyM', 'KeyI', 'KeyK',
+  'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Tab', 'Space', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'AltLeft', 'AltRight', 'F1', 'F3', 'F5', 'F11', 'F12'];
+function keyboardLock() { try { navigator.keyboard?.lock?.(LOCK_KEYS); } catch { } }
+function lockPointer() {                 // 조준 잠금 — 옵션이 켜져 있으면 전체화면으로 들어가며 키까지 잠근다
+  if (fsLock && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => { keyboardLock(); const pr = canvas.requestPointerLock(); if (pr && pr.catch) pr.catch(() => { }); })
+      .catch(() => { const pr = canvas.requestPointerLock(); if (pr && pr.catch) pr.catch(() => { }); });
+    return;
+  }
+  if (document.fullscreenElement) keyboardLock();
+  const pr = canvas.requestPointerLock();
+  if (pr && pr.catch) pr.catch(() => { });
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { try { navigator.keyboard?.unlock?.(); } catch { } } });
+document.getElementById('optFs')?.addEventListener('click', e => {
+  e.stopPropagation();
+  fsLock = !fsLock;
+  localStorage.setItem('fps.fs', fsLock ? 'on' : 'off');
+  if (!fsLock && document.fullscreenElement) document.exitFullscreen?.().catch?.(() => { });
+  syncOptUI();
+  toast(fsLock ? '⛶ 전체화면 + 키 잠금 켬 — Ctrl 조합이 브라우저에 안 먹습니다' : '⛶ 전체화면 끔 — Ctrl+W 등 브라우저 단축키에 주의');
+});
 document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.altKey) && /^(Key|Digit|Tab$|F\d)/.test(e.code)) e.preventDefault();   // 전체화면 키 잠금 중엔 브라우저 단축키를 막는다
   keys[e.code] = true;
   if (e.code === 'KeyR' && !reloading && ammo < magSize()) reload();
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) dash();
@@ -4231,10 +4256,7 @@ document.addEventListener('keydown', e => {
       if (!escArmed) return;       // 잠금 해제를 유발한 그 누름의 잔여 keydown만 무시
       paused = false;              // 즉시 게임 재개 — 조준 잠금은 시도만, 실패 시 클릭으로 복구
       if (isMobileCtrl()) started = true;
-      else {
-        const pr = canvas.requestPointerLock();
-        if (pr && pr.catch) pr.catch(() => { });
-      }
+      else lockPointer();
       shopMenu.style.display = 'none';
       refreshOverlay();
     } else if (!locked) {          // 잠금 없이 플레이 중 ESC → 일시정지
@@ -4809,7 +4831,7 @@ function restart(toMenu = false) {
   msgEl.style.display = 'none';
   if (toMenu) { started = false; inRun = false; paused = false; document.getElementById('mapPick').style.display = 'none'; document.getElementById('brief').style.display = 'none'; refreshOverlay(); } // 확인 → 메인 화면
   else if (isMobileCtrl()) { started = true; refreshOverlay(); }
-  else canvas.requestPointerLock();
+  else lockPointer();
   nextWave();
 }
 document.getElementById('deathOk').addEventListener('click', e => { e.stopPropagation(); restart(true); });
