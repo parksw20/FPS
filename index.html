@@ -665,6 +665,10 @@
   body.mobile.fireJog #mbFire{background:rgba(217,83,79,.28); border-style:dashed}
   #mobOpt{display:none}
   body.mobile #mobOpt{display:block}
+  /* 모바일: 미니맵 절반 · 하단 HUD 80% (zoom은 위치 오프셋까지 같이 줄여 화면 중앙 기준 배치가 유지된다) */
+  body.mobile #minimap{zoom:.5}
+  body.mobile #wave.rnd{top:172px} body.mobile #seedTag{top:196px} body.mobile #fpsHud{top:220px}
+  body.mobile #ammo, body.mobile #stats, body.mobile #rSlot, body.mobile #pSlot, body.mobile #gSlot, body.mobile #mSlot, body.mobile #wSlot, body.mobile #kSlot{zoom:.8}
   #joyStick{position:absolute; left:50%; top:50%; width:64px; height:64px; margin:-32px 0 0 -32px; border-radius:50%;
     background:rgba(126,224,163,.35); border:1px solid #7ee0a3; pointer-events:none}
   .mbtn{width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.8rem; color:#e8edf4;
