@@ -987,7 +987,7 @@ let AC = null, masterGain = null;
 let sfxComp = null, sfxVerb = null, noiseBuf = null;
 function audioInit() {
   if (AC) return;
-  AC = new (window.AudioContext || window.webkitAudioContext)();
+  AC = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
   sfxComp = AC.createDynamicsCompressor();   // 레이어가 겹쳐도 찌그러지지 않게
   sfxComp.threshold.value = -14; sfxComp.knee.value = 18; sfxComp.ratio.value = 6; sfxComp.attack.value = 0.002; sfxComp.release.value = 0.12;
   masterGain = AC.createGain(); masterGain.gain.value = 0.35;
@@ -1004,13 +1004,14 @@ function audioInit() {
 }
 // ---------- 샘플 효과음 (assets/sound/*.wav — 카운터 스트라이크 무기음) ----------
 const SFX_FILES = {
-  m4: 'm4a1_unsil-1', m4out: 'm4a1_clipout', m4in: 'm4a1_clipin', m4bolt: 'm4a1_boltpull', m4deploy: 'm4a1_deploy',
+  m4: 'm4a1-1', m4out: 'm4a1_clipout', m4in: 'm4a1_clipin', m4bolt: 'm4a1_boltpull', m4deploy: 'm4a1_deploy',
   de: 'deagle-1', deout: 'de_clipout', dein: 'de_clipin', deslide: 'de_slideback', dedeploy: 'de_deploy',
   fbex1: 'flashbang_explode1', fbex2: 'flashbang_explode2', gnhit: 'grenade_hit1', zoom: 'zoom',
   c4plant: 'c4_plant', c4beep: 'c4_beep1', c4ex: 'c4_explode1',
   head: 'headshot.mp3',
 };
-const sfxRaw = {}, sfxBuf = {};
+const sfxRaw = {}, sfxBuf = {}, sfxOff = {};
+const SAMPLE_VOL = 0.72;                 // 샘플 전체 볼륨 배율
 for (const [k, f] of Object.entries(SFX_FILES))       // 바이트는 처음부터 받아 두고, 디코드는 오디오 컨텍스트가 생기면
   fetch('assets/sound/' + (f.includes('.') ? f : f + '.wav')).then(r => r.ok ? r.arrayBuffer() : null).then(b => { if (b) sfxRaw[k] = b; }).catch(() => { });
 function decodeSfx() {
@@ -1018,7 +1019,13 @@ function decodeSfx() {
   for (const k of Object.keys(sfxRaw)) {
     if (sfxBuf[k] || sfxBuf[k] === false) continue;
     sfxBuf[k] = false;                                  // 디코드 중 표시
-    AC.decodeAudioData(sfxRaw[k].slice(0)).then(b => { sfxBuf[k] = b; }).catch(() => { delete sfxBuf[k]; });
+    AC.decodeAudioData(sfxRaw[k].slice(0)).then(b => {
+      const d = b.getChannelData(0); let peak = 0;         // 앞머리 무음·느린 상승을 건너뛰어 소리가 실제로 나는 순간부터 재생
+      for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > peak) peak = Math.abs(d[i]);
+      let i = 0; while (i < d.length && Math.abs(d[i]) < peak * 0.1) i++;
+      sfxOff[k] = Math.max(0, i / b.sampleRate - 0.002);
+      sfxBuf[k] = b;
+    }).catch(() => { delete sfxBuf[k]; });
   }
 }
 function playSample(name, { vol = 1, rate = 1, at = 0, verb = 0.35, jitter = 0.04 } = {}) {   // 샘플이 없으면 false → 호출부가 절차음으로
@@ -1028,10 +1035,10 @@ function playSample(name, { vol = 1, rate = 1, at = 0, verb = 0.35, jitter = 0.0
   const t = AC.currentTime + at;
   const src = AC.createBufferSource(); src.buffer = b;
   src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * jitter);   // 살짝 다른 높이로 반복감 줄이기
-  const g = AC.createGain(); g.gain.value = vol;
+  const g = AC.createGain(); g.gain.value = vol * SAMPLE_VOL;
   src.connect(g); g.connect(masterGain);
   if (verb > 0 && sfxVerb) { const vg = AC.createGain(); vg.gain.value = verb; g.connect(vg); vg.connect(sfxVerb); }
-  src.start(t);
+  src.start(t, sfxOff[name] || 0);
   return true;
 }
 // 노이즈 한 조각: 필터 스윕 + 감쇠 (총성·폭발·타격의 뼈대)
@@ -1105,9 +1112,10 @@ const sfxHead = () => {                  // 헤드샷: 샘플 (없으면 금속 
   click(0, 0.6, 8000);
 };
 const sfxReload = () => {                // 탄창 뺌 → 꽂음 → 노리쇠 (소총 M4A1 · 권총 데저트 이글 샘플)
-  if (weapon === 'pistol' ? playSample('deout', { vol: 0.9, verb: 0.2 }) : playSample('m4out', { vol: 0.9, verb: 0.2 })) {
-    if (weapon === 'pistol') { playSample('dein', { vol: 0.9, verb: 0.2, at: 0.35 }); playSample('deslide', { vol: 0.9, verb: 0.2, at: 0.75 }); }
-    else { playSample('m4in', { vol: 0.9, verb: 0.2, at: 0.35 }); playSample('m4bolt', { vol: 0.9, verb: 0.2, at: 0.78 }); }
+  const T = reloadMs() / 1000;           // 탄창 뺌 8% · 꽂음 42% · 노리쇠/슬라이드 74% 지점
+  if (weapon === 'pistol' ? playSample('deout', { vol: 0.9, verb: 0.2, at: T * 0.08 }) : playSample('m4out', { vol: 0.9, verb: 0.2, at: T * 0.08 })) {
+    if (weapon === 'pistol') { playSample('dein', { vol: 0.9, verb: 0.2, at: T * 0.42 }); playSample('deslide', { vol: 0.9, verb: 0.2, at: T * 0.74 }); }
+    else { playSample('m4in', { vol: 0.9, verb: 0.2, at: T * 0.42 }); playSample('m4bolt', { vol: 0.9, verb: 0.2, at: T * 0.74 }); }
     return;
   }
   click(0, 0.5, 5000); thump(220, 140, 0.04, 0.25, 0);                                   // 해제
@@ -4623,7 +4631,7 @@ function shoot(now) {
     }
     hitmark(headshot);
     if (headshot) popupHitText(hitKind, hitEn);
-    headshot ? sfxHead() : sfxHit();
+    hitKind === 'hs' ? sfxHead() : sfxHit();
     if (hitEn.hp <= 0) killEnemy(hitEn, hitKind === 'hs' ? 2 : 1);
     return hitPos;
   }
@@ -9520,7 +9528,7 @@ window.__game = {
   jumpInfo() { const a = player.actions['rifle jump']; return { oneShot: player.oneShot ?? null, timeScale: +(a?.timeScale ?? 0).toFixed(2), clipDur: +(a?.getClip().duration ?? 0).toFixed(2), vy: +player.vy.toFixed(2), onGround: player.onGround, y: +player.pos.y.toFixed(2), jumpUpg: upg.jump }; },
   setUpg(k, v) { upg[k] = v; return { ...upg }; },
   upper() { const w = {}; for (const k in player.actions) { const a = player.actions[k]; if (a.isRunning() && a.getEffectiveWeight() > 0.001) w[k] = +a.getEffectiveWeight().toFixed(2); } return { upperShot: player.upperShot ?? null, loco: player.current?.getClip().name ?? null, weights: w, tracks: { runLower: player.actions['rifle run_lower']?.getClip().tracks.length, reloadUpper: player.actions['reloading_upper']?.getClip().tracks.length, reloadFull: player.actions['reloading']?.getClip().tracks.length } }; },
-  sfx() { const st = {}; for (const k of Object.keys(SFX_FILES)) st[k] = sfxBuf[k] ? +sfxBuf[k].duration.toFixed(2) : (sfxRaw[k] ? 'raw' : 'none'); return { ac: !!AC, files: st }; },
+  sfx() { const st = {}; for (const k of Object.keys(SFX_FILES)) st[k] = sfxBuf[k] ? [+sfxBuf[k].duration.toFixed(2), +(sfxOff[k] ?? 0).toFixed(3)] : (sfxRaw[k] ? 'raw' : 'none'); return { ac: !!AC, latency: AC ? +(AC.baseLatency ?? 0).toFixed(3) : null, files: st }; },
   sfxPlay(name) { audioInit(); return playSample(name); },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
