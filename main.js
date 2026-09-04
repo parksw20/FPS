@@ -1167,12 +1167,15 @@ function clipOf(gltf, name) {
 }
 
 // ---------- player ----------
-const EYE_STAND = 1.62;
+const EYE_STAND = 1.62, EYE_CROUCH = 1.05;   // 앉으면 눈높이가 내려간다
+const CROUCH_SPD = 0.5;                  // 앉아서 걷는 속도 배율
+const CROUCH_CLIPS = ['idle crouching aiming', 'idle crouching', 'walk crouching forward', 'walk crouching backward', 'walk crouching left', 'walk crouching right',
+  'walk crouching forward left', 'walk crouching forward right', 'walk crouching backward left', 'walk crouching backward right', 'death crouching headshot front'];
 const player = {
   root: null, mixer: null, actions: {}, current: null,
   pos: new THREE.Vector3(0, 0, 0), vy: 0, onGround: true,
   yaw: 0, pitch: 0, hp: 100, dead: false,
-  eyeH: EYE_STAND, zooming: false,
+  eyeH: EYE_STAND, zooming: false, crouch: false,
   oneShot: null, fireAction: null,
   dashT: 0, dashCd: 0, dashDir: { x: 0, z: -1 }, lastDir: { x: 0, z: -1 },
 };
@@ -1445,7 +1448,7 @@ function setupPlayer() {
   player.mixer = new THREE.AnimationMixer(root);
   const names = ['rifle aiming idle', 'rifle run', 'run backwards', 'walking', 'walking backwards',
     'strafe', 'strafe (2)', 'strafe left', 'reloading', 'rifle jump', 'firing rifle', 'toss grenade',
-    'hit reaction', 'humanoid:death_gun'];
+    'hit reaction', 'humanoid:death_gun', ...CROUCH_CLIPS];
   for (const n of names) {
     const c = clipOf(playerGltf, n);
     if (c) player.actions[n] = player.mixer.clipAction(c);
@@ -1455,7 +1458,7 @@ function setupPlayer() {
   const LOWER_RE = /hips|pelvis|leg|thigh|shin|calf|knee|foot|ankle|toe/i;
   const maskClip = (clip, keepLower, suffix) => new THREE.AnimationClip(clip.name + suffix, clip.duration,
     clip.tracks.filter(t => LOWER_RE.test(t.name.split('.')[0]) === keepLower));
-  for (const n of ['rifle aiming idle', 'rifle run', 'run backwards', 'walking', 'walking backwards', 'strafe', 'strafe (2)', 'strafe left']) {
+  for (const n of ['rifle aiming idle', 'rifle run', 'run backwards', 'walking', 'walking backwards', 'strafe', 'strafe (2)', 'strafe left', ...CROUCH_CLIPS]) {
     const c = clipOf(playerGltf, n);
     if (c) player.actions[n + '_lower'] = player.mixer.clipAction(maskClip(c, true, '_lower'));
   }
@@ -1501,6 +1504,13 @@ function upperPlay(name, fade = 0.1) {
 function upperStop(fade = 0.15) {
   if (player.upperAct) player.upperAct.fadeOut(fade);
   player.upperAct = null; player.upperShot = null;
+}
+function crouchBlockedAbove() {          // 일어설 자리(머리 위 1.7m)에 구조물이 있으면 계속 앉아 있는다
+  for (const o of obstacles) {
+    if (Math.abs(player.pos.x - o.x) >= o.w / 2 + 0.45 || Math.abs(player.pos.z - o.z) >= o.d / 2 + 0.45) continue;
+    if (o.yOff > player.pos.y + 1.15 && o.yOff < player.pos.y + 1.7) return true;
+  }
+  return false;
 }
 function jumpAnim() {                    // 점프 모션을 체공 시간에 맞춘다 (점프력 업그레이드·점프대·리본으로 오래 떠 있어도 착지까지 이어진다)
   if (camMode === 'fps') return;         // 1인칭에서는 점프 모션이 상체를 카메라 앞으로 들이밀어 화면을 가리므로 생략
@@ -4233,6 +4243,7 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.code === 'ControlLeft' || e.code === 'ControlRight') e.preventDefault();
+  if (e.code === 'KeyC') e.preventDefault();   // C도 앉기 (Ctrl+W 등 브라우저 단축키 충돌을 피하는 대안)
 });
 document.addEventListener('keyup', e => {
   keys[e.code] = false;
@@ -4727,13 +4738,14 @@ function damagePlayer(n, fromX, fromZ, src) {
     firing = false; gMode = false; trajLine.visible = false; aimCircle.visible = false;
     shopMenu.style.display = 'none'; // 일시정지 상점이 열려 있었다면 닫기
     // 사망 애니메이션(humanoid:death_gun) 재생 후 YOU DIED 표시
-    const da = player.actions['humanoid:death_gun'];
+    const deathName = player.crouch && player.actions['death crouching headshot front'] ? 'death crouching headshot front' : 'humanoid:death_gun';
+    const da = player.actions[deathName];
     let deathDur = 2.2;
     if (da) {
       da.setLoop(THREE.LoopOnce); da.clampWhenFinished = true;
-      play('humanoid:death_gun', 0.15);
+      play(deathName, 0.15);
       upperStop(0.1);
-      player.oneShot = 'humanoid:death_gun'; // 다른 애니로 덮이지 않게 고정
+      player.oneShot = deathName; // 다른 애니로 덮이지 않게 고정
       deathDur = da.getClip().duration;
     }
     clearTimeout(damagePlayer._t);
@@ -4754,7 +4766,7 @@ function restart(toMenu = false) {
   // 사망 포즈(clampWhenFinished) 잔존 방지 — 전체 액션 정지 후 idle 새로 시작
   if (player.mixer) player.mixer.stopAllAction();
   if (player.actions['rifle aiming idle']) { player.current = null; play('rifle aiming idle', 0.1); }
-  player.zooming = false; player.eyeH = EYE_STAND;
+  player.zooming = false; player.eyeH = EYE_STAND; player.crouch = false;
   player.dashT = 0; player.dashCd = 0; chainCd = 0;
   ribbonOwned = gearSave.ribbon; pistolOwned = gearSave.pistol;
   chainUses = chainMax(); chainRe = 0; updateRibbonSlot(); updatePistolSlot();
@@ -4884,7 +4896,12 @@ function updatePlayer(dt) {
   if (walkGrid) { flowTimer -= dt; if (flowTimer <= 0) { rebuildFlow(); flowTimer = 0.3; } }
   const mobile = isMobileCtrl();
   if (mobile) { if (zoomTog && !player.zooming) sfxZoom(); player.zooming = zoomTog; }
-  const sp = moveSpeed() * (dbgFast ? 3 : 1); // 기본 이동 = 달리기 (디버그 3배속)
+  const wantCrouch = !!(keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC']) && !player.dead;
+  if (wantCrouch !== player.crouch) {
+    if (wantCrouch || !crouchBlockedAbove()) player.crouch = wantCrouch;   // 머리 위가 막혀 있으면 일어서지 못한다
+  }
+  player.eyeH += ((player.crouch ? EYE_CROUCH : EYE_STAND) - player.eyeH) * Math.min(1, dt * 12);   // 눈높이 부드럽게
+  const sp = moveSpeed() * (dbgFast ? 3 : 1) * (player.crouch ? CROUCH_SPD : 1); // 기본 이동 = 달리기 (디버그 3배속 · 앉으면 절반)
   let mx = 0, mz = 0;
   if (mobile) { mx = touchMove.x; mz = touchMove.z; }
   else {
@@ -4913,7 +4930,7 @@ function updatePlayer(dt) {
   const steps = Math.max(1, Math.ceil(Math.hypot(mvx, mvz) / 0.2));
   for (let s = 0; s < steps; s++) {
     player.pos.x += mvx / steps; player.pos.z += mvz / steps;
-    collideCircle(player.pos, 0.45, 1.7, player.pos.y);
+    collideCircle(player.pos, 0.45, player.crouch ? 1.15 : 1.7, player.pos.y);   // 앉으면 낮은 틈도 지나간다
     if (walkGrid && cellSolid(player.pos.x, player.pos.z)) {   // 그래도 벽 속이면 마지막 안전 지점으로 되돌리고 멈춘다
       player.pos.x = safeX; player.pos.z = safeZ; player.dashT = 0;
       break;
@@ -4928,7 +4945,7 @@ function updatePlayer(dt) {
   } else lavaBurn = 0;
 
   // 점프/중력/플랫폼 지지
-  if (keys['Space'] && player.onGround) {
+  if (keys['Space'] && player.onGround && !player.crouch) {   // 앉은 채로는 점프하지 않는다
     player.vy = jumpV(); player.onGround = false;
     jumpAnim();
   }
@@ -4948,13 +4965,20 @@ function updatePlayer(dt) {
   if (!player.oneShot) {
     const moving = Math.abs(mx) + Math.abs(mz) > 0.12;
     const L = player.upperShot && player.actions['rifle run_lower'] ? '_lower' : '';   // 상체가 따로 움직이는 중이면 하체 클립만
-    if (!moving) play('rifle aiming idle' + L);
+    if (player.crouch && player.actions['idle crouching aiming']) {   // 앉기: 정지·전후좌우·대각선
+      const fw = mz < -0.12, bk = mz > 0.12, rt = mx > 0.12, lf = mx < -0.12;
+      const n = !moving ? 'idle crouching aiming'
+        : fw ? (rt ? 'walk crouching forward right' : lf ? 'walk crouching forward left' : 'walk crouching forward')
+        : bk ? (rt ? 'walk crouching backward right' : lf ? 'walk crouching backward left' : 'walk crouching backward')
+        : rt ? 'walk crouching right' : 'walk crouching left';
+      play(n + L);
+    } else if (!moving) play('rifle aiming idle' + L);
     else if (mz < 0) play('rifle run' + L);
     else if (mz > 0) play('run backwards' + L);
     else if (mx > 0) play('strafe' + L);
     else play('strafe (2)' + L); // 왼쪽: strafe left는 바닥 싱크가 안 맞음
   }
-  if (player.current && !player.oneShot) player.current.timeScale = player.dashT > 0 ? 1.6 : 1.15;
+  if (player.current && !player.oneShot) player.current.timeScale = player.dashT > 0 ? 1.6 : player.crouch ? 1.0 : 1.15;
 
   player.mixer.update(dt);
   // 홀드 투척: 1.5초 지점에서 모션 정지 유지 (마우스 업까지)
@@ -9211,7 +9235,7 @@ window.__game = {
       floorNo, floorTime: +floorTime.toFixed(1), portalTravel, cores, spawnCd: +spawnCd.toFixed(2), floorShopOpen,
       portal: portal ? { x: +portal.x.toFixed(1), z: +portal.z.toFixed(1), locked: !!portal.locked } : null,
       hunter: hunter ? { pos: hunter.root.position.toArray().map(v => +v.toFixed(1)), speed: +hunter.speed.toFixed(1), stunAcc: hunter.stunAcc, stunT: +hunter.stunT.toFixed(2) } : null,
-      hp: player.hp, eyeH: +player.eyeH.toFixed(2), zooming: player.zooming, firing, yaw: +player.yaw.toFixed(3), pitch: +player.pitch.toFixed(3), fov: +camera.fov.toFixed(1),
+      hp: player.hp, eyeH: +player.eyeH.toFixed(2), crouch: player.crouch, zooming: player.zooming, firing, yaw: +player.yaw.toFixed(3), pitch: +player.pitch.toFixed(3), fov: +camera.fov.toFixed(1),
       dashCd: +player.dashCd.toFixed(2),
       playerPos: player.pos.toArray().map(v => +v.toFixed(2)),
       enemies: enemies.map(e => ({
@@ -9529,6 +9553,7 @@ window.__game = {
   air() { return { ribbonAir: !!player.ribbonAir, standObs: player.standObs ? obstacles.indexOf(player.standObs) : null, y: +player.pos.y.toFixed(2), vy: +player.vy.toFixed(2), onGround: player.onGround, x: +player.pos.x.toFixed(1), z: +player.pos.z.toFixed(1) }; },
   fixCam(aspect = 1.6) { if (!isFinite(camera.aspect) || camera.aspect <= 0) { camera.aspect = aspect; camera.updateProjectionMatrix(); } camera.updateMatrixWorld(true); return { aspect: camera.aspect, pos: camera.position.toArray().map(v => +v.toFixed(2)) }; },
   gear(p, r) { if (p !== undefined) pistolOwned = !!p; if (r !== undefined) ribbonOwned = !!r; chainUses = Math.max(chainUses, 1); updateRibbonSlot?.(); return { pistolOwned, ribbonOwned, chainUses }; },
+  clips() { return playerGltf ? playerGltf.animations.map(c => [c.name, +c.duration.toFixed(2), c.tracks.length]) : null; },
   progs() { return renderer.info.programs.map(p => p.name + '|' + p.cacheKey.length + '|' + p.usedTimes); },
   hitches() {                            // 실제 플레이 중 기록된 끊김 + 구간별 평균(ms)
     const avg = {}; for (let i = 0; i < PT_NAMES.length; i++) avg[PT_NAMES[i]] = +(PT_SUM[i] / Math.max(1, ptFrames)).toFixed(3);
