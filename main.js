@@ -2543,7 +2543,7 @@ function updateDoors(dt) {
 
 // ---------- 점프대: 3층부터 맵에 2곳, 가운데로 들어가면 5m 도약 (1회용) ----------
 const jumpPads = [];
-const PAD_R = 2.4, PAD_H = 5, PAD_FLOOR = 3, PAD_COUNT = 2;
+const PAD_R = 2.4, PAD_H = 8, PAD_FLOOR = 3, PAD_COUNT = 2;   // 도약 높이 8m (5m에서 +3m)
 let padTex = null;
 function padTexture() {                  // 하늘색 동심원 + JUMP 글자
   if (padTex) return padTex;
@@ -2732,7 +2732,7 @@ function updateJumpPads(dt) {
     if (player.dead || player.pos.y > 0.6) continue;
     if (Math.hypot(player.pos.x - p.x, player.pos.z - p.z) > PAD_R * 0.6) continue;  // 가운데만 발동
     p.used = true;
-    player.vy = Math.sqrt(2 * 13.5 * PAD_H);   // 5m 도약
+    player.vy = Math.sqrt(2 * 13.5 * PAD_H);   // PAD_H만큼 도약
     player.onGround = false;
     if (camMode !== 'fps') oneShot('rifle jump', 0.9);
     sfxTone(420, 0.28, 'sine', 0.18, 900);
