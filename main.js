@@ -3927,6 +3927,8 @@ function refreshOverlay() {
   startEl.style.display = onStart ? 'block' : 'none';
   const ob = document.getElementById('optBtn');   // 메인 화면에는 메뉴의 '옵션'만 (우상단 버튼 숨김)
   if (ob) ob.style.display = onStart ? 'none' : '';
+  const mu = document.getElementById('mobileUI');   // 조그·액션 버튼은 게임 중에만
+  if (mu) mu.style.display = isMobileCtrl() && isPlaying() && !player.dead ? 'block' : 'none';
   const p = document.getElementById('pauseOv');
   const pauseUI = menu && inRun;
   if (p) p.style.display = pauseUI ? 'block' : 'none';
@@ -4720,6 +4722,7 @@ function damagePlayer(n, fromX, fromZ, src) {
   updateHpHud();
   if (player.hp <= 0) {
     player.dead = true;
+    refreshOverlay();                   // 사망: 모바일 조작 버튼 숨김
     firing = false; gMode = false; trajLine.visible = false; aimCircle.visible = false;
     shopMenu.style.display = 'none'; // 일시정지 상점이 열려 있었다면 닫기
     // 사망 애니메이션(humanoid:death_gun) 재생 후 YOU DIED 표시
