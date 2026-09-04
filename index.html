@@ -499,7 +499,7 @@
   #srName{position:absolute; left:50%; top:56px; transform:translateX(-50%); font-size:.78rem; letter-spacing:.2em; color:#9fb0c4}
   @media (max-width:900px){ .srPanel{width:40vw; padding:10px} #srRight.room{width:54vw} .srSlot .nm{font-size:.78rem} }
   /* 시작 전 맵 선택 */
-  #mapPick{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:22px;
+  #mapPick{position:fixed; inset:0; display:none; flex-direction:column; align-items:center; justify-content:safe center; gap:clamp(8px, 2vh, 22px);   /* 넘치면 위부터 스크롤 */
     background:rgba(3,8,12,.72); backdrop-filter:blur(3px); z-index:20; overflow:auto; padding:24px 12px; box-sizing:border-box}
   #mapPick h3{font-size:1.15rem; letter-spacing:.34em; color:#7df3ff; text-shadow:0 0 12px rgba(64,214,255,.8); margin:0}
   #mapPick .menuBtn{width:100%; text-align:center}
@@ -507,7 +507,7 @@
   #mapPick #mapBack{width:min(280px,60vw); text-align:center}
   #mapPick #mapBack span{font-size:1.05rem; color:#9fb0c4}
   .mapCols{display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap; justify-content:center}
-  .mapCol{display:flex; flex-direction:column; gap:18px; width:min(540px, 42vw); min-width:300px}
+  .mapCol{display:flex; flex-direction:column; gap:clamp(8px, 1.8vh, 18px); width:min(540px, 42vw, 62vh); min-width:min(300px, 42vw)}   /* 세로가 짧은 화면(폰 가로)에서는 높이에 맞춰 줄어든다 */
   .mapCard{background:#05080c; border:1px solid rgba(64,214,255,.25); border-radius:6px; overflow:hidden;
     box-shadow:0 0 22px rgba(0,0,0,.6)}
   .mapCard .shot{position:relative; aspect-ratio:16/9; background:#05080c}
@@ -533,6 +533,14 @@
   #briefCard li b{color:#ffd76b}
   #briefBtns{display:flex; gap:16px}
   #briefBtns .menuBtn{width:210px; text-align:center}
+  @media (max-height:640px){                    /* 세로가 짧은 화면: 글자·버튼도 줄인다 */
+    #mapPick h3{font-size:.95rem}
+    #mapPick .menuBtn{padding:8px 16px}
+    #mapPick .menuBtn span{font-size:1rem}
+    .mapCard .desc{font-size:.8rem; padding:6px 8px}
+    .mapCard .chip{font-size:.8rem; padding:4px 9px}
+    .tpBtn{margin-top:0}
+  }
   @media (max-width:900px){                     /* 좁은 화면: 카드 한 장씩 */
     .mapCols{gap:18px}
     .mapCol{width:min(430px,90vw); min-width:0}
@@ -642,6 +650,18 @@
     margin-top:14px; padding-top:12px; border-top:1px dashed rgba(64,214,255,.25)}
   #itemLabel{font-size:.75em; letter-spacing:.25em; color:#7aa8bd; margin-bottom:8px}
   #upgList{display:flex; flex-direction:row; flex-wrap:wrap; gap:10px; justify-content:center; min-height:96px; align-content:flex-start}
+  @media (max-height:700px){                    /* 세로가 짧은 화면(폰 가로): 상점을 촘촘하게 — 스크롤 없이 들어가게 */
+    #shopMenu{font-size:14px; padding:10px 14px}
+    #shopMenu h3{margin-bottom:4px}
+    #shopCoins{margin-bottom:6px}
+    #shopTabs{margin:0 0 8px}
+    #shopTabs button{min-width:84px; padding:5px 10px}
+    #upgList{min-height:0; gap:6px}
+    #itemList{gap:6px}
+    #upgList button, #itemList button{padding:6px 10px !important}
+    #shopMenu .shopHint{margin-top:6px}
+    #shopClose{width:30px; height:30px; right:8px; top:8px}
+  }
   #upgList button, #itemList button{transform:skewX(-8deg); background:rgba(4,20,28,.85); border:1.5px solid rgba(64,214,255,.55); border-radius:8px;
     padding:12px 20px; color:#eaf9ff; font-size:1em; cursor:pointer; text-align:center;
     box-shadow:0 0 10px rgba(64,214,255,.25), inset 0 0 8px rgba(64,214,255,.08)}
