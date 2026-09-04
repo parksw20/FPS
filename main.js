@@ -11,6 +11,16 @@ let shadowQ = localStorage.getItem('fps.shadowq') || 'mid';    // 'high' 부드�
 let shadowOn = shadowQ !== 'off';
 let srEditUI = false, srRightFolded = false;   // 가구를 고르면 우측 패널을 접는다 · 탭으로 다시 편다
 let touchPick = null, placeDrag = false, placeAskKind = null, suppressClick = false;   // 터치로 잡아 옮기기 · 놓을 때 확인 팝업                    // 쇼룸 생활모드: '방 편집'을 눌러 우측 패널·저장 버튼을 연 상태
+const IN_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());   // 오프라인 APK 안에서 실행 중
+const UI_DEF = IN_APP ? 0.55 : 1;        // UI 배율 기본값 — 앱은 아주 작게
+let uiScale = +localStorage.getItem('fps.ui') || UI_DEF;
+const UI_ROOTS = ['hud', 'optBtn', 'optMenu', 'quitAsk', 'optResetAsk', 'addRoom', 'showroom', 'shopMenu', 'mobileUI', 'loading', 'start', 'mapPick', 'brief', 'gearGot', 'curTop', 'tpMenu', 'pauseOv', 'rankMenu'];
+function applyUiScale() {                // 화면 위 UI 전체를 같은 배율로 (3D 캔버스는 그대로)
+  for (const id of UI_ROOTS) { const el = document.getElementById(id); if (el) el.style.zoom = uiScale; }
+  const sl = document.getElementById('optUi'), sv = document.getElementById('uiVal');
+  if (sl) sl.value = uiScale; if (sv) sv.textContent = Math.round(uiScale * 100) + '%';
+}
+applyUiScale();
 const SENS_DEF = { pc: 1, mobile: 2 };  // 시야 감도 기본값 — 모바일은 2배
 const lookSens = { pc: +localStorage.getItem('fps.sens.pc') || SENS_DEF.pc, mobile: +localStorage.getItem('fps.sens.mobile') || SENS_DEF.mobile };
 const sensNow = () => isMobileCtrl() ? lookSens.mobile : lookSens.pc;
@@ -3714,7 +3724,7 @@ function banner(text) {
 // ---------- 옵션 (시점 · 조작) ----------
 let camMode = localStorage.getItem('fps.view') || 'shoulder';  // 기본: 3인칭 숄더뷰
 if (camMode === 'tps') camMode = 'shoulder';                    // 구버전 저장값 호환
-let ctrlMode = localStorage.getItem('fps.ctrl') || 'pc';       // 'pc' | 'mobile'
+let ctrlMode = localStorage.getItem('fps.ctrl') || (IN_APP ? 'mobile' : 'pc');       // 'pc' | 'mobile' — 앱(APK)은 기본 모바일
 let fireMode = { btn: 'only', jog: 'look' }[localStorage.getItem('fps.fire')] || localStorage.getItem('fps.fire') || 'look';   // 사격 조그: 'only' 사격만 | 'look' 사격 + 시야 변경 (기본)
 const isMobileCtrl = () => ctrlMode === 'mobile';
 let started = false;                                            // 모바일 모드 게임 시작 여부
@@ -3938,6 +3948,7 @@ function syncOptUI() {
   if (ob) ob.classList.toggle('on', outlineOn);
   const sb = document.getElementById('optShadow');
   if (sb) { sb.textContent = SHADOW_LABEL[shadowQ]; sb.classList.toggle('on', shadowQ === 'high'); }
+  applyUiScale();
   const sl = document.getElementById('optSens'), sv = document.getElementById('sensVal');
   if (sl) { sl.value = sensNow(); if (sv) sv.textContent = sensNow().toFixed(1) + '× (' + (isMobileCtrl() ? '모바일' : 'PC') + ')'; }
   const fb = document.getElementById('optFs');
@@ -4253,6 +4264,16 @@ function lockPointer() {                 // 조준 잠금 — 옵션이 켜져 �
   if (pr && pr.catch) pr.catch(() => { });
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) { try { navigator.keyboard?.unlock?.(); } catch { } } });
+document.getElementById('optUi')?.addEventListener('input', e => {
+  e.stopPropagation();
+  uiScale = Math.max(0.4, Math.min(1.3, +e.target.value || 1));
+  localStorage.setItem('fps.ui', uiScale);
+  applyUiScale();
+});
+document.getElementById('optUiReset')?.addEventListener('click', e => {
+  e.stopPropagation();
+  uiScale = UI_DEF; localStorage.removeItem('fps.ui'); applyUiScale(); toast('UI 크기 기본값 ' + Math.round(uiScale * 100) + '%');
+});
 document.getElementById('optSens')?.addEventListener('input', e => {
   e.stopPropagation();
   const v = Math.max(0.3, Math.min(3, +e.target.value || 1));
