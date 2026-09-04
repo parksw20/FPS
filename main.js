@@ -9583,3 +9583,8 @@ window.__game = {
   buy(k) { buyUpg(k); },
   addCoins(n) { coins += n; setCoinHud(); renderUpg(); persistProgress(); },
 };
+
+// 설치형 앱(PWA): 홈 화면에 추가하면 주소창 없는 전체 화면으로 열린다 (manifest display: fullscreen)
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || /^(localhost|127\.)/.test(location.hostname))) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { }); });
+}
