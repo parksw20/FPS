@@ -4400,7 +4400,7 @@ function updateChain(dt) {
 }
 function fireChain() {
   if (player.dead || chainCd > 0) return;
-  if (!ribbonOwned) { toast('🎀 리본은 ' + RIBBON_STAGE + '단계에서 얻습니다'); return; }
+  if (!ribbonOwned) { toast('🎀 리본은 악의 소굴 ' + RIBBON_STAGE + '단계에서 얻습니다'); return; }
   if (chainUses <= 0) { toast('🎀 리본 재충전 중 — ' + Math.ceil(chainRe) + '초'); return; }
   chainUses--;
   if (chainRe <= 0) chainRe = chainRecharge();   // 충전 타이머는 한 발이라도 비면 돌아간다
